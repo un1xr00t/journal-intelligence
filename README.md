@@ -198,6 +198,10 @@ That's why I built it.
 
 ---
 
+[![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=whthomas22&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://www.buymeacoffee.com/whthomas22)
+
+<a href="https://www.buymeacoffee.com/whthomas22"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=whthomas22&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" /></a>
+
 ## Contributing
 
 Issues and PRs welcome. If something doesn't work on your setup, open an issue - I want this to be deployable by anyone.
