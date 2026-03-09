@@ -396,7 +396,7 @@ def _html_wrap(title: str, date_start: str, date_end: str,
   &nbsp;Generated: {generated}
 </div>
 {body}
-<footer>Journal Intelligence System · journal.williamthomas.name · CONFIDENTIAL</footer>
+<footer>Journal Intelligence System · CONFIDENTIAL</footer>
 </body>
 </html>"""
 
@@ -783,7 +783,7 @@ def _render_pdf_reportlab(data: dict, packet_type: str,
     story.append(Spacer(1, 0.3*inch))
     story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#dddddd")))
     story.append(Paragraph(
-        "Journal Intelligence System · journal.williamthomas.name", meta_style))
+        "Journal Intelligence System", meta_style))
 
     doc.build(story)
     return buf.getvalue()
@@ -841,7 +841,7 @@ def _render_markdown(data: dict, packet_type: str,
         lines.append("")
 
     lines += ["---",
-              "*Journal Intelligence System · journal.williamthomas.name*"]
+              "*Journal Intelligence System*"]
     return "\n".join(lines)
 
 
