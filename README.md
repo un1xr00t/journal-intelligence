@@ -275,6 +275,69 @@ If you're catching up on a backlog of entries:
 
 ---
 
+## Backup & Restore
+
+The app includes two scripts for database and derived data backups: `backup_journal.sh` and `restore_journal.sh`. Make them executable after cloning:
+
+```bash
+chmod +x backup_journal.sh restore_journal.sh
+```
+
+---
+
+### Automated Backups (VPS)
+
+The backup script uses SQLite's native backup API — safe to run while the app is live. It backs up the database and all derived data (master summaries, user memory, exports), then auto-purges backups older than 14 days.
+
+Set it up as a daily cron job:
+
+```bash
+crontab -e
+```
+
+Add this line to run at 3am daily:
+
+```
+0 3 * * * /path/to/journal-intelligence/backup_journal.sh >> /path/to/journal-intelligence/logs/backup.log 2>&1
+```
+
+Backups are stored in `backups/` inside your app root. Each backup consists of two files:
+- `journal_backup_YYYYMMDD_HHMMSS.db` — the SQLite database
+- `journal_backup_YYYYMMDD_HHMMSS_derived.tar.gz` — summaries, memory profiles, exports
+
+---
+
+### Restoring from a Backup
+
+```bash
+./restore_journal.sh journal_backup_20260304_030000
+```
+
+Pass the backup name **without** the file extension. The script will:
+1. Stop the API
+2. List available backups if you don't pass a name
+3. Ask for confirmation before overwriting anything
+4. Save a `.pre_restore_*` snapshot of current data before overwriting
+5. Restart the API when done
+
+---
+
+### Pull a Backup to Your Local Machine (VPS users)
+
+If you want an off-server copy, use `rsync` to pull backups down locally:
+
+```bash
+rsync -avz --progress user@your-server:/path/to/journal-intelligence/backups/ ~/journal-backups/
+```
+
+If you set up an SSH config alias, it simplifies to:
+
+```bash
+rsync -avz --progress yourserver:/path/to/journal-intelligence/backups/ ~/journal-backups/
+```
+
+---
+
 ## Directory Structure
 
 ```
