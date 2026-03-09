@@ -213,11 +213,10 @@ This is early. But the roadmap is ambitious - and I'm not slowing down.
 
 - **Direct web upload** - paste or drop journal entries straight from the browser, no Shortcut needed
 - **Memory injection** - your memory profile actively shapes every AI response, not just onboarding
-- **Docker support** - one `docker-compose up` and you're running, no manual install needed
-- **Mobile-optimized UI** - write and review from your phone without the Shortcut
+- **Native iOS & Android app** - a dedicated mobile experience built for this, not a browser wrapper. Write, review, upload, and get reflections from your phone natively
+- **Improved export engine** - exports are live and working, but this is getting a serious upgrade: better formatting, more packet types, smarter redaction, and therapist-ready clinical layouts
 - **Multi-user support improvements** - better admin tooling, user management, invite flows
 - **Deeper pattern intelligence** - longer lookback windows, cross-pattern correlations, predictive mood modeling
-- **Therapist export mode** - structured session prep packets formatted for clinical handoff
 - **Community resources** - user-contributed topic configs, prompt packs, theme presets
 
 I have a lot more planned that I'm not ready to talk about yet. If this resonates with you - watch the repo, open issues, or just reach out. This project has a lot of road ahead of it.
