@@ -168,6 +168,8 @@ tail -20 logs/api.log
 
 ## Configuration
 
+> ⚠️ **If you see `/opt/journal-dashboard/` anywhere** in the scripts, config files, or cron examples — replace it with your actual install path. For example if you cloned to `/home/youruser/journal-intelligence/`, use that instead. This path appears in a few places and is specific to the reference VPS setup.
+
 ```bash
 cp config/config.example.yaml config/config.yaml
 nano config/config.yaml
