@@ -136,6 +136,23 @@ Then open `http://localhost:8000`, create your account, and follow the onboardin
 
 ---
 
+## Restarting the API
+
+If you're on a VPS and need to restart the backend quickly, there's a convenience script included:
+
+```bash
+chmod +x frontend/restartAPI.sh
+./frontend/restartAPI.sh
+```
+
+This kills any running uvicorn process, clears port 8000, and relaunches the API with the correct PYTHONPATH and worker config. Tail the log after to confirm it came up clean:
+
+```bash
+tail -20 logs/api.log
+```
+
+---
+
 ## Stack
 
 | Layer | Tech |
@@ -187,6 +204,23 @@ journal-intelligence/
 ├── install_local.sh
 └── security_hardening.sh
 ```
+
+---
+
+## What's Coming
+
+This is early. But the roadmap is ambitious - and I'm not slowing down.
+
+- **Direct web upload** - paste or drop journal entries straight from the browser, no Shortcut needed
+- **Memory injection** - your memory profile actively shapes every AI response, not just onboarding
+- **Docker support** - one `docker-compose up` and you're running, no manual install needed
+- **Mobile-optimized UI** - write and review from your phone without the Shortcut
+- **Multi-user support improvements** - better admin tooling, user management, invite flows
+- **Deeper pattern intelligence** - longer lookback windows, cross-pattern correlations, predictive mood modeling
+- **Therapist export mode** - structured session prep packets formatted for clinical handoff
+- **Community resources** - user-contributed topic configs, prompt packs, theme presets
+
+I have a lot more planned that I'm not ready to talk about yet. If this resonates with you - watch the repo, open issues, or just reach out. This project has a lot of road ahead of it.
 
 ---
 
