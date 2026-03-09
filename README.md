@@ -5,7 +5,9 @@
 ---
 
 > ⚠️ **VERY EARLY BETA** — This project is actively being developed. Things may break, APIs may change, and some features are still being wired up. That said, the core is solid and running in production. Use it, break it, open issues. Screenshots, setup guides, and full documentation are on the way.
+>
 > 📸 **Coming soon:** Screenshots of every page, plus a full step-by-step guide for setting up the iPhone Shortcut so you can upload journal entries directly from your phone.
+>
 > 📤 **In the works:** Direct upload from the web dashboard — no iPhone Shortcut required. Drop a file or paste your entry straight from the browser.
 
 ---
