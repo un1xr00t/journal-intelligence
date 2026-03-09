@@ -6,8 +6,7 @@
 
 > ⚠️ **VERY EARLY BETA** - This project is actively being developed. Things may break, APIs may change, and some features are still being wired up. That said, the core is solid and running in production. Use it, break it, open issues. Screenshots, setup guides, and full documentation are on the way.
 >
-> 📸 **Coming soon:** Screenshots of every page, plus a full step-by-step guide for setting up the iPhone Shortcut so you can upload journal entries directly from your phone.
->
+> 📸 **Coming soon:** Screenshots of every page.
 > 📤 **In the works:** Direct upload from the web dashboard - paste or drop an entry straight from your browser without needing the Shortcut.
 
 ---
@@ -178,9 +177,101 @@ Your `config.yaml` is gitignored and never committed. The install scripts auto-g
 
 ---
 
-## iPhone Shortcut Integration *(screenshot of Settings coming soon)*
+## iPhone Shortcut Integration
 
-This is currently how entries get in - straight from your iPhone. The ingest endpoint accepts plain text or HTML files via `POST /api/upload` with your personal API key in the header. Your key is generated during onboarding, shown once, and stored as a hash - regeneratable anytime from Settings. A full step-by-step Shortcut setup guide is coming soon.
+<img src="https://github.com/user-attachments/assets/c8d9344a-29ff-4086-9c3d-286f545f1c4d" width="350" alt="iPhone Shortcut setup" />
+
+
+This is how entries get in — straight from your iPhone via Apple Shortcuts. The ingest endpoint accepts plain text or HTML files. Your personal API key is generated during onboarding and regeneratable anytime from **Settings → Account → API Key**.
+
+> **Heads up:** This workflow requires a few steps right now. Direct upload from the web dashboard is coming soon and will make this much simpler.
+
+---
+
+### Step 1 — Get Your API Key
+
+1. Log into your Journal Intelligence dashboard
+2. Go to **Settings** (gear icon in the sidebar)
+3. Click the **Account** tab
+4. Find the **API Key** section — copy the full key shown there
+5. If you don't see it or need a new one, hit **Regenerate** — your new key will display once, so copy it immediately
+
+---
+
+### Step 2 — Build the Shortcut
+
+Open the **Shortcuts** app and create a new shortcut. Add these actions in order:
+
+#### Action 1 — Select Files
+- Add action: **Select Files**
+- Leave defaults (allows you to pick one or multiple files when you run it)
+
+#### Action 2 — Repeat with each item in File
+- Add action: **Repeat with each item in**
+- Set the input to **File** (the output of the previous step)
+
+#### Action 3 — Get Contents of URL
+- Add action: **Get Contents of URL**
+- Set the **URL** to:
+  ```
+  https://your-domain.com/api/upload
+  ```
+  *(Replace `your-domain.com` with your actual domain, e.g. `journal.yourdomain.name`)*
+- Set **Method** to `POST`
+- Expand **Headers** and add two headers:
+  | Key | Value |
+  |---|---|
+  | `X-API-Key` | Your full API key from Step 1 |
+  | `X-Filename` | `Repeat Item` *(tap the variable picker, select Repeat Item)* |
+- Set **Request Body** to `File`
+- Set **File** to `Repeat Item` *(tap the variable picker, select Repeat Item)*
+
+#### Action 4 — End Repeat
+- Add action: **End Repeat**
+
+Name the shortcut something like **"Upload to Journal Intelligence"** and save it.
+
+---
+
+### Step 3 — Daily Workflow
+
+This is how to get an entry from Apple Journal into the dashboard:
+
+1. **Write your entry** in the Apple Journal app as normal
+2. **Export to iCloud Drive:**
+   - Tap the entry → tap the share icon
+   - Choose **Export to Files**
+   - Navigate to **iCloud Drive → [your journal folder] → entries**
+   - If a file with the same name already exists, tap **Replace** — this keeps things tidy
+3. **Run the Shortcut:**
+   - Open the **Shortcuts** app
+   - Tap your **"Upload to Journal Intelligence"** shortcut
+   - When the file picker opens, navigate to **iCloud Drive → [your journal folder] → entries**
+   - Tap the entry you just saved to select it
+   - The shortcut will run — **a single entry typically takes around 20 seconds** to fully upload and process, this is normal
+4. The AI extraction runs in the background after upload. Give it a minute, then open your dashboard — your entry will be there with mood, severity, and events already extracted.
+
+---
+
+### Uploading Multiple Entries at Once
+
+If you're catching up on a backlog of entries:
+
+- You can select multiple files in the file picker when the shortcut runs
+- The shortcut loops through each one automatically
+- **Expect this to take several minutes** depending on how many entries you're uploading
+- **Keep your phone awake and the Shortcuts app in the foreground** — if your phone sleeps mid-upload, it may interrupt the process before all entries are sent
+
+---
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Shortcut returns an error | Double-check your API key is pasted correctly with no extra spaces |
+| Entry uploads but no AI data appears | AI extraction runs async — wait 60–90 seconds then refresh |
+| File picker doesn't show iCloud Drive | Make sure iCloud Drive is enabled in iOS Settings → [your name] → iCloud |
+| 401 Unauthorized error | Your key may have been regenerated — grab a fresh one from Settings → Account |
 
 ---
 
