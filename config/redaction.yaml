@@ -1,0 +1,116 @@
+# ============================================================
+# Journal Dashboard — Redaction Rules
+# ============================================================
+# Applied when redaction toggle is ON during export.
+# Regex patterns and dictionary replacements for sanitizing
+# sensitive information before sharing with third parties.
+# ============================================================
+
+# ── Name Replacements ─────────────────────────────────────────
+# Direct string replacements (case-insensitive)
+
+names:
+  # Add real names and their replacements here
+  # - find: "John Smith"
+  #   replace: "[PERSON A]"
+  # - find: "Jane Doe"
+  #   replace: "[PERSON B]"
+  []
+
+# ── Location Replacements ─────────────────────────────────────
+
+locations:
+  # - find: "123 Main Street"
+  #   replace: "[ADDRESS]"
+  # - find: "Springfield"
+  #   replace: "[CITY]"
+  []
+
+# ── Organization Replacements ─────────────────────────────────
+
+organizations:
+  # - find: "Acme Corp"
+  #   replace: "[EMPLOYER]"
+  # - find: "St. Mary's Hospital"
+  #   replace: "[MEDICAL FACILITY]"
+  []
+
+# ── Regex Patterns ────────────────────────────────────────────
+# For dynamic content that follows patterns
+
+patterns:
+  # Phone numbers (US format)
+  - regex: '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+    replace: "[PHONE]"
+
+  # Email addresses
+  - regex: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    replace: "[EMAIL]"
+
+  # Social Security Numbers
+  - regex: '\b\d{3}-\d{2}-\d{4}\b'
+    replace: "[SSN]"
+
+  # Credit card numbers (basic pattern)
+  - regex: '\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'
+    replace: "[CARD NUMBER]"
+
+  # Dates in MM/DD/YYYY or MM-DD-YYYY format (optional)
+  # - regex: '\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b'
+  #   replace: "[DATE]"
+
+  # IP addresses
+  - regex: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
+    replace: "[IP ADDRESS]"
+
+  # Dollar amounts over $1000
+  - regex: '\$\d{1,3}(,\d{3})+(\.\d{2})?'
+    replace: "[AMOUNT]"
+
+# ── Field Suppression ─────────────────────────────────────────
+# These fields are entirely replaced with [SUPPRESSED] in exports
+
+suppress_fields:
+  - "raw_text"
+  - "file_path"
+  - "ip_address"
+
+# ── Output Settings ───────────────────────────────────────────
+
+output:
+  # Suffix added to redacted export filenames
+  filename_suffix: "_REDACTED"
+  
+  # Store redacted exports in separate subfolder
+  separate_folder: true
+  folder_name: "redacted"
+
+# ── Severity Levels ───────────────────────────────────────────
+# Different redaction levels for different contexts
+
+levels:
+  minimal:
+    description: "Names and contact info only"
+    apply:
+      - names
+      - patterns
+
+  standard:
+    description: "Names, locations, organizations, patterns"
+    apply:
+      - names
+      - locations
+      - organizations
+      - patterns
+
+  maximum:
+    description: "All redactions plus field suppression"
+    apply:
+      - names
+      - locations
+      - organizations
+      - patterns
+      - suppress_fields
+
+# Default redaction level
+default_level: "standard"

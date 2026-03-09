@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
+    <meta name="archive.org" content="noindex" />
+    <meta name="googlebot" content="noindex, nofollow" />
+    <title>Journal Intelligence</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Journal" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- Splash / description -->
+    <meta name="description" content="Your personal AI-powered journal intelligence dashboard" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg-base:       #07070f;
+        --bg-surface:    #0c0c18;
+        --bg-card:       #10101e;
+        --bg-card-hover: #14142a;
+        --border:        rgba(99,102,241,0.12);
+        --border-bright: rgba(99,102,241,0.3);
+        --accent:        #6366f1;
+        --accent-2:      #8b5cf6;
+        --accent-glow:   rgba(99,102,241,0.2);
+        --text-primary:  #e8e8f0;
+        --text-secondary:#9898b0;
+        --text-muted:    #55556a;
+        --mood-photo:    none;
+        --mood-name:     'neutral';
+        --mood-hue:      240;
+        --severity-color:#f59e0b;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        background: var(--bg-base);
+        color: var(--text-primary);
+        font-family: 'DM Sans', sans-serif;
+        min-height: 100vh;
+        /* Safe area insets for iPhone notch / home indicator */
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        overflow-x: hidden;
+      }
+      #root { display: flex; height: 100vh; overflow: hidden; }
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('[PWA] SW registered:', reg.scope))
+            .catch(err => console.warn('[PWA] SW registration failed:', err));
+        });
+      }
+    </script>
+  </body>
+</html>

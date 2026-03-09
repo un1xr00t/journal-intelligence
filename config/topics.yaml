@@ -1,0 +1,341 @@
+# ============================================================
+# Journal Dashboard — Topics Configuration
+# ============================================================
+# Defines topic categories and their associated keywords.
+# Used by the extractor and pattern engine for categorization.
+# ============================================================
+
+# ── Topic Categories ──────────────────────────────────────────
+
+categories:
+  work:
+    display_name: "Work & Career"
+    color: "#3498db"
+    keywords:
+      - work
+      - job
+      - office
+      - meeting
+      - project
+      - deadline
+      - boss
+      - coworker
+      - colleague
+      - client
+      - presentation
+      - promotion
+      - salary
+      - career
+      - interview
+      - performance
+      - review
+
+  health:
+    display_name: "Health & Wellness"
+    color: "#27ae60"
+    keywords:
+      - health
+      - doctor
+      - appointment
+      - medication
+      - exercise
+      - workout
+      - gym
+      - sleep
+      - insomnia
+      - tired
+      - exhausted
+      - sick
+      - illness
+      - therapy
+      - therapist
+      - anxiety
+      - depression
+      - pain
+      - headache
+
+  relationships:
+    display_name: "Relationships"
+    color: "#e74c3c"
+    keywords:
+      - relationship
+      - partner
+      - spouse
+      - husband
+      - wife
+      - boyfriend
+      - girlfriend
+      - dating
+      - marriage
+      - divorce
+      - breakup
+      - argument
+      - fight
+      - communication
+      - love
+      - intimacy
+      - trust
+
+  family:
+    display_name: "Family"
+    color: "#9b59b6"
+    keywords:
+      - family
+      - parent
+      - mother
+      - father
+      - mom
+      - dad
+      - sibling
+      - brother
+      - sister
+      - child
+      - children
+      - son
+      - daughter
+      - grandparent
+      - grandmother
+      - grandfather
+      - aunt
+      - uncle
+      - cousin
+
+  social:
+    display_name: "Social Life"
+    color: "#f39c12"
+    keywords:
+      - friend
+      - friends
+      - party
+      - dinner
+      - lunch
+      - hangout
+      - social
+      - gathering
+      - event
+      - birthday
+      - celebration
+      - visit
+      - call
+      - text
+      - conversation
+
+  finance:
+    display_name: "Finances"
+    color: "#1abc9c"
+    keywords:
+      - money
+      - finances
+      - budget
+      - bills
+      - debt
+      - loan
+      - savings
+      - investment
+      - expense
+      - purchase
+      - shopping
+      - rent
+      - mortgage
+      - credit
+      - bank
+
+  personal_growth:
+    display_name: "Personal Growth"
+    color: "#8e44ad"
+    keywords:
+      - goal
+      - goals
+      - growth
+      - learning
+      - reading
+      - book
+      - course
+      - skill
+      - habit
+      - routine
+      - meditation
+      - mindfulness
+      - reflection
+      - journal
+      - progress
+      - improvement
+      - challenge
+
+  housing:
+    display_name: "Home & Housing"
+    color: "#e67e22"
+    keywords:
+      - home
+      - house
+      - apartment
+      - moving
+      - move
+      - landlord
+      - rent
+      - lease
+      - repair
+      - maintenance
+      - cleaning
+      - furniture
+      - renovation
+      - neighbor
+
+  legal:
+    display_name: "Legal Matters"
+    color: "#c0392b"
+    keywords:
+      - lawyer
+      - attorney
+      - legal
+      - court
+      - lawsuit
+      - custody
+      - divorce
+      - contract
+      - agreement
+      - police
+      - investigation
+
+  creative:
+    display_name: "Creative Pursuits"
+    color: "#2ecc71"
+    keywords:
+      - writing
+      - art
+      - music
+      - creative
+      - project
+      - hobby
+      - painting
+      - drawing
+      - photography
+      - design
+      - craft
+
+# ── Entity Types ──────────────────────────────────────────────
+
+entity_types:
+  PERSON:
+    display_name: "People"
+    color: "#3498db"
+
+  TOPIC:
+    display_name: "Topics"
+    color: "#9b59b6"
+
+  ORGANIZATION:
+    display_name: "Organizations"
+    color: "#e67e22"
+
+  LOCATION:
+    display_name: "Locations"
+    color: "#27ae60"
+
+# ── Mood Keywords ─────────────────────────────────────────────
+# Help the extractor identify mood from text
+
+mood_indicators:
+  calm:
+    - peaceful
+    - relaxed
+    - content
+    - serene
+    - comfortable
+    - at ease
+    - centered
+    - grounded
+    - okay
+    - fine
+    - good day
+
+  anxious:
+    - anxious
+    - worried
+    - nervous
+    - stressed
+    - overwhelmed
+    - racing thoughts
+    - can't sleep
+    - restless
+    - panicked
+    - on edge
+    - tense
+
+  sad:
+    - sad
+    - depressed
+    - down
+    - hopeless
+    - empty
+    - lonely
+    - grief
+    - loss
+    - crying
+    - tears
+    - heartbroken
+    - disappointed
+
+  angry:
+    - angry
+    - frustrated
+    - furious
+    - irritated
+    - annoyed
+    - resentful
+    - bitter
+    - outraged
+    - pissed
+    - mad
+
+  mixed:
+    - confused
+    - conflicted
+    - torn
+    - ambivalent
+    - unstable
+    - up and down
+    - roller coaster
+    - all over the place
+
+# ── Severity Indicators ───────────────────────────────────────
+# Keywords that suggest higher severity entries
+
+severity_indicators:
+  high:
+    - crisis
+    - emergency
+    - suicidal
+    - self-harm
+    - abuse
+    - violence
+    - assault
+    - hospital
+    - police
+    - arrest
+    - overdose
+    - worst day
+    - can't go on
+    - breaking point
+
+  medium:
+    - argument
+    - fight
+    - breakup
+    - fired
+    - panic attack
+    - breakdown
+    - relapse
+    - accident
+    - injury
+    - confrontation
+    - ultimatum
+
+  low:
+    - minor
+    - small issue
+    - frustrating
+    - annoying
+    - inconvenience
+    - slightly
+    - a little

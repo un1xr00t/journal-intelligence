@@ -1,0 +1,453 @@
+# ============================================================
+# Journal Dashboard — AI Prompts
+# ============================================================
+# All LLM prompts in one place for easy tuning and versioning.
+# Each prompt includes a version string for cache invalidation.
+# ============================================================
+
+# ── Daily Entry Extraction ────────────────────────────────────
+# Runs once per new entry. Extracts structured fields.
+
+daily_extraction:
+  version: "v1.0"
+  system: |
+    You are a precise journal analysis assistant. Extract structured information from personal journal entries.
+    Be objective and factual. Do not infer emotions not explicitly stated.
+    Output valid JSON only, no markdown formatting.
+
+  user: |
+    Analyze this journal entry and extract the following fields:
+
+    Entry Date: {entry_date}
+    Entry Text:
+    ---
+    {entry_text}
+    ---
+
+    Extract and return as JSON:
+    {{
+      "mood_label": "calm|anxious|sad|angry|mixed",
+      "mood_score": <float 0.0-10.0, where 0=worst, 10=best>,
+      "severity": <float 0.0-10.0, how intense/significant the day was>,
+      "key_events": ["event1", "event2", ...],
+      "people": [
+        {{"name": "Person Name", "context": "brief relationship/context"}}
+      ],
+      "topics": ["topic1", "topic2", ...],
+      "notable_quotes": ["direct quote from entry that's significant"],
+      "contradiction_flags": [
+        {{"statement": "what was said", "type": "denial|admission|inconsistency"}}
+      ],
+      "tags": ["tag1", "tag2", ...]
+    }}
+
+    Guidelines:
+    - mood_label: Choose the dominant emotional tone
+    - mood_score: 5.0 is neutral; lower is worse, higher is better
+    - severity: How emotionally/situationally intense was this day? 0=mundane, 10=crisis
+    - key_events: Major things that happened, decisions made, conversations had
+    - people: Anyone mentioned by name or clear identifier
+    - topics: Themes, subjects, areas of life discussed
+    - notable_quotes: Verbatim phrases that stand out as important
+    - contradiction_flags: Any statements that deny, admit, or contradict previous patterns
+    - tags: Short keywords for indexing
+
+# ── Daily Summary ─────────────────────────────────────────────
+# Runs once per new entry. Creates a 2-4 sentence narrative.
+
+daily_summary:
+  version: "v1.0"
+  system: |
+    You are a thoughtful journal summarizer. Write brief, insightful summaries that capture the essence of a day.
+    Be empathetic but objective. Write in third person ("They...").
+    Keep summaries to 2-4 sentences.
+
+  user: |
+    Summarize this journal entry in 2-4 sentences:
+
+    Date: {entry_date}
+    Entry:
+    ---
+    {entry_text}
+    ---
+
+    Write a brief narrative summary that captures:
+    - The emotional tone of the day
+    - Key events or decisions
+    - Any notable interactions or realizations
+
+    Output only the summary text, no JSON or formatting.
+
+# ── Master Summary Update ─────────────────────────────────────
+# Runs after each ingest. Updates the living narrative document.
+# Input: previous master summary + new daily summary only.
+
+master_summary_update:
+  version: "v1.1"
+  system: |
+    You are maintaining a living narrative document that synthesizes someone's journal history.
+    You receive the previous master summary and a new daily summary.
+    Update the master summary to incorporate the new information without rewriting history.
+    Be thoughtful, empathetic, and observant of patterns.
+
+  user: |
+    Here is the current master summary:
+    ---
+    {previous_master_summary}
+    ---
+
+    Here is the new daily summary to incorporate:
+    Date: {new_entry_date}
+    ---
+    {new_daily_summary}
+    ---
+
+    Update the master summary to incorporate this new day. Return JSON with these sections:
+
+    {{
+      "overall_arc": "The through-line across the full journal history. What's the story?",
+      "current_state": "Where things stand as of {new_entry_date}. Recent developments.",
+      "key_themes": ["Theme 1", "Theme 2", ...],
+      "key_people": [
+        {{"name": "Name", "role": "Their role/relationship", "recent": "Recent mentions"}}
+      ],
+      "active_threads": ["Unresolved situation 1", "Open question 2", ...],
+      "notable_patterns": ["Pattern 1", "Pattern 2", ...]
+    }}
+
+    Guidelines:
+    - Don't rewrite history; incorporate the new day naturally
+    - Update current_state to reflect the most recent entry
+    - Add to or refine themes, people, threads as needed
+    - Note any new patterns that emerge
+    - Keep each section concise but substantive
+    - Always reference entries by date (e.g., "February 25th" or "2026-02-25") — never by sequential day number (e.g., "Day 71"). If the previous summary uses day numbers, replace them with dates.
+
+# ── Master Summary Initial ────────────────────────────────────
+# Runs once when creating the first master summary.
+
+master_summary_initial:
+  version: "v1.1"
+  system: |
+    You are creating the initial master summary for a journal.
+    Based on the daily summaries provided, create a thoughtful synthesis.
+
+  user: |
+    Here are the daily summaries from the journal so far:
+    ---
+    {all_daily_summaries}
+    ---
+
+    Create an initial master summary. Return JSON:
+
+    {{
+      "overall_arc": "The emerging story across these entries",
+      "current_state": "Where things stand as of the most recent entry",
+      "key_themes": ["Theme 1", "Theme 2", ...],
+      "key_people": [
+        {{"name": "Name", "role": "Their role/relationship", "recent": "Recent mentions"}}
+      ],
+      "active_threads": ["Unresolved situation 1", "Open question 2", ...],
+      "notable_patterns": ["Pattern 1", "Pattern 2", ...]
+    }}
+
+    Guidelines:
+    - Always reference entries by date (e.g., "February 25th") — never by sequential day number (e.g., "Day 71")
+
+# ── Pattern Deep Analysis ─────────────────────────────────────
+# Triggered only when rule-based alert crosses threshold.
+# Input: summaries from the relevant date range only.
+
+pattern_analysis:
+  version: "v1.0"
+  system: |
+    You are analyzing detected patterns in journal entries.
+    A rule-based system flagged a potential pattern. Provide deeper analysis.
+    Be specific and cite evidence from the summaries provided.
+
+  user: |
+    A pattern alert was triggered:
+    Alert Type: {alert_type}
+    Date Range: {date_range_start} to {date_range_end}
+    Initial Description: {alert_description}
+
+    Here are the daily summaries from this period:
+    ---
+    {period_summaries}
+    ---
+
+    Analyze this pattern and return JSON:
+
+    {{
+      "analysis": "Detailed analysis of what's happening",
+      "evidence": ["Specific evidence point 1", "Evidence point 2", ...],
+      "severity_assessment": "low|medium|high|critical",
+      "potential_causes": ["Possible cause 1", "Possible cause 2", ...],
+      "recommended_actions": ["Suggested action 1", "Action 2", ...],
+      "related_patterns": ["Other pattern this might connect to", ...]
+    }}
+
+# ── Case File Narrative ───────────────────────────────────────
+# On-demand when generating export packets.
+
+case_file_narrative:
+  version: "v1.0"
+  system: |
+    You are writing a narrative introduction for a case file export.
+    The case file contains journal entries and analysis for a specific period.
+    Write professionally but with empathy. This may be shared with a therapist.
+
+  user: |
+    Generate a narrative introduction for this case file:
+
+    Packet Type: {packet_type}
+    Date Range: {date_range_start} to {date_range_end}
+    
+    Daily summaries included:
+    ---
+    {selected_summaries}
+    ---
+
+    Alerts/patterns flagged:
+    ---
+    {alerts_summary}
+    ---
+
+    Write a 2-3 paragraph narrative that:
+    1. Introduces the time period and its significance
+    2. Highlights key themes and events
+    3. Notes any patterns or concerns worth attention
+
+    Output only the narrative text, no JSON.
+
+# ── Contradiction Detection ───────────────────────────────────
+# Triggered when potential contradictions are flagged.
+
+contradiction_analysis:
+  version: "v1.0"
+  system: |
+    You are analyzing potential contradictions between journal statements.
+    Be careful to distinguish between genuine contradictions and natural evolution of perspective.
+
+  user: |
+    Analyze these potentially contradictory statements:
+
+    Earlier ({date_a}):
+    "{statement_a}"
+
+    Later ({date_b}):
+    "{statement_b}"
+
+    Context from surrounding entries:
+    ---
+    {context_summaries}
+    ---
+
+    Determine if this is a contradiction and return JSON:
+
+    {{
+      "is_contradiction": true|false,
+      "contradiction_type": "denial|reversal|inconsistency|evolution|none",
+      "explanation": "Why this is or isn't a meaningful contradiction",
+      "significance": "low|medium|high",
+      "recommended_evidence_label": "Short title if this should be saved as evidence"
+    }}
+
+# ── Export: Therapy Summary ───────────────────────────────────
+# On-demand export generation — AI-written structured report for clinician.
+
+export_therapy_summary:
+  version: "v1.0"
+  system: |
+    You are generating a structured therapy summary report.
+    This report may be shared with a therapist or mental health professional.
+    Write professionally, empathetically, and in third person ("They...").
+    Be specific — cite dates and concrete examples from the data provided.
+    Do not reproduce raw journal text verbatim. Synthesise and interpret.
+
+  user: |
+    Generate a therapy summary for the period {start_date} to {end_date}.
+
+    Daily summaries:
+    ---
+    {daily_summaries}
+    ---
+
+    Active patterns and alerts:
+    ---
+    {alerts}
+    ---
+
+    Evidence items:
+    ---
+    {evidence}
+    ---
+
+    Master narrative context:
+    ---
+    {master_summary_excerpt}
+    ---
+
+    Write a structured therapy summary with these clearly labelled sections:
+
+    ## 1. Overview
+    (2-3 sentences describing the overall tone and significance of the period)
+
+    ## 2. Emotional Arc
+    (How mood shifted across the period — key highs, lows, turning points)
+
+    ## 3. Key Themes
+    (Recurring topics, concerns, or preoccupations that emerged)
+
+    ## 4. Notable Events
+    (Significant moments or decisions, with approximate dates)
+
+    ## 5. Relationships & People
+    (Who appeared in this period, in what context, with what dynamic)
+
+    ## 6. Detected Patterns & Alerts
+    (What the automated system flagged and what it may indicate)
+
+    ## 7. Open Threads
+    (Unresolved situations, unanswered questions, ongoing stressors)
+
+    ## 8. Clinician Notes
+    (Observations a therapist should be aware of — potential areas for exploration)
+
+    Be specific and cite dates where relevant. Do not invent details not present in the data.
+
+
+# ── Export: Incident Packet ───────────────────────────────────
+# Narrative for a specific incident or time period of concern.
+
+export_incident_packet:
+  version: "v1.0"
+  system: |
+    You are writing an incident narrative for a journal export packet.
+    This documents a specific period of concern with supporting evidence.
+    Write clearly and factually. Third person. Cite dates.
+    This may be used in legal, therapeutic, or documentation contexts.
+
+  user: |
+    Write an incident narrative for the period {start_date} to {end_date}.
+
+    Daily summaries:
+    ---
+    {daily_summaries}
+    ---
+
+    Detected patterns and alerts:
+    ---
+    {alerts}
+    ---
+
+    Evidence items:
+    ---
+    {evidence}
+    ---
+
+    Write a structured incident narrative with:
+
+    ## 1. Incident Overview
+    (What was happening during this period and why it is significant)
+
+    ## 2. Chronological Account
+    (Key events in sequence with dates — what happened, when, and how it was recorded)
+
+    ## 3. Supporting Evidence
+    (Specific statements or events from the journal that substantiate the account)
+
+    ## 4. Patterns Identified
+    (Behavioural or emotional patterns the system detected)
+
+    ## 5. Context and Background
+    (Relevant history or circumstances that frame this incident)
+
+    Be factual and precise. Do not editorialize beyond what the data supports.
+
+
+# ── Export: Pattern Report ────────────────────────────────────
+# Interpretation of detected patterns and behavioural sequences.
+
+export_pattern_report:
+  version: "v1.0"
+  system: |
+    You are writing a pattern analysis report based on journal data.
+    Interpret detected patterns with nuance — distinguish between
+    genuine concerning patterns and normal variation.
+    Write analytically. Third person. Cite date ranges and specific evidence.
+
+  user: |
+    Write a pattern analysis report for the period {start_date} to {end_date}.
+
+    Daily summaries:
+    ---
+    {daily_summaries}
+    ---
+
+    Detected alerts and patterns (with AI analysis where available):
+    ---
+    {alerts}
+    ---
+
+    Evidence items:
+    ---
+    {evidence}
+    ---
+
+    Master narrative for context:
+    ---
+    {master_summary_excerpt}
+    ---
+
+    Write a structured pattern report with:
+
+    ## 1. Summary
+    (What the most significant patterns are and what period they span)
+
+    ## 2. Pattern Analysis
+    (For each major detected pattern: what it is, when it appeared, what drove it,
+     how significant it is, and whether it's improving or worsening)
+
+    ## 3. Mood & Severity Trends
+    (Overall trajectory — stable, volatile, improving, declining)
+
+    ## 4. Behavioural Sequences
+    (If certain events or moods seem to trigger others — note the sequences)
+
+    ## 5. Contradictions Noted
+    (Any statements or positions that appear inconsistent over the period)
+
+    ## 6. Recommendations
+    (What these patterns suggest in terms of areas to address or monitor)
+
+
+# ── Export: Weekly Digest ─────────────────────────────────────
+# Brief AI intro paragraph for 7-day summary digest.
+
+export_weekly_digest:
+  version: "v1.0"
+  system: |
+    You are writing a brief weekly digest introduction.
+    Keep it concise — 2-3 paragraphs maximum.
+    Capture the tone and key moments of the week. Third person.
+
+  user: |
+    Write a brief weekly digest introduction for the week of {start_date} to {end_date}.
+
+    Daily summaries:
+    ---
+    {daily_summaries}
+    ---
+
+    Alerts this week (if any):
+    ---
+    {alerts}
+    ---
+
+    Write 2-3 paragraphs that:
+    1. Capture the overall mood and tone of the week
+    2. Highlight the most significant events or moments
+    3. Note any patterns or concerns worth flagging
+
+    Keep it concise and readable. This is an intro — detailed data follows below it.

@@ -1,0 +1,217 @@
+# =============================================================================
+# Journal Intelligence Dashboard — .gitignore
+# =============================================================================
+
+# =============================================================================
+# CRITICAL — Personal data, secrets, credentials
+# NEVER commit these under any circumstances
+# =============================================================================
+
+# Your actual config (JWT secret, API keys, etc.)
+config/config.yaml
+
+# Your entire journal database
+db/
+*.db
+*.db-wal
+*.db-shm
+
+# All personal journal data
+data/
+
+# Logs (auth events, IP addresses, API activity)
+logs/
+*.log
+*.jsonl
+
+# Backups
+backups/
+*.bak
+*.backup
+*.tar.gz
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+.Python
+venv/
+env/
+ENV/
+.venv/
+pip-wheel-metadata/
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+.pytype/
+profile_default/
+ipython_config.py
+.ipynb_checkpoints/
+
+# =============================================================================
+# Node / Frontend
+# =============================================================================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+.npm
+.yarn/
+.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =============================================================================
+# Environment & Secrets
+# =============================================================================
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+certbot/
+letsencrypt/
+
+# =============================================================================
+# OS
+# =============================================================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# Editors & IDEs
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.cursor/
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+.classpath
+*.iml
+*.ipr
+*.iws
+.metals/
+.bloop/
+nbproject/
+
+# =============================================================================
+# Project-specific: dev/deploy artifacts that contain personal info
+# =============================================================================
+
+# Handoff docs — contain server details, API key prefixes, personal narrative
+handoff*.md
+
+# One-off patch/fix/deploy scripts used during development
+patch_*.py
+fix_*.py
+deploy_*.py
+backfill_*.py
+
+# Demo data generators (contain personal narrative arc)
+generate_demo_*.py
+
+# Old migration scripts (already ran, don't need in repo)
+migrate_user_isolation.sql
+migration_api_keys.sql
+migration_reflection_cache.sql
+migration_user_memory.sql
+migration_user_settings.sql
+
+# Old versioned/duplicate files
+App_updated.jsx
+*_patch.jsx
+*_patch.py
+main_additions.py
+main_export_routes.py
+main_upload_patch.py
+
+# Dev docs that reference personal server setup
+chatgptNGINXconfigfix.md
+shortcut_troubleshooting.md
+entry_commands.md
+delete_user_fix.md
+exit_plan_spec.md
+
+# Old project instruction versions (keep latest only)
+PROJECT_INSTRUCTIONS_v4.md
+PROJECT_INSTRUCTIONS_v5.md
+
+# nohup output
+nohup.out
+
+# Temp files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# =============================================================================
+# SSL / nginx
+# =============================================================================
+nginx/
+ssl/

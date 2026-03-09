@@ -1,0 +1,131 @@
+# ============================================================
+# Journal Dashboard — Theme Configuration
+# ============================================================
+# Procedural mood-adaptive theming. No external images.
+# Each preset defines colors and SVG pattern style.
+# ============================================================
+
+# Default preset when no mood data available
+default_preset: "calm"
+
+# ── Mood Presets ──────────────────────────────────────────────
+
+presets:
+  calm:
+    gradient_start: "#1a1a2e"
+    gradient_end: "#16213e"
+    accent: "#4a90a4"
+    text: "#e8e8e8"
+    pattern: "soft_wave"
+    description: "Peaceful, grounded state"
+
+  anxious:
+    gradient_start: "#2d1b30"
+    gradient_end: "#1a1a2e"
+    accent: "#9b59b6"
+    text: "#e8e8e8"
+    pattern: "jagged_static"
+    description: "Heightened alertness, worry"
+
+  sad:
+    gradient_start: "#1a1a28"
+    gradient_end: "#0f0f1a"
+    accent: "#5d6d7e"
+    text: "#d0d0d0"
+    pattern: "slow_drift"
+    description: "Low energy, melancholy"
+
+  angry:
+    gradient_start: "#2e1a1a"
+    gradient_end: "#1a0f0f"
+    accent: "#c0392b"
+    text: "#e8e8e8"
+    pattern: "pulse_burst"
+    description: "Frustration, intensity"
+
+  mixed:
+    gradient_start: "#1e1e2f"
+    gradient_end: "#2a1f35"
+    accent: "#7f8fa6"
+    text: "#e0e0e0"
+    pattern: "noise_blend"
+    description: "Emotional instability, volatility"
+
+# ── Pattern Descriptions ──────────────────────────────────────
+# These map to SVG generators in theme.py
+
+patterns:
+  soft_wave:
+    description: "Gentle sine wave bands"
+    mood_fit: ["calm"]
+
+  jagged_static:
+    description: "High-frequency noise lines"
+    mood_fit: ["anxious"]
+
+  slow_drift:
+    description: "Large slow arcs"
+    mood_fit: ["sad"]
+
+  pulse_burst:
+    description: "Radiating lines from center"
+    mood_fit: ["angry"]
+
+  noise_blend:
+    description: "Overlapping circles at varying opacity"
+    mood_fit: ["mixed"]
+
+# ── Trend Modifiers ───────────────────────────────────────────
+# Applied based on rolling mood score trend
+
+trend_modifiers:
+  improving:
+    gradient_end_shift: 0.1  # Lighten gradient end
+    description: "Mood trending upward"
+
+  worsening:
+    gradient_start_shift: -0.1  # Darken gradient start
+    description: "Mood trending downward"
+
+  stable:
+    shift: 0
+    description: "No significant trend"
+
+# ── Thresholds ────────────────────────────────────────────────
+
+thresholds:
+  # If std dev of rolling scores exceeds this, use "mixed" preset
+  instability_threshold: 2.5
+
+  # Number of days to consider for rolling calculations
+  rolling_window_days: 7
+
+  # Trend detection slope thresholds
+  improving_slope: 1.0
+  worsening_slope: -1.0
+
+# ── Alert Badges ──────────────────────────────────────────────
+
+alert_colors:
+  critical: "#e74c3c"
+  high: "#e67e22"
+  medium: "#f39c12"
+  low: "#3498db"
+  info: "#95a5a6"
+
+# ── UI Metrics ────────────────────────────────────────────────
+
+metrics:
+  mood_ring:
+    size: 120
+    stroke_width: 8
+    colors:
+      excellent: "#27ae60"
+      good: "#2ecc71"
+      neutral: "#f39c12"
+      poor: "#e67e22"
+      bad: "#e74c3c"
+
+  severity_bar:
+    height: 8
+    gradient: ["#27ae60", "#f39c12", "#e74c3c"]
