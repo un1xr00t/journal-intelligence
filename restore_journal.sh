@@ -2,12 +2,12 @@
 # restore_journal.sh
 # Usage: ./restore_journal.sh journal_backup_20260304_030000
 # (pass the backup name WITHOUT extension)
-# Place at: /opt/journal-dashboard/restore_journal.sh
+# Place at: <your-app-root>/restore_journal.sh
 
 set -e
 
-APP_ROOT="/opt/journal-dashboard"
-BACKUP_DIR="/opt/journal-dashboard/backups"
+APP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_DIR="${APP_ROOT}/backups"
 BACKUP_NAME="$1"
 
 if [ -z "$BACKUP_NAME" ]; then
@@ -60,7 +60,7 @@ fi
 # 4. Restart API
 echo "[4/4] Restarting API..."
 cd "$APP_ROOT"
-nohup venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > logs/api.log 2>&1 &
+nohup env PYTHONPATH="$APP_ROOT" venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2 > logs/api.log 2>&1 &
 sleep 3
 tail -5 logs/api.log
 
