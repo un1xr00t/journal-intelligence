@@ -8,13 +8,16 @@
 >
 > 📸 **Coming soon:** Screenshots of every page, plus a full step-by-step guide for setting up the iPhone Shortcut so you can upload journal entries directly from your phone.
 >
-> 📤 **In the works:** Direct upload from the web dashboard — no iPhone Shortcut required. Drop a file or paste your entry straight from the browser.
+> 📤 **In the works:** Direct upload from the web dashboard — paste or drop an entry straight from your browser without needing the Shortcut.
 
 ---
 
 There's a certain kind of pain that's hard to explain to people. The kind where you're not sure if you're overreacting. Where you've been told your memory is wrong so many times you start to believe it. Where you look back at months or years of your life and wonder — was that real? Did that actually happen the way I remember?
+
 I started journaling as a way to hold onto reality. To document things. To have a record that existed outside of my own head, one that couldn't be rewritten by someone else.
+
 And then I thought — what if my journal could actually *talk back*? What if instead of just writing into a void, the things I was processing could be understood, tracked, reflected back at me in ways that helped me see the bigger picture?
+
 That's what this is. A privacy-first, self-hosted journal intelligence system. Built by someone in the middle of it, for anyone else who needs it.
 
 ---
@@ -22,6 +25,7 @@ That's what this is. A privacy-first, self-hosted journal intelligence system. B
 ## What It Does
 
 You write. The system listens — and thinks.
+
 Journal entries come in as plain text files (or straight from your iPhone via Shortcuts). From there, AI extracts mood, emotional severity, key events, people mentioned, and recurring topics. But it doesn't stop at data. It builds a living picture of you over time.
 
 ---
@@ -79,9 +83,13 @@ This one I'm proud of. The system reads your onboarding profile, your active pat
 
 ### 🗺 Exit Plan — Your Own Private Workspace
 If your journal signals that you might be navigating a major life transition — leaving a relationship, financial instability, housing uncertainty, safety concerns — the system offers to build you something most apps would never touch.
+
 A **personalized, phased exit plan**. Your own private workspace.
+
 It generates a step-by-step plan based entirely on your journal context — five phases from Safety & Documentation through to Stabilization. Each phase has tasks tailored to your situation, a "Today" section that surfaces only what's relevant right now, resource links tied directly to each task, and a private scratchpad that no AI ever reads.
+
 As you journal more, the plan offers incremental updates — new signals, reprioritized tasks, updated resources. You control every change. Nothing gets applied without your say.
+
 It's the thing I wish had existed when I needed it.
 
 ---
@@ -153,9 +161,9 @@ Your `config.yaml` is gitignored and never committed. The install scripts auto-g
 
 ---
 
-## iPhone Shortcut Integration(SCREENSHOT OF SETTINGS COMING SOON)
+## iPhone Shortcut Integration *(screenshot of Settings coming soon)*
 
-Upload journal entries straight from your phone. The ingest endpoint accepts plain text or HTML files via `POST /api/upload` with your personal API key in the header. Your key is generated during onboarding, shown once, and stored as a hash — regeneratable anytime from Settings.
+This is currently how entries get in — straight from your iPhone. The ingest endpoint accepts plain text or HTML files via `POST /api/upload` with your personal API key in the header. Your key is generated during onboarding, shown once, and stored as a hash — regeneratable anytime from Settings. A full step-by-step Shortcut setup guide is coming soon.
 
 ---
 
