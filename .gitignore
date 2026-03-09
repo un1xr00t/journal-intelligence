@@ -223,3 +223,7 @@ ssl/
 .streamlit/
 debug.py
 migrate_paths.py
+
+# Backup scripts — personalized locally, not tracked after initial commit
+backup_journal.sh
+restore_journal.sh
