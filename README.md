@@ -10,7 +10,6 @@
 > ⚠️ **VERY EARLY BETA** - This project is actively being developed. Things may break, APIs may change, and some features are still being wired up. That said, the core is solid and running in production. Use it, break it, open issues. Screenshots, setup guides, and full documentation are on the way.
 >
 > 📸 **Coming soon:** Screenshots of every page.
-> 📤 **In the works:** Direct upload from the web dashboard - paste or drop an entry straight from your browser without needing the Shortcut.
 
 ---
 
@@ -28,7 +27,7 @@ That's what this is. A privacy-first, self-hosted journal intelligence system. B
 
 You write. The system listens - and thinks.
 
-Journal entries come in as plain text files (or straight from your iPhone via Shortcuts). From there, AI extracts mood, emotional severity, key events, people mentioned, and recurring topics. But it doesn't stop at data. It builds a living picture of you over time.
+Journal entries come in as plain text files, straight from your iPhone via Shortcuts, or written directly in the browser. From there, AI extracts mood, emotional severity, key events, people mentioned, and recurring topics. But it doesn't stop at data. It builds a living picture of you over time.
 
 ---
 
@@ -36,6 +35,17 @@ Journal entries come in as plain text files (or straight from your iPhone via Sh
 
 ### 📖 Timeline
 Your entries, beautifully laid out. Mood scores visualized as a sparkline. Severity tracked over time. A **Living Master Summary** that sits at the top and evolves with every new entry - a constantly updated portrait of where you are and what you've been going through.
+
+---
+
+### ✎ Write & Import — Direct from the Browser
+No iPhone required. The dashboard includes a full in-browser journal workspace accessible from the sidebar or the Write banner on the Timeline.
+
+**Write mode** — A premium editorial workspace. Cormorant Garamond serif, ruled-line texture, deep amber palette. Just you and a blank page. Pick the date, write freely, hit Save. The full AI pipeline runs immediately — mood, severity, events, master summary update — identical to what happens when you upload from an iPhone Shortcut.
+
+**Import mode** — Drag and drop `.txt` or `.html` files (Day One exports, Apple Journal exports, anything plain text) directly into the browser. Drop multiple files at once. Each one processes through the full pipeline sequentially. Status tracks per-file in real time — Queued, Processing, Saved, Duplicate, or Failed.
+
+Both modes are JWT-authenticated and user-scoped. Everything lands on your Timeline with full AI extraction, just like Shortcut uploads.
 
 ---
 
@@ -182,18 +192,39 @@ Your `config.yaml` is gitignored and never committed. The install scripts auto-g
 
 ---
 
-## iPhone Shortcut Integration
+## Getting Entries In
 
-<img src="https://github.com/user-attachments/assets/c8d9344a-29ff-4086-9c3d-286f545f1c4d" width="350" alt="iPhone Shortcut setup" />
+<img width="904" height="672" alt="Screenshot From 2026-03-09 21-17-26" src="https://github.com/user-attachments/assets/af5c942d-25ee-4ab1-aa65-93c4f1c344a1" />
+<img width="903" height="1008" alt="Screenshot From 2026-03-09 21-17-33" src="https://github.com/user-attachments/assets/0e4b3779-9ae8-4c19-93bf-3bbc80b2573d" />
 
+There are two ways to add journal entries. Both run the exact same AI pipeline — mood extraction, severity scoring, key events, master summary update, pattern detection.
 
-This is how entries get in — straight from your iPhone via Apple Shortcuts. The ingest endpoint accepts plain text or HTML files. Your personal API key is generated during onboarding and regeneratable anytime from **Settings → Account → API Key**.
+### Option 1 — Write or Import Directly in the Browser
 
-> **Heads up:** This workflow requires a few steps right now. Direct upload from the web dashboard is coming soon and will make this much simpler.
+Click **Write** in the sidebar or the banner on the Timeline page.
+
+**To write a new entry:**
+1. Choose the **✦ Write** tab
+2. Select the date (defaults to today)
+3. Write freely in the editor
+4. Hit **✦ Save Entry** or press **⌘S**
+5. The AI processes it immediately — mood, severity, and a summary appear on the success screen
+
+**To import existing files:**
+1. Choose the **⊞ Import** tab
+2. Drag and drop `.txt` or `.html` files onto the zone, or click to browse
+3. Drop as many as you want at once — the system queues and processes them sequentially
+4. Watch per-file status update in real time as each one processes
 
 ---
 
-### Step 1 — Get Your API Key
+### Option 2 — iPhone Shortcut
+
+<img src="https://github.com/user-attachments/assets/c8d9344a-29ff-4086-9c3d-286f545f1c4d" width="350" alt="iPhone Shortcut setup" />
+
+Upload directly from Apple Journal on your iPhone. Your personal API key is generated during onboarding and regeneratable anytime from **Settings → Account → API Key**.
+
+#### Step 1 — Get Your API Key
 
 1. Log into your Journal Intelligence dashboard
 2. Go to **Settings** (gear icon in the sidebar)
@@ -201,27 +232,25 @@ This is how entries get in — straight from your iPhone via Apple Shortcuts. Th
 4. Find the **API Key** section — copy the full key shown there
 5. If you don't see it or need a new one, hit **Regenerate** — your new key will display once, so copy it immediately
 
----
-
-### Step 2 — Build the Shortcut
+#### Step 2 — Build the Shortcut
 
 Open the **Shortcuts** app and create a new shortcut. Add these actions in order:
 
-#### Action 1 — Select Files
+**Action 1 — Select Files**
 - Add action: **Select Files**
 - Leave defaults (allows you to pick one or multiple files when you run it)
 
-#### Action 2 — Repeat with each item in File
+**Action 2 — Repeat with each item in File**
 - Add action: **Repeat with each item in**
 - Set the input to **File** (the output of the previous step)
 
-#### Action 3 — Get Contents of URL
+**Action 3 — Get Contents of URL**
 - Add action: **Get Contents of URL**
 - Set the **URL** to:
   ```
   https://your-domain.com/api/upload
   ```
-  *(Replace `your-domain.com` with your actual domain, e.g. `journal.yourdomain.name`)*
+  *(Replace `your-domain.com` with your actual domain)*
 - Set **Method** to `POST`
 - Expand **Headers** and add two headers:
   | Key | Value |
@@ -231,45 +260,33 @@ Open the **Shortcuts** app and create a new shortcut. Add these actions in order
 - Set **Request Body** to `File`
 - Set **File** to `Repeat Item` *(tap the variable picker, select Repeat Item)*
 
-#### Action 4 — End Repeat
+**Action 4 — End Repeat**
 - Add action: **End Repeat**
 
 Name the shortcut something like **"Upload to Journal Intelligence"** and save it.
 
----
-
-### Step 3 — Daily Workflow
-
-This is how to get an entry from Apple Journal into the dashboard:
+#### Step 3 — Daily Workflow
 
 1. **Write your entry** in the Apple Journal app as normal
 2. **Export to iCloud Drive:**
    - Tap the entry → tap the share icon
    - Choose **Export to Files**
    - Navigate to **iCloud Drive → [your journal folder] → entries**
-   - If a file with the same name already exists, tap **Replace** — this keeps things tidy
+   - If a file with the same name already exists, tap **Replace**
 3. **Run the Shortcut:**
    - Open the **Shortcuts** app
    - Tap your **"Upload to Journal Intelligence"** shortcut
-   - When the file picker opens, navigate to **iCloud Drive → [your journal folder] → entries**
-   - Tap the entry you just saved to select it
-   - The shortcut will run — **a single entry typically takes around 20 seconds** to fully upload and process, this is normal
-4. The AI extraction runs in the background after upload. Give it a minute, then open your dashboard — your entry will be there with mood, severity, and events already extracted.
+   - When the file picker opens, navigate to your entries folder and select the file
+   - A single entry typically takes around 20 seconds to fully process
+4. Open your dashboard — your entry will be there with mood, severity, and events already extracted
 
----
+#### Uploading Multiple Entries at Once
 
-### Uploading Multiple Entries at Once
-
-If you're catching up on a backlog of entries:
-
-- You can select multiple files in the file picker when the shortcut runs
+- Select multiple files in the file picker when the shortcut runs
 - The shortcut loops through each one automatically
-- **Expect this to take several minutes** depending on how many entries you're uploading
-- **Keep your phone awake and the Shortcuts app in the foreground** — if your phone sleeps mid-upload, it may interrupt the process before all entries are sent
+- Keep your phone awake and the Shortcuts app in the foreground during bulk uploads
 
----
-
-### Troubleshooting
+#### Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -287,8 +304,6 @@ The app includes two scripts for database and derived data backups: `backup_jour
 ```bash
 chmod +x backup_journal.sh restore_journal.sh
 ```
-
----
 
 ### Automated Backups (VPS)
 
@@ -310,8 +325,6 @@ Backups are stored in `backups/` inside your app root. Each backup consists of t
 - `journal_backup_YYYYMMDD_HHMMSS.db` — the SQLite database
 - `journal_backup_YYYYMMDD_HHMMSS_derived.tar.gz` — summaries, memory profiles, exports
 
----
-
 ### Restoring from a Backup
 
 ```bash
@@ -325,20 +338,10 @@ Pass the backup name **without** the file extension. The script will:
 4. Save a `.pre_restore_*` snapshot of current data before overwriting
 5. Restart the API when done
 
----
-
 ### Pull a Backup to Your Local Machine (VPS users)
-
-If you want an off-server copy, use `rsync` to pull backups down locally:
 
 ```bash
 rsync -avz --progress user@your-server:/path/to/journal-intelligence/backups/ ~/journal-backups/
-```
-
-If you set up an SSH config alias, it simplifies to:
-
-```bash
-rsync -avz --progress yourserver:/path/to/journal-intelligence/backups/ ~/journal-backups/
 ```
 
 ---
@@ -370,7 +373,6 @@ journal-intelligence/
 
 This is early. But the roadmap is ambitious - and I'm not slowing down.
 
-- **Direct web upload** - paste or drop journal entries straight from the browser, no Shortcut needed
 - **Memory injection** - your memory profile actively shapes every AI response, not just onboarding
 - **Native iOS & Android app** - a dedicated mobile experience built for this, not a browser wrapper. Write, review, upload, and get reflections from your phone natively
 - **Improved export engine** - exports are live and working, but this is getting a serious upgrade: better formatting, more packet types, smarter redaction, and therapist-ready clinical layouts
