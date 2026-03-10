@@ -1017,6 +1017,11 @@ async def upload_file_web(
     if not body:
         raise HTTPException(status_code=400, detail="Empty file")
 
+    # If filename has no date pattern, default to today so ingest doesn't fail
+    import datetime as _dt, re as _re
+    if not _re.search(r'\d{4}[-_]\d{2}[-_]\d{2}', filename):
+        filename = _dt.date.today().isoformat() + ".txt"
+
     ingest_result = ingest_file(filename, body, user_id=user_id)
     if ingest_result["status"] == "error":
         raise HTTPException(status_code=422, detail=ingest_result["message"])
