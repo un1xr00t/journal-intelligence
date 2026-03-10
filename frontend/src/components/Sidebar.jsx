@@ -68,7 +68,7 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
       {/* Gradient overlay */}
       <div style={{
         position: 'absolute', inset: 0, zIndex: 1,
-        background: 'linear-gradient(180deg, rgba(7,7,15,0.97) 0%, rgba(7,7,15,0.92) 100%)',
+        background: 'linear-gradient(180deg, var(--bg-sidebar, rgba(7,7,15,0.97)) 0%, var(--bg-sidebar, rgba(7,7,15,0.92)) 100%)',
       }} />
 
       <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', height: '100%', padding: '20px 0', overflowY: 'auto' }}>

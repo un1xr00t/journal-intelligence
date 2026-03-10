@@ -82,7 +82,7 @@ function Shell() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12,
           padding: '0 16px', height: 52, flexShrink: 0,
-          background: 'rgba(7,7,15,0.97)',
+          background: 'var(--bg-sidebar, rgba(7,7,15,0.97))',
           borderBottom: '1px solid var(--border)',
           zIndex: 100, position: 'relative',
         }}>

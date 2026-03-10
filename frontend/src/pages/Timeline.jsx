@@ -37,7 +37,7 @@ function SeverityBar({ value }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#64748b" }}>
       <span style={{ width: 52, flexShrink: 0 }}>Severity</span>
-      <div style={{ flex: 1, height: 3, background: "#1e293b", borderRadius: 99, overflow: "hidden" }}>
+      <div style={{ flex: 1, height: 3, background: "var(--bg-progress, #1e293b)", borderRadius: 99, overflow: "hidden" }}>
         <div style={{ width: `${pct}%`, height: "100%", background: severityColor(value), borderRadius: 99 }} />
       </div>
       <span style={{ width: 24, textAlign: "right" }}>{value ? value.toFixed(1) : "–"}</span>
@@ -128,7 +128,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: "#10101e",
+        background: "var(--bg-card, #10101e)",
         border: `1px solid ${editMode ? "rgba(99,102,241,0.35)" : "rgba(255,255,255,0.06)"}`,
         borderRadius: 12,
         cursor: editMode ? "default" : "pointer",
@@ -187,7 +187,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
           }}
         >
           <div style={{
-            background: "#13131f",
+            background: "var(--bg-card-alt, #13131f)",
             border: "1px solid rgba(239,68,68,0.25)",
             borderTop: "2px solid #ef4444",
             borderRadius: 12,
@@ -266,7 +266,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
             {tags.slice(0, 5).map((t, i) => (
               <span key={i} style={{
                 fontSize: 10, color: "#94a3b8",
-                background: "#1e293b", padding: "2px 8px", borderRadius: 99,
+                background: "var(--bg-progress, #1e293b)", padding: "2px 8px", borderRadius: 99,
               }}>
                 {typeof t === "string" ? t : t.name || t.label || ""}
               </span>
@@ -284,7 +284,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
                 rows={10}
                 style={{
                   width: "100%", boxSizing: "border-box",
-                  background: "#0d1117",
+                  background: "var(--bg-card-deep, #0d1117)",
                   border: "1px solid rgba(99,102,241,0.3)",
                   borderRadius: 8,
                   color: "#cbd5e1",
@@ -459,7 +459,7 @@ function MasterSummaryPanel({ summary }) {
 
   return (
     <div style={{
-      background: "#10101e",
+      background: "var(--bg-card, #10101e)",
       border: "1px solid rgba(255,255,255,0.06)",
       borderTop: `2px solid ${accent}`,
       borderRadius: 12,
@@ -729,7 +729,7 @@ function TherapistInsight() {
 
   return (
     <div style={{
-      background: "#0d0d1a",
+      background: "var(--bg-card-dark, #0d0d1a)",
       border: `1px solid ${borderColor}`,
       borderTop: `2px solid ${accentColor}`,
       borderRadius: 12,
@@ -750,7 +750,7 @@ function TherapistInsight() {
           {dateRange && (
             <span style={{
               fontSize: 10, color: "#475569",
-              background: "#1e293b", padding: "2px 8px", borderRadius: 99,
+              background: "var(--bg-progress, #1e293b)", padding: "2px 8px", borderRadius: 99,
             }}>{dateRange}</span>
           )}
           {entryCount != null && (
@@ -1116,7 +1116,7 @@ export default function Timeline({ filters }) {
           { label: "Avg Severity",  value: avgSev },
         ].map(s => (
           <div key={s.label} style={{
-            background: "#10101e",
+            background: "var(--bg-card, #10101e)",
             border: "1px solid rgba(255,255,255,0.05)",
             borderTop: `2px solid ${accent}`,
             borderRadius: 12,
@@ -1134,7 +1134,7 @@ export default function Timeline({ filters }) {
       {sparkData.length > 1 && (
         <div style={{
           display: "flex", alignItems: "center", gap: 16,
-          background: "#10101e", border: "1px solid rgba(255,255,255,0.05)",
+          background: "var(--bg-card, #10101e)", border: "1px solid rgba(255,255,255,0.05)",
           borderRadius: 12, padding: "10px 16px", marginBottom: 16,
         }}>
           <span style={{ fontSize: 11, color: "#64748b", flexShrink: 0 }}>Mood trend</span>
@@ -1152,7 +1152,7 @@ export default function Timeline({ filters }) {
           {activeFilters.map(([k, v]) => (
             <span key={k} style={{
               fontSize: 11, color: "#94a3b8",
-              background: "#1e293b", padding: "2px 8px", borderRadius: 99,
+              background: "var(--bg-progress, #1e293b)", padding: "2px 8px", borderRadius: 99,
             }}>{k}: {v}</span>
           ))}
         </div>
@@ -1193,7 +1193,7 @@ export default function Timeline({ filters }) {
               disabled={btn.disabled}
               style={{
                 padding: "6px 14px", fontSize: 13, borderRadius: 8,
-                background: "#1e293b", border: "1px solid rgba(255,255,255,0.06)",
+                background: "var(--bg-progress, #1e293b)", border: "1px solid rgba(255,255,255,0.06)",
                 color: btn.disabled ? "#334155" : "#94a3b8",
                 cursor: btn.disabled ? "not-allowed" : "pointer",
               }}

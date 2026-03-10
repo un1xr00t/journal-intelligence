@@ -21,6 +21,11 @@ const UI_THEMES = {
     '--bg-surface':     '#0c0c18',
     '--bg-card':        '#10101e',
     '--bg-card-hover':  '#14142a',
+    '--bg-card-alt':    '#13131f',
+    '--bg-card-dark':   '#0d0d1a',
+    '--bg-card-deep':   '#0d1117',
+    '--bg-progress':    '#1e293b',
+    '--bg-sidebar':     'rgba(7,7,15,0.97)',
     '--border':         'rgba(99,102,241,0.12)',
     '--border-bright':  'rgba(99,102,241,0.3)',
     '--accent':         '#6366f1',
@@ -32,23 +37,27 @@ const UI_THEMES = {
     '--severity-color': '#f59e0b',
   },
   writer: {
-    '--bg-base':        '#0a0704',
-    '--bg-surface':     '#110d07',
-    '--bg-card':        '#18110a',
-    '--bg-card-hover':  '#221508',
-    '--border':         'rgba(195,145,85,0.15)',
-    '--border-bright':  'rgba(195,145,85,0.35)',
-    '--accent':         '#c8965a',
-    '--accent-2':       '#a67844',
-    '--accent-glow':    'rgba(200,150,90,0.2)',
-    '--text-primary':   '#ede0cb',
-    '--text-secondary': '#a8926f',
-    '--text-muted':     '#6b5640',
-    '--severity-color': '#e8a030',
+    '--bg-base':        '#0d0b08',
+    '--bg-surface':     '#110e09',
+    '--bg-card':        '#17120c',
+    '--bg-card-hover':  '#1e1710',
+    '--bg-card-alt':    '#19130d',
+    '--bg-card-dark':   '#130f0a',
+    '--bg-card-deep':   '#110d08',
+    '--bg-progress':    '#251c10',
+    '--bg-sidebar':     'rgba(13,11,8,0.97)',
+    '--border':         'rgba(200,169,110,0.12)',
+    '--border-bright':  'rgba(200,169,110,0.35)',
+    '--accent':         '#c8a96e',
+    '--accent-2':       '#9b7a3e',
+    '--accent-glow':    'rgba(200,169,110,0.18)',
+    '--text-primary':   '#f0e8d8',
+    '--text-secondary': '#c8a96e',
+    '--text-muted':     'rgba(200,169,110,0.38)',
+    '--severity-color': '#d4724a',
   },
 }
 
-// Apply all CSS vars for a given UI theme name
 function applyUiThemeVars(name) {
   const root = document.documentElement
   const vars = UI_THEMES[name] || UI_THEMES.default
@@ -56,13 +65,11 @@ function applyUiThemeVars(name) {
   root.setAttribute('data-ui-theme', name)
 }
 
-// Apply mood theme — in writer mode, accent/border vars are locked by the UI theme
 function applyMoodTheme(theme, uiThemeName) {
   const root = document.documentElement
   if (theme.moodName)      root.style.setProperty('--mood-name', `'${theme.moodName}'`)
   if (theme.moodHue)       root.style.setProperty('--mood-hue', theme.moodHue)
   if (theme.severityColor) root.style.setProperty('--severity-color', theme.severityColor)
-  // Writer mode keeps its amber palette — don't let mood override it
   if (uiThemeName !== 'writer') {
     if (theme.accent)       root.style.setProperty('--accent',        theme.accent)
     if (theme.accent2)      root.style.setProperty('--accent-2',      theme.accent2)
@@ -80,7 +87,6 @@ export function ThemeProvider({ children }) {
   )
   const uiThemeRef = useRef(uiTheme)
 
-  // Apply UI theme vars on mount and whenever uiTheme changes
   useEffect(() => {
     applyUiThemeVars(uiTheme)
     uiThemeRef.current = uiTheme
