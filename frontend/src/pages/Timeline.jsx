@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
@@ -758,7 +758,61 @@ function ExitPlanOfferBanner({ offer, onDismiss }) {
 
 // ── Main Timeline ─────────────────────────────────────────────────────────────
 
+function WriteBanner({ navigate }) {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <div
+      onClick={() => navigate('/write')}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 20px', marginBottom: 16,
+        background: hovered
+          ? 'linear-gradient(90deg, rgba(200,169,110,0.11) 0%, rgba(200,169,110,0.05) 100%)'
+          : 'linear-gradient(90deg, rgba(200,169,110,0.06) 0%, rgba(200,169,110,0.02) 100%)',
+        border: '1px solid',
+        borderColor: hovered ? 'rgba(200,169,110,0.38)' : 'rgba(200,169,110,0.15)',
+        borderRadius: 12, cursor: 'pointer',
+        transition: 'all 0.25s ease',
+        boxShadow: hovered ? '0 0 28px rgba(200,169,110,0.09)' : 'none',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span style={{
+          fontSize: 20, lineHeight: 1,
+          opacity: hovered ? 1 : 0.55,
+          display: 'inline-block',
+          transform: hovered ? 'translateY(-1px)' : 'none',
+          transition: 'opacity 0.2s, transform 0.2s',
+        }}>✎</span>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, margin: '0 0 2px', letterSpacing: '0.01em',
+            color: hovered ? 'rgba(200,169,110,0.95)' : 'rgba(200,169,110,0.65)',
+            transition: 'color 0.2s',
+          }}>
+            Write a new entry
+          </div>
+          <div style={{ fontSize: 11, color: '#475569', margin: 0, letterSpacing: '0.02em' }}>
+            Journal directly in the browser — same pipeline as iPhone Shortcuts
+          </div>
+        </div>
+      </div>
+      <div style={{
+        fontSize: 11, fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase',
+        color: hovered ? 'rgba(200,169,110,0.8)' : 'rgba(200,169,110,0.3)',
+        transform: hovered ? 'translateX(3px)' : 'none',
+        transition: 'color 0.2s, transform 0.2s',
+      }}>
+        Open →
+      </div>
+    </div>
+  );
+}
+
+
 export default function Timeline({ filters }) {
+  const navigate = useNavigate();
   const [entries, setEntries]       = useState([]);
   const [total, setTotal]           = useState(0);
   const [page, setPage]             = useState(0);
@@ -852,6 +906,8 @@ export default function Timeline({ filters }) {
           </div>
         ))}
       </div>
+      {/* ── Write CTA Banner ─────────────────────────────── */}
+      <WriteBanner navigate={navigate} />
 
       {/* ── Sparkline ────────────────────────────────────── */}
       {sparkData.length > 1 && (

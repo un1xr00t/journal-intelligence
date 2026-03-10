@@ -926,6 +926,134 @@ async def toggle_bookmark(
         return {"bookmarked": True, "entry_id": entry_id}
 
 
+# ── Journal Write (JWT auth — web workspace) ─────────────────────────────────
+
+class JournalWriteRequest(BaseModel):
+    text: str
+    entry_date: str | None = None  # YYYY-MM-DD, defaults to today
+
+
+@app.post("/api/journal/write")
+async def write_journal_entry(
+    body: JournalWriteRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_any_user),
+):
+    """JWT-authenticated write. Runs full pipeline: ingest → AI extraction → master summary → pattern scan."""
+    from src.ingest.service import ingest_file
+    from src.nlp.extractor import process_entry
+    from src.nlp.master_summary import process_master_summary
+    import datetime
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Entry text cannot be empty")
+
+    entry_date = body.entry_date if body.entry_date else datetime.date.today().isoformat()
+    filename = f"{entry_date}.txt"
+    content_bytes = text.encode("utf-8")
+    user_id = current_user["id"]
+
+    ingest_result = ingest_file(filename, content_bytes, user_id=user_id)
+    if ingest_result["status"] == "error":
+        raise HTTPException(status_code=422, detail=ingest_result["message"])
+    if ingest_result["status"] == "skipped":
+        return {"status": "skipped", "message": ingest_result["message"], "entry_id": ingest_result.get("entry_id")}
+
+    entry_id = ingest_result["entry_id"]
+    confirmed_date = ingest_result["entry_date"]
+
+    extraction_result = process_entry(entry_id, confirmed_date, text, user_id=user_id)
+    if extraction_result["status"] == "error":
+        return {"status": "partial", "message": f"Saved for {confirmed_date} but AI extraction failed: {extraction_result.get('error')}", "entry_id": entry_id, "entry_date": confirmed_date}
+
+    daily_summary = extraction_result["summary"].get("summary_text", "")
+    master_result = process_master_summary(confirmed_date, daily_summary, user_id=user_id)
+
+    if config.get("features", {}).get("pattern_detection_enabled", True):
+        from src.patterns.detectors import run_all_detectors
+        background_tasks.add_task(run_all_detectors, user_id)
+
+    return {
+        "status": "success",
+        "entry_id": entry_id,
+        "entry_date": confirmed_date,
+        "ingest_status": ingest_result["status"],
+        "mood_label": extraction_result["extraction"].get("mood_label"),
+        "mood_score": extraction_result["extraction"].get("mood_score"),
+        "severity": extraction_result["extraction"].get("severity"),
+        "master_summary_version": master_result.get("version"),
+        "word_count": ingest_result.get("word_count", len(text.split())),
+    }
+
+
+# ── Journal File Upload (JWT auth — web import tab) ───────────────────────────
+
+@app.post("/api/journal/upload-file")
+async def upload_file_web(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_any_user),
+):
+    """JWT-authenticated file upload from the web Import tab. Identical pipeline to /api/upload."""
+    from src.ingest.service import ingest_file
+    from src.nlp.extractor import process_entry
+    from src.nlp.master_summary import process_master_summary
+
+    user_id = current_user["id"]
+    content_type = request.headers.get("content-type", "")
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        file_obj = form.get("file")
+        if not file_obj:
+            raise HTTPException(status_code=400, detail="No file in form data")
+        body = await file_obj.read()
+        filename = request.headers.get("X-Filename") or getattr(file_obj, "filename", "entry.txt") or "entry.txt"
+    else:
+        body = await request.body()
+        filename = request.headers.get("X-Filename", "entry.txt")
+
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    ingest_result = ingest_file(filename, body, user_id=user_id)
+    if ingest_result["status"] == "error":
+        raise HTTPException(status_code=422, detail=ingest_result["message"])
+    if ingest_result["status"] == "skipped":
+        return {"status": "skipped", "message": ingest_result["message"], "entry_id": ingest_result.get("entry_id")}
+
+    entry_id = ingest_result["entry_id"]
+    entry_date = ingest_result["entry_date"]
+
+    try:
+        text_content = body.decode("utf-8")
+    except UnicodeDecodeError:
+        text_content = body.decode("latin-1")
+
+    extraction_result = process_entry(entry_id, entry_date, text_content, user_id=user_id)
+    if extraction_result["status"] == "error":
+        return {"status": "partial", "message": f"Saved but AI extraction failed: {extraction_result.get('error')}", "entry_id": entry_id, "entry_date": entry_date}
+
+    daily_summary = extraction_result["summary"].get("summary_text", "")
+    master_result = process_master_summary(entry_date, daily_summary, user_id=user_id)
+
+    if config.get("features", {}).get("pattern_detection_enabled", True):
+        from src.patterns.detectors import run_all_detectors
+        background_tasks.add_task(run_all_detectors, user_id)
+
+    return {
+        "status": "success",
+        "entry_id": entry_id,
+        "entry_date": entry_date,
+        "ingest_status": ingest_result["status"],
+        "mood_label": extraction_result["extraction"].get("mood_label"),
+        "mood_score": extraction_result["extraction"].get("mood_score"),
+        "severity": extraction_result["extraction"].get("severity"),
+        "word_count": ingest_result.get("word_count", 0),
+    }
+
+
 # ── Upload (API key auth — iPhone Shortcut) ───────────────────────────────────
 
 @app.post("/api/upload")

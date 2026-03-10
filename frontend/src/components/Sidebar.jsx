@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { to: '/settings',      icon: '⚙', label: 'Settings'  },
   { to: '/resources',     icon: '✦', label: 'Resources'  },
   { to: '/exit-plan',     icon: '🗺', label: 'Exit Plan'  },
+  { to: '/write',         icon: '✎', label: 'Write'      },
 ]
 
 export default function Sidebar({ filters, onFilterChange, alerts = [], onRefresh, isMobile = false, isOpen = false, onClose }) {

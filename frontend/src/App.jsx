@@ -17,6 +17,7 @@ import Settings from './pages/Settings'
 import Resources from './pages/Resources'
 import ExitPlan from './pages/ExitPlan'
 import ExitPlanFull from './pages/ExitPlanFull'
+import JournalWrite from './pages/JournalWrite'
 import api from './services/api'
 
 function LoadingScreen() {
@@ -44,12 +45,14 @@ function Shell() {
   const [filters, setFilters] = useState({})
   const [alerts, setAlerts] = useState([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [edgePeek, setEdgePeek] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
 
   // Pages with no sidebar and no padding — either public or full-screen tool pages
   const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding'
   const isFullscreenPage = location.pathname === '/exitplan-full'
-  const hideSidebar      = isPublicPage || isFullscreenPage
+  const isWritePage      = location.pathname === '/write'
+  const hideSidebar      = isPublicPage || isFullscreenPage || isWritePage
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
@@ -121,6 +124,7 @@ function Shell() {
           />
         )}
 
+        {/* Normal sidebar — visible pages */}
         {!hideSidebar && user && (
           <Sidebar
             filters={filters}
@@ -131,6 +135,47 @@ function Shell() {
             isOpen={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
           />
+        )}
+
+        {/* Edge-peek sidebar — /write page */}
+        {isWritePage && user && (
+          <>
+            {/* Invisible hover trigger strip on left edge */}
+            <div
+              onMouseEnter={() => setEdgePeek(true)}
+              style={{
+                position: 'fixed', left: 0, top: 0, bottom: 0,
+                width: 14, zIndex: 290, cursor: 'default',
+              }}
+            />
+            {/* Dim backdrop */}
+            {edgePeek && (
+              <div
+                onClick={() => setEdgePeek(false)}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 291,
+                  background: 'rgba(0,0,0,0.45)',
+                  backdropFilter: 'blur(2px)',
+                  transition: 'opacity 0.25s',
+                }}
+              />
+            )}
+            {/* Sidebar as overlay — reuses isMobile drawer mode */}
+            <div
+              onMouseLeave={() => setEdgePeek(false)}
+              style={{ position: 'fixed', left: 0, top: 0, bottom: 0, zIndex: 292 }}
+            >
+              <Sidebar
+                filters={filters}
+                onFilterChange={handleFilterChange}
+                alerts={alerts}
+                onRefresh={() => window.location.reload()}
+                isMobile={true}
+                isOpen={edgePeek}
+                onClose={() => setEdgePeek(false)}
+              />
+            </div>
+          </>
         )}
 
         <main style={{
@@ -154,6 +199,7 @@ function Shell() {
             <Route path="/resources"       element={<ProtectedRoute><Resources /></ProtectedRoute>} />
             <Route path="/exit-plan"       element={<ProtectedRoute><ExitPlan /></ProtectedRoute>} />
             <Route path="/exitplan-full"   element={<ProtectedRoute><ExitPlanFull /></ProtectedRoute>} />
+            <Route path="/write"           element={<ProtectedRoute><JournalWrite /></ProtectedRoute>} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
         </main>
