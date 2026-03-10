@@ -45,12 +45,62 @@ function SeverityBar({ value }) {
   );
 }
 
-function EntryCard({ entry }) {
-  const [expanded, setExpanded] = useState(false);
+function EntryCard({ entry: initialEntry, onUpdate }) {
+  const [entry,      setEntry]      = useState(initialEntry);
+  const [expanded,   setExpanded]   = useState(false);
+  const [hovered,    setHovered]    = useState(false);
+  const [editMode,   setEditMode]   = useState(false);
+  const [editText,   setEditText]   = useState("");
+  const [loadingRaw, setLoadingRaw] = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [saveError,  setSaveError]  = useState(null);
+
   const tags     = safeJson(entry.tags);
   const events   = safeJson(entry.key_events);
   const quotes   = safeJson(entry.notable_quotes);
   const entities = safeJson(entry.entities);
+
+  async function handleEditClick(e) {
+    e.stopPropagation();
+    setSaveError(null);
+    setLoadingRaw(true);
+    try {
+      const res = await api.get(`/api/entries/${entry.entry_date}`);
+      setEditText(res.data.data?.normalized_text || "");
+      setEditMode(true);
+      setExpanded(false);
+    } catch {
+      setSaveError("Failed to load entry text");
+    } finally {
+      setLoadingRaw(false);
+    }
+  }
+
+  async function handleSave(e) {
+    e.stopPropagation();
+    if (!editText.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await api.put(`/api/entries/${entry.id}`, { normalized_text: editText });
+      if (res.data.entry) {
+        const updated = { ...entry, ...res.data.entry };
+        setEntry(updated);
+        if (onUpdate) onUpdate(updated);
+      }
+      setEditMode(false);
+    } catch (err) {
+      setSaveError(err?.response?.data?.detail || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel(e) {
+    e.stopPropagation();
+    setEditMode(false);
+    setSaveError(null);
+  }
 
   const PERSON_TYPES = new Set(["person", "human", "individual"]);
   const people = entities.filter(e => PERSON_TYPES.has((e.type || e.entity_type || "").toLowerCase()));
@@ -59,18 +109,40 @@ function EntryCard({ entry }) {
 
   return (
     <div
-      onClick={() => setExpanded(v => !v)}
+      onClick={() => !editMode && setExpanded(v => !v)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         background: "#10101e",
-        border: "1px solid rgba(255,255,255,0.06)",
+        border: `1px solid ${editMode ? "rgba(99,102,241,0.35)" : "rgba(255,255,255,0.06)"}`,
         borderRadius: 12,
-        cursor: "pointer",
+        cursor: editMode ? "default" : "pointer",
         marginBottom: 8,
         transition: "border-color 0.15s",
+        position: "relative",
       }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"}
-      onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"}
     >
+      {(hovered && !editMode) && (
+        <button
+          onClick={handleEditClick}
+          disabled={loadingRaw}
+          title="Edit entry"
+          style={{
+            position: "absolute", top: 10, right: 12,
+            background: "rgba(99,102,241,0.12)",
+            border: "1px solid rgba(99,102,241,0.25)",
+            borderRadius: 6,
+            color: "#a5b4fc",
+            fontSize: 11,
+            padding: "3px 9px",
+            cursor: "pointer",
+            zIndex: 2,
+            opacity: loadingRaw ? 0.6 : 1,
+          }}
+        >
+          {loadingRaw ? "…" : "✎ Edit"}
+        </button>
+      )}
       <div style={{ display: "flex", gap: 16, padding: "14px 16px" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 52, paddingTop: 2 }}>
           <span style={{ fontSize: 11, fontFamily: "monospace", color: "#64748b" }}>
@@ -108,15 +180,71 @@ function EntryCard({ entry }) {
               </span>
             ))}
           </div>
-          <p style={{
-            fontSize: 13, color: "#cbd5e1", lineHeight: 1.65, margin: 0,
-            overflow: "hidden",
-            display: "-webkit-box",
-            WebkitLineClamp: expanded ? "unset" : 2,
-            WebkitBoxOrient: "vertical",
-          }}>
-            {entry.summary_text || "No summary."}
-          </p>
+          {editMode ? (
+            <div onClick={e => e.stopPropagation()} style={{ marginTop: 4 }}>
+              <p style={{ fontSize: 10, color: "#6366f1", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px" }}>
+                Editing raw entry text
+              </p>
+              <textarea
+                autoFocus
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                rows={10}
+                style={{
+                  width: "100%", boxSizing: "border-box",
+                  background: "#0d1117",
+                  border: "1px solid rgba(99,102,241,0.3)",
+                  borderRadius: 8,
+                  color: "#cbd5e1",
+                  fontSize: 13,
+                  lineHeight: 1.65,
+                  padding: "10px 12px",
+                  resize: "vertical",
+                  fontFamily: "inherit",
+                  outline: "none",
+                }}
+              />
+              {saveError && (
+                <p style={{ fontSize: 11, color: "#f87171", margin: "4px 0 0" }}>{saveError}</p>
+              )}
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  style={{
+                    fontSize: 12, padding: "5px 14px", borderRadius: 7,
+                    background: saving ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.15)",
+                    border: "1px solid rgba(99,102,241,0.35)",
+                    color: "#a5b4fc", cursor: saving ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {saving ? "Regenerating summary…" : "Save & Regenerate"}
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={saving}
+                  style={{
+                    fontSize: 12, padding: "5px 14px", borderRadius: 7,
+                    background: "transparent",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#64748b", cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p style={{
+              fontSize: 13, color: "#cbd5e1", lineHeight: 1.65, margin: 0,
+              overflow: "hidden",
+              display: "-webkit-box",
+              WebkitLineClamp: expanded ? "unset" : 2,
+              WebkitBoxOrient: "vertical",
+            }}>
+              {entry.summary_text || "No summary."}
+            </p>
+          )}
           <div style={{ marginTop: 10 }}>
             <SeverityBar value={entry.severity} />
           </div>
@@ -947,7 +1075,15 @@ export default function Timeline({ filters }) {
           No entries match the current filters.
         </p>
       ) : (
-        entries.map(e => <EntryCard key={e.id} entry={e} />)
+        entries.map(e => (
+          <EntryCard
+            key={e.id}
+            entry={e}
+            onUpdate={updated =>
+              setEntries(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
+            }
+          />
+        ))
       )}
 
       {/* ── Pagination ───────────────────────────────────── */}

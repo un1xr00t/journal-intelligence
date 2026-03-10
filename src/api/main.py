@@ -883,6 +883,144 @@ async def toggle_evidence_bookmark(
 
 # ── Bookmark toggle ───────────────────────────────────────────────────────────
 
+@app.put("/api/entries/{entry_id}")
+async def update_entry_text(
+    entry_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_any_user),
+):
+    """Update raw entry text and re-run AI extraction."""
+    from src.auth.auth_db import get_db
+    from src.nlp.extractor import process_entry
+
+    data = await request.json()
+    new_text = (data.get("normalized_text") or "").strip()
+    if not new_text:
+        raise HTTPException(400, "Entry text cannot be empty")
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, entry_date, user_id FROM entries WHERE id = ? AND is_current = 1",
+        (entry_id,)
+    ).fetchone()
+    if not row or row["user_id"] != current_user["id"]:
+        conn.close()
+        raise HTTPException(404, "Entry not found")
+
+    entry_date = row["entry_date"]
+    word_count = len(new_text.split())
+
+    conn.execute(
+        "UPDATE entries SET normalized_text = ?, word_count = ? WHERE id = ?",
+        (new_text, word_count, entry_id)
+    )
+    conn.execute("DELETE FROM derived_summaries WHERE entry_id = ?", (entry_id,))
+    conn.commit()
+    conn.close()
+
+    extraction_result = process_entry(entry_id, entry_date, new_text, user_id=current_user["id"])
+    if extraction_result["status"] == "error":
+        return {
+            "status": "partial",
+            "error": extraction_result.get("error"),
+            "entry_id": entry_id,
+        }
+
+    summary    = extraction_result.get("summary", {})
+    extraction = extraction_result.get("extraction", {})
+
+    import json as _json
+    def _dump(v):
+        return _json.dumps(v) if isinstance(v, (list, dict)) else v
+
+    return {
+        "status": "success",
+        "entry": {
+            "id":             entry_id,
+            "entry_date":     entry_date,
+            "word_count":     word_count,
+            "summary_text":   summary.get("summary_text"),
+            "mood_label":     extraction.get("mood_label"),
+            "mood_score":     extraction.get("mood_score"),
+            "severity":       extraction.get("severity"),
+            "tags":           _dump(extraction.get("tags")),
+            "key_events":     _dump(extraction.get("key_events")),
+            "entities":       _dump(extraction.get("entities")),
+            "notable_quotes": _dump(extraction.get("notable_quotes")),
+        },
+    }
+
+
+@app.put("/api/entries/{entry_id}")
+async def update_entry_text(
+    entry_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_any_user),
+):
+    """Update raw entry text and re-run AI extraction."""
+    from src.auth.auth_db import get_db
+    from src.nlp.extractor import process_entry
+
+    data = await request.json()
+    new_text = (data.get("normalized_text") or "").strip()
+    if not new_text:
+        raise HTTPException(400, "Entry text cannot be empty")
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, entry_date, user_id FROM entries WHERE id = ? AND is_current = 1",
+        (entry_id,)
+    ).fetchone()
+    if not row or row["user_id"] != current_user["id"]:
+        conn.close()
+        raise HTTPException(404, "Entry not found")
+
+    entry_date = row["entry_date"]
+    word_count = len(new_text.split())
+
+    conn.execute(
+        "UPDATE entries SET normalized_text = ?, word_count = ? WHERE id = ?",
+        (new_text, word_count, entry_id)
+    )
+    conn.execute("DELETE FROM derived_summaries WHERE entry_id = ?", (entry_id,))
+    conn.commit()
+    conn.close()
+
+    extraction_result = process_entry(entry_id, entry_date, new_text, user_id=current_user["id"])
+    if extraction_result["status"] == "error":
+        return {
+            "status": "partial",
+            "error": extraction_result.get("error"),
+            "entry_id": entry_id,
+        }
+
+    summary    = extraction_result.get("summary", {})
+    extraction = extraction_result.get("extraction", {})
+
+    import json as _json
+    def _dump(v):
+        return _json.dumps(v) if isinstance(v, (list, dict)) else v
+
+    return {
+        "status": "success",
+        "entry": {
+            "id":             entry_id,
+            "entry_date":     entry_date,
+            "word_count":     word_count,
+            "summary_text":   summary.get("summary_text"),
+            "mood_label":     extraction.get("mood_label"),
+            "mood_score":     extraction.get("mood_score"),
+            "severity":       extraction.get("severity"),
+            "tags":           _dump(extraction.get("tags")),
+            "key_events":     _dump(extraction.get("key_events")),
+            "entities":       _dump(extraction.get("entities")),
+            "notable_quotes": _dump(extraction.get("notable_quotes")),
+        },
+    }
+
+
 @app.post("/api/entries/{entry_id}/bookmark")
 async def toggle_bookmark(
     entry_id: int,
