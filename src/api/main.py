@@ -1021,6 +1021,33 @@ async def update_entry_text(
     }
 
 
+# ── DELETE /api/entries/{entry_id} ────────────────────────────────────────
+@app.delete("/api/entries/{entry_id}")
+async def delete_entry(
+    entry_id: int,
+    current_user: dict = Depends(require_any_user),
+):
+    """Delete an entry and its derived summary."""
+    from src.auth.auth_db import get_db
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM entries WHERE id = ? AND user_id = ?",
+            (entry_id, current_user["id"]),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        conn.execute("DELETE FROM derived_summaries WHERE entry_id = ?", (entry_id,))
+        conn.execute("DELETE FROM evidence WHERE entry_id = ?", (entry_id,))
+        conn.execute("DELETE FROM ingest_log WHERE entry_id = ?", (entry_id,))
+        conn.execute("DELETE FROM revisions WHERE previous_id = ? OR new_id = ?", (entry_id, entry_id))
+        conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
+        conn.commit()
+        _logger.info(f"[entries] deleted entry_id={entry_id} user={current_user['id']}")
+        return {"deleted": True}
+    finally:
+        conn.close()
+
 @app.post("/api/entries/{entry_id}/bookmark")
 async def toggle_bookmark(
     entry_id: int,

@@ -45,7 +45,7 @@ function SeverityBar({ value }) {
   );
 }
 
-function EntryCard({ entry: initialEntry, onUpdate }) {
+function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
   const [entry,      setEntry]      = useState(initialEntry);
   const [expanded,   setExpanded]   = useState(false);
   const [hovered,    setHovered]    = useState(false);
@@ -53,7 +53,9 @@ function EntryCard({ entry: initialEntry, onUpdate }) {
   const [editText,   setEditText]   = useState("");
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [saving,     setSaving]     = useState(false);
-  const [saveError,  setSaveError]  = useState(null);
+  const [saveError,       setSaveError]       = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting,        setDeleting]        = useState(false);
 
   const tags     = safeJson(entry.tags);
   const events   = safeJson(entry.key_events);
@@ -107,6 +109,19 @@ function EntryCard({ entry: initialEntry, onUpdate }) {
   const topics = entities.filter(e => !PERSON_TYPES.has((e.type || e.entity_type || "").toLowerCase()));
   const palette = moodPalette(entry.mood_label);
 
+  const handleDelete = async (e) => {
+    if (e) e.stopPropagation();
+    setDeleting(true);
+    try {
+      await api.delete(`/api/entries/${entry.id}`);
+      if (onDelete) onDelete(entry.id);
+    } catch (err) {
+      console.error("Delete failed", err);
+      setDeleting(false);
+      setShowDeleteModal(false);
+    }
+  }
+
   return (
     <div
       onClick={() => !editMode && setExpanded(v => !v)}
@@ -122,7 +137,7 @@ function EntryCard({ entry: initialEntry, onUpdate }) {
         position: "relative",
       }}
     >
-      {(hovered && !editMode) && (
+      {(hovered && !editMode) && (<>
         <button
           onClick={handleEditClick}
           disabled={loadingRaw}
@@ -142,7 +157,84 @@ function EntryCard({ entry: initialEntry, onUpdate }) {
         >
           {loadingRaw ? "…" : "✎ Edit"}
         </button>
+        <button
+          onClick={e => { e.stopPropagation(); setShowDeleteModal(true); }}
+          style={{
+            position: "absolute", top: 10, right: 78,
+            fontSize: 11,
+            padding: "3px 9px",
+            cursor: "pointer",
+            zIndex: 2,
+            background: "rgba(239,68,68,0.12)",
+            border: "1px solid rgba(239,68,68,0.25)",
+            color: "#f87171",
+            borderRadius: 6,
+            fontFamily: "inherit",
+          }}
+        >
+          ✕ Delete
+        </button>
+      </>)}
+      {showDeleteModal && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div style={{
+            background: "#13131f",
+            border: "1px solid rgba(239,68,68,0.25)",
+            borderTop: "2px solid #ef4444",
+            borderRadius: 12,
+            padding: "28px 32px",
+            width: 360,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+          }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0", margin: "0 0 8px" }}>
+              Delete this entry?
+            </p>
+            <p style={{ fontSize: 12, color: "#64748b", fontFamily: "IBM Plex Mono", margin: "0 0 12px" }}>
+              {entry.entry_date}{entry.word_count ? ` · ${entry.word_count} words` : ""}
+            </p>
+            <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 24px", lineHeight: 1.6 }}>
+              This will permanently remove the entry and all extracted data. This cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={e => { e.stopPropagation(); setShowDeleteModal(false); }}
+                disabled={deleting}
+                style={{
+                  fontSize: 13, padding: "7px 18px", borderRadius: 7,
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#64748b", cursor: "pointer",
+                }}
+              >
+                No, keep it
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{
+                  fontSize: 13, padding: "7px 18px", borderRadius: 7,
+                  background: "rgba(239,68,68,0.12)",
+                  border: "1px solid rgba(239,68,68,0.35)",
+                  color: "#f87171", cursor: deleting ? "not-allowed" : "pointer",
+                  opacity: deleting ? 0.7 : 1,
+                }}
+              >
+                {deleting ? "Deleting…" : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+
       <div style={{ display: "flex", gap: 16, padding: "14px 16px" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 52, paddingTop: 2 }}>
           <span style={{ fontSize: 11, fontFamily: "monospace", color: "#64748b" }}>
@@ -203,7 +295,8 @@ function EntryCard({ entry: initialEntry, onUpdate }) {
                   fontFamily: "inherit",
                   outline: "none",
                 }}
-              />
+              onDelete={id => setEntries(prev => prev.filter(x => x.id !== id))}
+          />
               {saveError && (
                 <p style={{ fontSize: 11, color: "#f87171", margin: "4px 0 0" }}>{saveError}</p>
               )}
@@ -1082,6 +1175,7 @@ export default function Timeline({ filters }) {
             onUpdate={updated =>
               setEntries(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
             }
+          onDelete={id => setEntries(prev => prev.filter(x => x.id !== id))}
           />
         ))
       )}
