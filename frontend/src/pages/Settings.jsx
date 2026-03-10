@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme } from '../contexts/ThemeContext'
 import api from '../services/api'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -918,6 +919,137 @@ function DataSection() {
   )
 }
 
+
+// ─── Appearance Section ───────────────────────────────────────────────────────
+const THEME_OPTIONS = [
+  {
+    id: 'default',
+    name: 'Default',
+    desc: 'Dark navy · mood-adaptive accents',
+    preview: {
+      bg: '#07070f', surface: '#0c0c18', card: '#10101e',
+      accent: '#6366f1', text: '#e8e8f0', muted: '#55556a',
+      border: 'rgba(99,102,241,0.18)',
+    },
+  },
+  {
+    id: 'writer',
+    name: 'Writer',
+    desc: 'Warm umber · notebook aesthetic',
+    preview: {
+      bg: '#0a0704', surface: '#110d07', card: '#18110a',
+      accent: '#c8965a', text: '#ede0cb', muted: '#6b5640',
+      border: 'rgba(195,145,85,0.22)',
+    },
+  },
+]
+
+function AppearanceSection() {
+  const { uiTheme, setUiTheme } = useTheme()
+
+  return (
+    <>
+      <Card>
+        <Label>UI Theme</Label>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: "'IBM Plex Mono', monospace", marginBottom: 16, lineHeight: 1.5 }}>
+          Controls the global color palette and typography. Applies instantly across the entire app.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          {THEME_OPTIONS.map(t => {
+            const active = uiTheme === t.id
+            return (
+              <button
+                key={t.id}
+                onClick={() => setUiTheme(t.id)}
+                style={{
+                  position: 'relative', padding: 0, cursor: 'pointer',
+                  border: active ? `1px solid ${t.preview.accent}` : '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 12, overflow: 'hidden', background: 'none',
+                  transition: 'border-color 0.2s, box-shadow 0.2s',
+                  boxShadow: active ? `0 0 16px ${t.preview.accent}28` : 'none',
+                  textAlign: 'left',
+                }}
+              >
+                {/* ── Mini app preview ── */}
+                <div style={{ background: t.preview.bg, padding: '13px 12px 10px', borderRadius: '11px 11px 0 0' }}>
+                  <div style={{ display: 'flex', gap: 7 }}>
+                    {/* Fake sidebar */}
+                    <div style={{
+                      width: 30, background: t.preview.surface,
+                      border: `1px solid ${t.preview.border}`,
+                      borderRadius: 5, padding: '6px 5px',
+                      display: 'flex', flexDirection: 'column', gap: 4,
+                    }}>
+                      <div style={{ height: 3, width: '60%', background: t.preview.accent, borderRadius: 2 }} />
+                      {[0,1,2,3].map(i => (
+                        <div key={i} style={{ height: 2.5, background: t.preview.border, borderRadius: 2 }} />
+                      ))}
+                    </div>
+                    {/* Fake content */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {/* Fake stat row */}
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {[0,1,2].map(i => (
+                          <div key={i} style={{ flex: 1, height: 18, background: t.preview.card, border: `1px solid ${t.preview.border}`, borderRadius: 4 }} />
+                        ))}
+                      </div>
+                      {/* Fake entry card */}
+                      <div style={{ background: t.preview.card, border: `1px solid ${t.preview.border}`, borderRadius: 5, padding: '5px 7px' }}>
+                        <div style={{ height: 2.5, width: '75%', background: t.preview.text, borderRadius: 2, opacity: 0.55, marginBottom: 3 }} />
+                        <div style={{ height: 2, width: '50%', background: t.preview.muted, borderRadius: 2, opacity: 0.5 }} />
+                      </div>
+                      {/* Fake button */}
+                      <div style={{
+                        height: 16, width: 52, borderRadius: 5,
+                        background: `linear-gradient(135deg, ${t.preview.accent}, ${t.preview.accent}99)`,
+                        opacity: 0.85,
+                      }} />
+                    </div>
+                  </div>
+                </div>
+                {/* ── Label strip ── */}
+                <div style={{ padding: '9px 13px 11px', background: t.preview.card, borderTop: `1px solid ${t.preview.border}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <span style={{
+                      fontSize: 12, fontWeight: 700, fontFamily: 'Syne, sans-serif',
+                      color: active ? t.preview.accent : 'rgba(255,255,255,0.7)',
+                    }}>{t.name}</span>
+                    {active && (
+                      <span style={{
+                        width: 16, height: 16, borderRadius: '50%',
+                        background: t.preview.accent, display: 'inline-flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, color: '#000', fontWeight: 800,
+                      }}>✓</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.28)', fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1.45 }}>
+                    {t.desc}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </Card>
+
+      {uiTheme === 'writer' && (
+        <Card style={{ background: 'rgba(200,150,90,0.04)', borderColor: 'rgba(200,150,90,0.15)' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 14, color: '#c8965a', flexShrink: 0, marginTop: 1 }}>✦</span>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Syne, sans-serif', color: '#c8965a', marginBottom: 4 }}>Writer mode active</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1.6 }}>
+                Amber palette is locked across all pages. Mood-adaptive accent colors are paused while Writer is active.
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+    </>
+  )
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'memory',   icon: '◷', label: 'Memory Profile' },
@@ -925,6 +1057,7 @@ const TABS = [
   { id: 'account',  icon: '⊞', label: 'Account'        },
   { id: 'sessions', icon: '◎', label: 'Sessions'        },
   { id: 'data',     icon: '◈', label: 'Data'            },
+  { id: 'appearance', icon: '◉', label: 'Appearance'   },
 ]
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
@@ -948,7 +1081,7 @@ export default function Settings() {
           <span style={{ color: 'var(--accent)' }}>⊙</span> Settings
         </h1>
         <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>
-          memory profile · ai preferences · account · sessions
+          memory profile · ai preferences · account · appearance
         </p>
       </div>
 
@@ -1005,6 +1138,12 @@ export default function Settings() {
         <>
           <SectionTitle icon="◈" title="Your Data" subtitle="Stats, storage, and privacy information" />
           <DataSection />
+        </>
+      )}
+      {tab === 'appearance' && (
+        <>
+          <SectionTitle icon="◉" title="Appearance" subtitle="Global UI theme — colors, palette, and typography" />
+          <AppearanceSection />
         </>
       )}
 

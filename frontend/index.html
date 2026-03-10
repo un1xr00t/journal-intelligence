@@ -24,7 +24,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Playfair+Display:ital,wght@0,700;1,400;1,600&display=swap" rel="stylesheet" />
     <style>
       :root {
         --bg-base:       #07070f;
@@ -45,6 +45,12 @@
         --severity-color:#f59e0b;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
+      [data-ui-theme="writer"] body {
+        font-family: 'Cormorant Garamond', Georgia, serif !important;
+      }
+      [data-ui-theme="writer"] ::-webkit-scrollbar-thumb {
+        background: rgba(195,145,85,0.3);
+      }
       body {
         background: var(--bg-base);
         color: var(--text-primary);
