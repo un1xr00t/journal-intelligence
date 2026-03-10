@@ -194,8 +194,12 @@ Your `config.yaml` is gitignored and never committed. The install scripts auto-g
 
 ## Getting Entries In
 
-<img width="600" alt="Screenshot From 2026-03-09 21-17-26" src="https://github.com/user-attachments/assets/af5c942d-25ee-4ab1-aa65-93c4f1c344a1" />
-<img width="500" alt="Screenshot From 2026-03-09 21-17-33" src="https://github.com/user-attachments/assets/0e4b3779-9ae8-4c19-93bf-3bbc80b2573d" />
+<table>
+  <tr>
+    <td><img width="440" alt="Screenshot From 2026-03-09 21-17-26" src="https://github.com/user-attachments/assets/af5c942d-25ee-4ab1-aa65-93c4f1c344a1" /></td>
+    <td><img width="440" alt="Screenshot From 2026-03-09 21-17-33" src="https://github.com/user-attachments/assets/0e4b3779-9ae8-4c19-93bf-3bbc80b2573d" /></td>
+  </tr>
+</table>
 
 There are two ways to add journal entries. Both run the exact same AI pipeline — mood extraction, severity scoring, key events, master summary update, pattern detection.
 
