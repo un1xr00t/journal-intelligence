@@ -1531,52 +1531,100 @@ def register_exit_plan_routes(app, require_any_user):
         finally:
             conn.close()
 
-    # ── GET /api/exit-plan/support-contacts ────────────────────────────────────
-    @app.get("/api/exit-plan/support-contacts")
-    async def get_support_contacts(current_user: dict = Depends(require_any_user)):
-        """
-        Returns a deduplicated, frequency-ranked list of PERSON entities from
-        the user's journal entries for the Support Network tab.
-        Read-only — never affects task progress.
-        """
+    # ── Support Network — manual contact CRUD ─────────────────────────────────
+
+    def _ensure_contacts_table(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS exit_plan_contacts (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                name       TEXT    NOT NULL,
+                role       TEXT    DEFAULT '',
+                phone      TEXT    DEFAULT '',
+                email      TEXT    DEFAULT '',
+                address    TEXT    DEFAULT '',
+                notes      TEXT    DEFAULT '',
+                created_at TEXT    NOT NULL,
+                updated_at TEXT    NOT NULL
+            )
+        """)
+        conn.commit()
+
+    @app.get("/api/exit-plan/contacts")
+    async def get_contacts(current_user: dict = Depends(require_any_user)):
         conn = get_db()
-        user_id = current_user["id"]
-        try:
-            rows = conn.execute("""
-                SELECT ds.entities, e.entry_date
-                FROM derived_summaries ds
-                JOIN entries e ON ds.entry_id = e.id
-                WHERE e.user_id = ? AND e.is_current = 1 AND ds.entities IS NOT NULL
-                ORDER BY e.entry_date DESC LIMIT 90
-            """, (user_id,)).fetchall()
-        except Exception:
-            rows = []
+        _ensure_contacts_table(conn)
+        rows = conn.execute(
+            "SELECT * FROM exit_plan_contacts WHERE user_id = ? ORDER BY created_at ASC",
+            (current_user["id"],)
+        ).fetchall()
+        return {"contacts": [dict(r) for r in rows]}
 
-        SKIP_NAMES = {"i", "me", "myself", "us", "we", "you", "they", "he", "she",
-                      "him", "her", "them", "my", "therapist", "doctor", "attorney"}
-        person_map = {}
-        for row in rows:
-            try:
-                entities = json.loads(row["entities"] or "[]")
-            except Exception:
-                continue
-            for entity in entities:
-                if entity.get("type") != "PERSON":
-                    continue
-                name = (entity.get("name") or "").strip()
-                if not name or name.lower() in SKIP_NAMES or len(name) < 2:
-                    continue
-                key = name.lower()
-                if key not in person_map:
-                    person_map[key] = {"name": name, "count": 0, "contexts": [], "last_seen": row["entry_date"]}
-                person_map[key]["count"] += 1
-                ctx = (entity.get("context") or "").strip()
-                if ctx and len(person_map[key]["contexts"]) < 3:
-                    person_map[key]["contexts"].append(ctx)
-                if row["entry_date"] > person_map[key]["last_seen"]:
-                    person_map[key]["last_seen"] = row["entry_date"]
+    class ContactCreateRequest(BaseModel):
+        name:    str
+        role:    str = ""
+        phone:   str = ""
+        email:   str = ""
+        address: str = ""
+        notes:   str = ""
 
-        contacts = sorted(person_map.values(), key=lambda x: x["count"], reverse=True)[:20]
-        return {"contacts": contacts, "total": len(person_map)}
+    @app.post("/api/exit-plan/contacts")
+    async def create_contact(req: ContactCreateRequest, current_user: dict = Depends(require_any_user)):
+        conn = get_db()
+        _ensure_contacts_table(conn)
+        now = datetime.now(timezone.utc).isoformat()
+        cur = conn.execute(
+            """INSERT INTO exit_plan_contacts (user_id, name, role, phone, email, address, notes, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (current_user["id"], req.name.strip(), req.role, req.phone, req.email, req.address, req.notes, now, now)
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM exit_plan_contacts WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return dict(row)
+
+    class ContactUpdateRequest(BaseModel):
+        name:    str = None
+        role:    str = None
+        phone:   str = None
+        email:   str = None
+        address: str = None
+        notes:   str = None
+
+    @app.patch("/api/exit-plan/contacts/{contact_id}")
+    async def update_contact(contact_id: int, req: ContactUpdateRequest, current_user: dict = Depends(require_any_user)):
+        conn = get_db()
+        _ensure_contacts_table(conn)
+        row = conn.execute(
+            "SELECT * FROM exit_plan_contacts WHERE id = ? AND user_id = ?",
+            (contact_id, current_user["id"])
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        updates = {k: v for k, v in req.dict().items() if v is not None}
+        if not updates:
+            return dict(row)
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        conn.execute(
+            f"UPDATE exit_plan_contacts SET {set_clause} WHERE id = ? AND user_id = ?",
+            list(updates.values()) + [contact_id, current_user["id"]]
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM exit_plan_contacts WHERE id = ?", (contact_id,)).fetchone()
+        return dict(row)
+
+    @app.delete("/api/exit-plan/contacts/{contact_id}")
+    async def delete_contact(contact_id: int, current_user: dict = Depends(require_any_user)):
+        conn = get_db()
+        _ensure_contacts_table(conn)
+        row = conn.execute(
+            "SELECT id FROM exit_plan_contacts WHERE id = ? AND user_id = ?",
+            (contact_id, current_user["id"])
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        conn.execute("DELETE FROM exit_plan_contacts WHERE id = ?", (contact_id,))
+        conn.commit()
+        return {"deleted": True}
 
 # end register_exit_plan_routes

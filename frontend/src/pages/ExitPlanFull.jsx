@@ -1166,89 +1166,265 @@ function CreatePlanFlow({ detectData, onCreated, onDismiss }) {
   )
 }
 
-// ── Network tab (support contacts from journal) ────────────────────────────
+// ── Support Network tab (manual contact book) ───────────────────────────────
 
-function NetworkTab() {
-  const [contacts,  setContacts]  = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [total,     setTotal]     = useState(0)
-  const [lastFetch, setLastFetch] = useState(null)
+const ROLE_OPTIONS = ['Therapist', 'Lawyer', 'Family', 'Friend', 'Doctor', 'Advocate', 'Other']
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const r = await api.get('/api/exit-plan/support-contacts')
-      setContacts(r.data.contacts || [])
-      setTotal(r.data.total || 0)
-      setLastFetch(new Date())
-    } catch {
-      setContacts([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+function ContactCard({ contact, onEdit, onDelete }) {
+  const [confirming, setConfirming] = useState(false)
+  return (
+    <div style={{
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 10, padding: '16px 18px', marginBottom: 10,
+      display: 'flex', alignItems: 'flex-start', gap: 14,
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+        background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 16,
+      }}>
+        {contact.role === 'Therapist' ? '🧠' : contact.role === 'Lawyer' ? '⚖️' : contact.role === 'Doctor' ? '🩺' : '👤'}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{contact.name}</span>
+          {contact.role && (
+            <span style={{
+              fontSize: 10, padding: '2px 7px', borderRadius: 99,
+              background: 'rgba(99,102,241,0.15)', color: 'var(--accent)',
+              fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+            }}>{contact.role}</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 16px' }}>
+          {contact.phone && (
+            <a href={`tel:${contact.phone}`} style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none' }}>
+              📞 {contact.phone}
+            </a>
+          )}
+          {contact.email && (
+            <a href={`mailto:${contact.email}`} style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none' }}>
+              ✉️ {contact.email}
+            </a>
+          )}
+          {contact.address && (
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>📍 {contact.address}</span>
+          )}
+        </div>
+        {contact.notes && (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5, fontStyle: 'italic' }}>
+            {contact.notes}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <button
+          onClick={() => onEdit(contact)}
+          style={{ padding: '5px 10px', fontSize: 11, borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+        >Edit</button>
+        {confirming ? (
+          <button
+            onClick={() => { setConfirming(false); onDelete(contact.id) }}
+            style={{ padding: '5px 10px', fontSize: 11, borderRadius: 6, border: '1px solid #ef444444', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}
+          >Confirm</button>
+        ) : (
+          <button
+            onClick={() => setConfirming(true)}
+            style={{ padding: '5px 10px', fontSize: 11, borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
+          >✕</button>
+        )}
+      </div>
+    </div>
+  )
+}
 
-  useEffect(() => { load() }, [load])
+const BLANK_FORM = { name: '', role: '', phone: '', email: '', address: '', notes: '' }
 
-  const tierColor = (n) => n >= 10 ? '#10b981' : n >= 5 ? '#6366f1' : n >= 2 ? '#f59e0b' : 'var(--text-muted)'
-  const tierLabel = (n) => n >= 10 ? 'Frequently mentioned' : n >= 5 ? 'Mentioned often' : n >= 2 ? 'Mentioned a few times' : 'Mentioned once'
+function ContactFormModal({ contact, onSave, onClose }) {
+  const [form, setForm] = useState(contact ? { ...contact } : { ...BLANK_FORM })
+  const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const submit = async () => {
+    if (!form.name.trim()) return
+    setSaving(true)
+    try { await onSave(form) } finally { setSaving(false) }
+  }
+
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
+    borderRadius: 7, padding: '8px 11px', color: 'var(--text-primary)',
+    fontSize: 13, outline: 'none', fontFamily: 'DM Sans',
+  }
+  const labelStyle = { fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>👥 Your Support Network</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 520 }}>
-            People detected from your journal entries. Updates live as you write — never affects task progress.
+    <>
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 299 }}
+      />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        zIndex: 300, background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 12, padding: '24px 26px', width: 420, maxWidth: '92vw',
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>
+          {contact ? 'Edit Contact' : 'Add Contact'}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={labelStyle}>Name *</label>
+            <input style={inputStyle} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Full name" />
+          </div>
+          <div>
+            <label style={labelStyle}>Role</label>
+            <select style={{ ...inputStyle, cursor: 'pointer' }} value={form.role} onChange={e => set('role', e.target.value)}>
+              <option value="">Select role…</option>
+              {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Phone</label>
+              <input style={inputStyle} value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="555-555-5555" />
+            </div>
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input style={inputStyle} value={form.email} onChange={e => set('email', e.target.value)} placeholder="name@example.com" />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Address</label>
+            <input style={inputStyle} value={form.address} onChange={e => set('address', e.target.value)} placeholder="City, State or full address" />
+          </div>
+          <div>
+            <label style={labelStyle}>Notes</label>
+            <textarea
+              style={{ ...inputStyle, resize: 'vertical' }}
+              value={form.notes}
+              onChange={e => set('notes', e.target.value)}
+              placeholder="Office hours, meeting instructions, anything helpful…"
+              rows={2}
+            />
           </div>
         </div>
-        <button style={{ ...btn('ghost', { fontSize: 11, flexShrink: 0, marginLeft: 16 }) }} onClick={load} disabled={loading}>
-          {loading ? '…' : '⟳ Refresh'}
+        <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', fontSize: 12, borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={saving || !form.name.trim()}
+            style={{ padding: '8px 18px', fontSize: 12, borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: (saving || !form.name.trim()) ? 0.5 : 1 }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function NetworkTab() {
+  const [contacts,   setContacts]   = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [showModal,  setShowModal]  = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+
+  const load = async () => {
+    try {
+      const r = await api.get('/api/exit-plan/contacts')
+      setContacts(r.data.contacts || [])
+    } catch {} finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleSave = async (form) => {
+    if (editTarget) {
+      await api.patch(`/api/exit-plan/contacts/${editTarget.id}`, form)
+    } else {
+      await api.post('/api/exit-plan/contacts', form)
+    }
+    setShowModal(false)
+    setEditTarget(null)
+    load()
+  }
+
+  const handleEdit = (contact) => {
+    setEditTarget(contact)
+    setShowModal(true)
+  }
+
+  const handleDelete = async (id) => {
+    await api.delete(`/api/exit-plan/contacts/${id}`)
+    load()
+  }
+
+  const openAdd = () => {
+    setEditTarget(null)
+    setShowModal(true)
+  }
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>👥 Support Network</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            People you can count on — therapist, lawyer, trusted friends and family.
+            This is private and never connected to your journal entries.
+          </div>
+        </div>
+        <button
+          onClick={openAdd}
+          style={{ padding: '8px 16px', fontSize: 12, borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+        >
+          + Add Person
         </button>
       </div>
-      {lastFetch && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono', marginBottom: 16 }}>
-          Updated {lastFetch.toLocaleTimeString()} · {total} unique people found
-        </div>
-      )}
-      <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 8, padding: '12px 16px', marginBottom: 20 }}>
-        <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, marginBottom: 4 }}>💡 How to use this</div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-          The "Build your support network" task in Phase 1 is where you'll document who you can count on.
-          Use this list as a starting point — these are people your journal already knows about.
-        </div>
-      </div>
+
       {loading ? (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>Loading your network…</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>Loading…</div>
       ) : contacts.length === 0 ? (
-        <div style={{ ...card({ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }) }}>
-          <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.3 }}>👤</div>
-          No people detected yet. Keep writing — they'll appear here as you mention them.
+        <div style={{
+          background: 'var(--bg-card)', border: '1px dashed var(--border)',
+          borderRadius: 10, padding: '32px 24px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>👥</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+            No contacts yet.<br />
+            Add your therapist, lawyer, or anyone you trust during this transition.
+          </div>
+          <button
+            onClick={openAdd}
+            style={{ marginTop: 16, padding: '9px 20px', fontSize: 12, borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Add First Contact
+          </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
-          {contacts.map((c, i) => (
-            <div key={i} style={{ ...card({ padding: '14px 16px' }), borderLeft: `3px solid ${tierColor(c.count)}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{c.name}</div>
-                <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: tierColor(c.count), background: tierColor(c.count) + '18', padding: '2px 7px', borderRadius: 99 }}>×{c.count}</span>
-              </div>
-              <div style={{ fontSize: 10, color: tierColor(c.count), marginBottom: 8 }}>{tierLabel(c.count)}</div>
-              {c.contexts?.slice(0, 2).map((ctx, ci) => (
-                <div key={ci} style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, padding: '5px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.03)', marginBottom: 4, fontStyle: 'italic' }}>
-                  "{ctx}"
-                </div>
-              ))}
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontFamily: 'IBM Plex Mono' }}>
-                Last seen: {c.last_seen ? new Date(c.last_seen).toLocaleDateString() : '—'}
-              </div>
-            </div>
-          ))}
-        </div>
+        contacts.map(c => (
+          <ContactCard key={c.id} contact={c} onEdit={handleEdit} onDelete={handleDelete} />
+        ))
+      )}
+
+      {showModal && (
+        <ContactFormModal
+          contact={editTarget}
+          onSave={handleSave}
+          onClose={() => { setShowModal(false); setEditTarget(null) }}
+        />
       )}
     </div>
   )
 }
+
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -1348,7 +1524,7 @@ export default function ExitPlanFull() {
     { id: 'phases',  label: 'Phases' },
     { id: 'kanban',  label: 'Kanban' },
     { id: 'notes',   label: 'Notes' },
-    { id: 'network', label: '👥 Network' },
+    { id: 'network', label: '👥 Support Network' },
   ]
 
   // ── Header bar (always rendered) ─────────────────────────────────────────────
