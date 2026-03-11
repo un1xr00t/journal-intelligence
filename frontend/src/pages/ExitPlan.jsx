@@ -274,13 +274,15 @@ function TodayTaskCard({ task, onStatusChange, onOpenDetail }) {
 // ── Phase row (Full Plan view) ────────────────────────────────────────────────
 
 function PhaseRow({ phase, onTaskClick, onTaskAdded }) {
-  const [open,        setOpen]        = useState(phase.status === 'active')
-  const [addingTask,  setAddingTask]  = useState(false)
-  const [newTitle,    setNewTitle]    = useState('')
-  const [newPriority, setNewPriority] = useState('normal')
-  const [aiEnrich,    setAiEnrich]    = useState(true)
-  const [savingTask,  setSavingTask]  = useState(false)
-  const [taskError,   setTaskError]   = useState(null)
+  const [open,          setOpen]          = useState(phase.status === 'active')
+  const [addingTask,    setAddingTask]    = useState(false)
+  const [newTitle,      setNewTitle]      = useState('')
+  const [newPriority,   setNewPriority]   = useState('normal')
+  const [aiEnrich,      setAiEnrich]      = useState(true)
+  const [savingTask,    setSavingTask]    = useState(false)
+  const [taskError,     setTaskError]     = useState(null)
+  const [enrichingIds,  setEnrichingIds]  = useState(new Set())
+  const [deletingIds,   setDeletingIds]   = useState(new Set())
 
   const handleAddTask = async () => {
     if (!newTitle.trim()) return
@@ -288,21 +290,42 @@ function PhaseRow({ phase, onTaskClick, onTaskAdded }) {
     setTaskError(null)
     try {
       const resp = await api.post('/api/exit-plan/tasks', {
-        phase_id:   phase.id,
-        title:      newTitle.trim(),
-        priority:   newPriority,
-        ai_enrich:  aiEnrich,
+        phase_id: phase.id,
+        title:    newTitle.trim(),
+        priority: newPriority,
       })
+      const taskId = resp.data.task_id
       setNewTitle('')
       setNewPriority('normal')
       setAiEnrich(true)
       setAddingTask(false)
       if (onTaskAdded) onTaskAdded()
+      // Fire AI enrichment in background — non-blocking (same pattern as ExitPlanFull)
+      if (aiEnrich && taskId) {
+        setEnrichingIds(prev => new Set([...prev, taskId]))
+        api.post(`/api/exit-plan/tasks/${taskId}/enrich`).then(() => {
+          setEnrichingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
+          if (onTaskAdded) onTaskAdded()
+        }).catch(() => {
+          setEnrichingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
+        })
+      }
     } catch (e) {
       setTaskError(e?.response?.data?.detail || 'Failed to save task')
     } finally {
       setSavingTask(false)
     }
+  }
+
+  const handleDeleteTask = async (taskId, e) => {
+    e.stopPropagation()
+    if (!window.confirm('Delete this task? This cannot be undone.')) return
+    setDeletingIds(prev => new Set([...prev, taskId]))
+    try {
+      await api.delete(`/api/exit-plan/tasks/${taskId}`)
+      if (onTaskAdded) onTaskAdded()
+    } catch (err) { console.error('Failed to delete task', err) }
+    finally { setDeletingIds(prev => { const s = new Set(prev); s.delete(taskId); return s }) }
   }
 
   const statusIcon  = { active: '→', locked: '🔒', completed: '✓' }
@@ -344,33 +367,57 @@ function PhaseRow({ phase, onTaskClick, onTaskAdded }) {
           {(phase.tasks || []).length === 0 ? (
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks yet.</div>
           ) : (
-            (phase.tasks || []).map(task => (
-              <div
-                key={task.id}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
-                  cursor: phase.status !== 'locked' ? 'pointer' : 'default',
-                  opacity: task.status === 'skipped' ? 0.4 : 1,
-                }}
-                onClick={() => phase.status !== 'locked' && onTaskClick(task, phase)}
-              >
-                <span style={{ fontSize: 13, color: task.status === 'done' ? '#10b981' : PRIORITY_COLORS[task.priority] || 'var(--text-muted)' }}>
-                  {task.status === 'done' ? '✓' : task.status === 'doing' ? '→' : task.status === 'skipped' ? '⊘' : '○'}
-                </span>
-                <span style={{
-                  fontSize: 12, flex: 1,
-                  color:    task.status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
-                  textDecoration: task.status === 'done' ? 'line-through' : 'none',
-                }}>
-                  {task.title}
-                </span>
-                {task.note_count > 0 && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>📝 {task.note_count}</span>}
-                {task.priority !== 'normal' && (
-                  <span style={{ ...pill(PRIORITY_COLORS[task.priority]), fontSize: 9 }}>{task.priority}</span>
-                )}
-              </div>
-            ))
+            (phase.tasks || []).map(task => {
+              const isEnriching = enrichingIds.has(task.id)
+              const isDeleting  = deletingIds.has(task.id)
+              return (
+                <div
+                  key={task.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    cursor: phase.status !== 'locked' ? 'pointer' : 'default',
+                    opacity: (task.status === 'skipped' || isDeleting) ? 0.4 : 1,
+                  }}
+                  onClick={() => phase.status !== 'locked' && onTaskClick(task, phase)}
+                >
+                  <span style={{ fontSize: 13, color: task.status === 'done' ? '#10b981' : PRIORITY_COLORS[task.priority] || 'var(--text-muted)' }}>
+                    {task.status === 'done' ? '✓' : task.status === 'doing' ? '→' : task.status === 'skipped' ? '⊘' : '○'}
+                  </span>
+                  <span style={{
+                    fontSize: 12, flex: 1,
+                    color:    task.status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
+                    textDecoration: task.status === 'done' ? 'line-through' : 'none',
+                  }}>
+                    {task.title}
+                    {!task.ai_generated && (
+                      <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 6, fontFamily: 'IBM Plex Mono' }}>you</span>
+                    )}
+                  </span>
+                  {isEnriching && (
+                    <span style={{ fontSize: 9, color: 'var(--accent)', fontFamily: 'IBM Plex Mono', flexShrink: 0 }}>✨ AI writing…</span>
+                  )}
+                  {task.note_count > 0 && <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>📝 {task.note_count}</span>}
+                  {task.priority !== 'normal' && (
+                    <span style={{ ...pill(PRIORITY_COLORS[task.priority]), fontSize: 9, flexShrink: 0 }}>{task.priority}</span>
+                  )}
+                  {phase.status !== 'locked' && !isDeleting && (
+                    <button
+                      onClick={(e) => handleDeleteTask(task.id, e)}
+                      title="Delete task"
+                      style={{
+                        flexShrink: 0, background: 'transparent', border: 'none',
+                        cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12,
+                        padding: '0 2px', lineHeight: 1, opacity: 0,
+                        transition: 'opacity 0.15s, color 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#ef4444' }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                    >🗑</button>
+                  )}
+                </div>
+              )
+            })
           )}
 
 
@@ -539,7 +586,7 @@ function KanbanView({ phases, onTaskClick, onStatusChange }) {
 
 // ── Task detail drawer ────────────────────────────────────────────────────────
 
-function TaskDetailDrawer({ task, phase, onClose, onStatusChange, onAddNote }) {
+function TaskDetailDrawer({ task, phase, onClose, onStatusChange, onAddNote, onRefresh }) {
   const [notes,     setNotes]     = useState([])
   const [noteText,  setNoteText]  = useState('')
   const [saving,    setSaving]    = useState(false)
@@ -632,6 +679,21 @@ function TaskDetailDrawer({ task, phase, onClose, onStatusChange, onAddNote }) {
           <button style={{ ...btn('ghost'), color: 'var(--text-muted)' }} onClick={() => onStatusChange(task.id, 'skipped')}>Skip</button>
         </div>
       )}
+
+      {/* Delete task */}
+      <div style={{ paddingTop: 4, borderTop: '1px solid var(--border)', marginBottom: 20 }}>
+        <button
+          style={{ ...btn('ghost'), fontSize: 11, color: '#ef444488', borderColor: '#ef444422', width: '100%' }}
+          onClick={async () => {
+            if (!window.confirm('Delete this task? This cannot be undone.')) return
+            try {
+              await api.delete(`/api/exit-plan/tasks/${task.id}`)
+              onClose()
+              if (onRefresh) onRefresh()
+            } catch (e) { console.error('Delete failed', e) }
+          }}
+        >🗑 Delete task</button>
+      </div>
 
       {/* Notes */}
       <div style={{ marginBottom: 20 }}>
@@ -1288,6 +1350,7 @@ export default function ExitPlan() {
               await handleStatusChange(id, status)
             }}
             onAddNote={() => loadPlan()}
+            onRefresh={() => loadPlan()}
           />
         </>
       )}
