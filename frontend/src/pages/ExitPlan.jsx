@@ -273,11 +273,41 @@ function TodayTaskCard({ task, onStatusChange, onOpenDetail }) {
 
 // ── Phase row (Full Plan view) ────────────────────────────────────────────────
 
-function PhaseRow({ phase, onTaskClick }) {
-  const [open, setOpen] = useState(phase.status === 'active')
+function PhaseRow({ phase, onTaskClick, onTaskAdded }) {
+  const [open,        setOpen]        = useState(phase.status === 'active')
+  const [addingTask,  setAddingTask]  = useState(false)
+  const [newTitle,    setNewTitle]    = useState('')
+  const [newPriority, setNewPriority] = useState('normal')
+  const [aiEnrich,    setAiEnrich]    = useState(true)
+  const [savingTask,  setSavingTask]  = useState(false)
+  const [taskError,   setTaskError]   = useState(null)
 
-  const statusIcon = { active: '→', locked: '🔒', completed: '✓' }
+  const handleAddTask = async () => {
+    if (!newTitle.trim()) return
+    setSavingTask(true)
+    setTaskError(null)
+    try {
+      const resp = await api.post('/api/exit-plan/tasks', {
+        phase_id:   phase.id,
+        title:      newTitle.trim(),
+        priority:   newPriority,
+        ai_enrich:  aiEnrich,
+      })
+      setNewTitle('')
+      setNewPriority('normal')
+      setAiEnrich(true)
+      setAddingTask(false)
+      if (onTaskAdded) onTaskAdded()
+    } catch (e) {
+      setTaskError(e?.response?.data?.detail || 'Failed to save task')
+    } finally {
+      setSavingTask(false)
+    }
+  }
+
+  const statusIcon  = { active: '→', locked: '🔒', completed: '✓' }
   const statusColor = { active: 'var(--accent)', locked: 'var(--text-muted)', completed: '#10b981' }
+
 
   return (
     <div style={{ ...card, marginBottom: 10 }}>
@@ -341,6 +371,123 @@ function PhaseRow({ phase, onTaskClick }) {
                 )}
               </div>
             ))
+          )}
+
+
+          {/* Add task — only for non-locked phases */}
+          {phase.status !== 'locked' && (
+            <div style={{ marginTop: 10 }}>
+              {!addingTask ? (
+                <button
+                  onClick={e => { e.stopPropagation(); setAddingTask(true) }}
+                  style={{
+                    background: 'transparent', border: '1px dashed var(--border)',
+                    borderRadius: 6, padding: '5px 12px', fontSize: 11,
+                    color: 'var(--text-muted)', cursor: 'pointer', width: '100%',
+                    textAlign: 'left', fontFamily: 'DM Sans',
+                  }}
+                >
+                  + Add task
+                </button>
+              ) : (
+                <div
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: '12px 14px',
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddTask(); if (e.key === 'Escape') setAddingTask(false) }}
+                    placeholder="Task title…"
+                    style={{
+                      width: '100%', background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border)', borderRadius: 6,
+                      padding: '7px 10px', color: 'var(--text-primary)',
+                      fontSize: 12, outline: 'none', fontFamily: 'DM Sans',
+                      boxSizing: 'border-box', marginBottom: 10,
+                    }}
+                  />
+
+                  {/* Priority pill buttons */}
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                      Priority:
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {['critical', 'high', 'normal', 'low'].map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setNewPriority(p)}
+                          style={{
+                            padding: '4px 12px', borderRadius: 99, fontSize: 11,
+                            fontWeight: newPriority === p ? 700 : 400,
+                            cursor: 'pointer', fontFamily: 'DM Sans',
+                            border: `1px solid ${newPriority === p ? PRIORITY_COLORS[p] : 'var(--border)'}`,
+                            background: newPriority === p ? PRIORITY_COLORS[p] + '22' : 'transparent',
+                            color: newPriority === p ? PRIORITY_COLORS[p] : 'var(--text-muted)',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AI / manual toggle */}
+                  <div style={{ marginBottom: 12 }}>
+                    <button
+                      onClick={() => setAiEnrich(a => !a)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        padding: 0, fontFamily: 'DM Sans',
+                      }}
+                    >
+                      <div style={{
+                        width: 32, height: 18, borderRadius: 99, position: 'relative', flexShrink: 0,
+                        background: aiEnrich ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
+                        transition: 'background 0.2s',
+                      }}>
+                        <div style={{
+                          position: 'absolute', top: 2, left: aiEnrich ? 16 : 2,
+                          width: 14, height: 14, borderRadius: 99,
+                          background: '#fff', transition: 'left 0.2s',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: 11, color: aiEnrich ? 'var(--text-secondary)' : 'var(--text-muted)', fontStyle: 'italic' }}>
+                        {aiEnrich
+                          ? '✨ AI will generate: what to do, why it matters, and resources'
+                          : 'Manual task — no AI enrichment'}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={handleAddTask}
+                      disabled={savingTask || !newTitle.trim()}
+                      style={{ ...btn('primary'), padding: '5px 14px', fontSize: 11 }}
+                    >
+                      {savingTask ? '…' : aiEnrich ? 'Add + AI Fill' : 'Add Task'}
+                    </button>
+                    <button
+                      onClick={() => { setAddingTask(false); setNewTitle(''); setNewPriority('normal'); setAiEnrich(true); setTaskError(null) }}
+                      style={{ ...btn('ghost'), padding: '5px 14px', fontSize: 11 }}
+                    >
+                      Cancel
+                    </button>
+                    {taskError && (
+                      <span style={{ fontSize: 11, color: '#ef4444', marginLeft: 4 }}>{taskError}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1110,6 +1257,7 @@ export default function ExitPlan() {
                 key={phase.id}
                 phase={phase}
                 onTaskClick={(task, ph) => handleOpenDetail(task, ph || phase)}
+                onTaskAdded={loadPlan}
               />
             ))
           ) : (

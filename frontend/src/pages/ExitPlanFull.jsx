@@ -664,6 +664,7 @@ function PhasesTab({ phases, onSelectTask, selectedTaskId, onRefresh }) {
   const [addingFor,    setAddingFor]    = useState(null)
   const [newTitle,     setNewTitle]     = useState('')
   const [newPriority,  setNewPriority]  = useState('normal')
+  const [aiEnrich,     setAiEnrich]     = useState(true)
   const [saving,       setSaving]       = useState(false)
   const [enrichingIds, setEnrichingIds] = useState(new Set())
   const [deletingIds,  setDeletingIds]  = useState(new Set())
@@ -672,7 +673,7 @@ function PhasesTab({ phases, onSelectTask, selectedTaskId, onRefresh }) {
   const startAdd  = (pid) => { setAddingFor(pid); setNewTitle(''); setNewPriority('normal') }
   const cancelAdd = () => setAddingFor(null)
 
-  const submitTask = async (phaseId) => {
+  const submitTask = async (phaseId, aiEnrich = true) => {
     if (!newTitle.trim()) return
     setSaving(true)
     try {
@@ -815,7 +816,7 @@ function PhasesTab({ phases, onSelectTask, selectedTaskId, onRefresh }) {
                         autoFocus
                         value={newTitle}
                         onChange={e => setNewTitle(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') submitTask(phase.id); if (e.key === 'Escape') cancelAdd() }}
+                        onKeyDown={e => { if (e.key === 'Enter') submitTask(phase.id, aiEnrich); if (e.key === 'Escape') cancelAdd() }}
                         placeholder="Task title — AI will write the details…"
                         style={{
                           width: '100%', boxSizing: 'border-box',
@@ -835,12 +836,43 @@ function PhasesTab({ phases, onSelectTask, selectedTaskId, onRefresh }) {
                             outline: newPriority === p ? `1px solid ${(PRIORITY_COLORS[p] || 'var(--accent)')}55` : 'none',
                           }}>{p}</button>
                         ))}
+                      {/* AI / manual toggle */}
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        style={{ width: '100%', marginTop: 4, marginBottom: 2 }}
+                      >
+                        <button
+                          onClick={() => setAiEnrich(a => !a)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            background: 'transparent', border: 'none', cursor: 'pointer',
+                            padding: 0, fontFamily: 'DM Sans',
+                          }}
+                        >
+                          <div style={{
+                            width: 32, height: 18, borderRadius: 99, position: 'relative', flexShrink: 0,
+                            background: aiEnrich ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
+                            transition: 'background 0.2s',
+                          }}>
+                            <div style={{
+                              position: 'absolute', top: 2, left: aiEnrich ? 16 : 2,
+                              width: 14, height: 14, borderRadius: 99,
+                              background: '#fff', transition: 'left 0.2s',
+                            }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: aiEnrich ? 'var(--text-secondary)' : 'var(--text-muted)', fontStyle: 'italic' }}>
+                            {aiEnrich
+                              ? '✨ AI will generate: what to do, why it matters, and resources'
+                              : 'Manual task — no AI enrichment'}
+                          </span>
+                        </button>
+                      </div>
                         <div style={{ flex: 1 }} />
                         <button
                           style={{ ...btn('primary', { padding: '4px 12px', fontSize: 11 }) }}
                           onClick={() => submitTask(phase.id)}
                           disabled={saving || !newTitle.trim()}
-                        >{saving ? '…' : 'Add + AI Fill'}</button>
+                        >{saving ? '…' : aiEnrich ? 'Add + AI Fill' : 'Add Task'}</button>
                         <button style={{ ...btn('ghost', { padding: '4px 10px', fontSize: 11 }) }} onClick={cancelAdd}>Cancel</button>
                       </div>
                       <div style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>
