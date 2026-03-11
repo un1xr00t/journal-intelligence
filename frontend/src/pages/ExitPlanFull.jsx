@@ -57,6 +57,7 @@ const RESOURCE_LIBRARY = {
     resources: [
       { name: 'National DV Hotline',    description: '1-800-799-7233 · text START to 88788',       url: 'https://thehotline.org',           type: 'hotline' },
       { name: 'Love Is Respect',        description: 'Text LOVEIS to 22522 — relationship support', url: 'https://loveisrespect.org',        type: 'hotline' },
+      { name: 'DV Connect',             description: 'thehotline.org — chat online anytime',        url: 'https://www.thehotline.org/get-help/chat', type: 'hotline' },
     ]
   },
   legal: {
@@ -73,6 +74,7 @@ const RESOURCE_LIBRARY = {
       { name: '211 Helpline',           description: 'Dial 2-1-1 — local housing, food, financial', url: 'https://211.org',                  type: 'hotline' },
       { name: 'HUD Rental Assistance',  description: 'Federal housing assistance programs',         url: 'https://www.hud.gov/topics/rental_assistance', type: 'resource' },
       { name: 'NLIHC Finder',           description: 'Rental assistance by state',                  url: 'https://nlihc.org/find-assistance', type: 'directory' },
+      { name: 'Tenant Rights Guide',    description: 'Know your rights as a renter in your state',  url: 'https://www.hud.gov/topics/rental_assistance/tenantrights', type: 'resource' },
     ]
   },
   parenting: {
@@ -81,13 +83,16 @@ const RESOURCE_LIBRARY = {
       { name: 'Our Family Wizard',      description: 'Co-parenting communication tool',             url: 'https://ourfamilywizard.com',      type: 'tool' },
       { name: 'Childhelp Hotline',      description: '1-800-422-4453 — support for parents',       type: 'hotline' },
       { name: 'Zero to Three',          description: 'Parenting resources and developmental support', url: 'https://zerotothree.org',         type: 'resource' },
+      { name: 'coParenter App',         description: 'Guided co-parenting communication',            url: 'https://coparenter.com',          type: 'tool' },
     ]
   },
   financial: {
     title: 'Financial Help', icon: '💰', color: '#10b981',
     resources: [
       { name: '211 Helpline',           description: 'Dial 2-1-1 — connects to local financial aid', url: 'https://211.org',                 type: 'hotline' },
-      { name: 'LawHelp.org',            description: 'Legal help for financial and debt issues',    url: 'https://lawhelp.org',              type: 'resource' },
+      { name: 'CFPB Tools',             description: 'Free budgeting and financial tools',           url: 'https://www.consumerfinance.gov/consumer-tools/', type: 'resource' },
+      { name: 'Free Credit Report',     description: 'annualcreditreport.com — free from all 3 bureaus', url: 'https://annualcreditreport.com', type: 'tool' },
+      { name: 'NFCC Credit Counseling', description: 'Free/low-cost nonprofit credit counseling',   url: 'https://nfcc.org',                 type: 'service' },
     ]
   },
   emotional_support: {
@@ -102,21 +107,85 @@ const RESOURCE_LIBRARY = {
     title: 'Safety Planning', icon: '🛡', color: '#f97316',
     resources: [
       { name: 'National DV Hotline',    description: '1-800-799-7233 — safety planning support',   url: 'https://thehotline.org',           type: 'hotline' },
-      { name: 'Safety Plan Guide',      description: 'thehotline.org/plan-for-safety',              url: 'https://www.thehotline.org/plan-for-safety', type: 'resource' },
+      { name: 'Safety Plan Guide',      description: 'Step-by-step safety planning',                url: 'https://www.thehotline.org/plan-for-safety', type: 'resource' },
+      { name: 'Signal',                 description: 'Encrypted messaging for private communication', url: 'https://signal.org',             type: 'tool' },
+    ]
+  },
+  income: {
+    title: 'Income & Gig Work', icon: '💼', color: '#059669',
+    resources: [
+      { name: 'DoorDash / Dasher',      description: 'Flexible delivery — earn on your schedule',  url: 'https://dasher.doordash.com',      type: 'service' },
+      { name: 'Instacart Shopper',      description: 'Grocery delivery — flexible hours',           url: 'https://shoppers.instacart.com',   type: 'service' },
+      { name: 'Rover',                  description: 'Dog walking & pet sitting gigs',              url: 'https://rover.com',                type: 'service' },
+      { name: 'TaskRabbit',             description: 'Local tasks and odd jobs — set your rate',    url: 'https://taskrabbit.com',           type: 'service' },
+      { name: 'Upwork',                 description: 'Freelance work — remote, set your schedule', url: 'https://upwork.com',               type: 'service' },
+    ]
+  },
+  job_search: {
+    title: 'Job Search & Employment', icon: '🔍', color: '#3b82f6',
+    resources: [
+      { name: 'Indeed',                 description: 'Job listings — filter by location and hours', url: 'https://indeed.com',               type: 'service' },
+      { name: 'LinkedIn Jobs',          description: 'Professional network and job listings',       url: 'https://linkedin.com/jobs',        type: 'service' },
+      { name: 'CareerOneStop',          description: 'Free career tools and skills assessment (DOL)', url: 'https://careeronestop.org',      type: 'resource' },
+      { name: 'Unemployment Benefits',  description: 'File at your state labor dept — careeronestop.org', url: 'https://www.careeronestop.org/LocalHelp/UnemploymentBenefits/find-unemployment-benefits.aspx', type: 'resource' },
+    ]
+  },
+  pets: {
+    title: 'Pet Resources', icon: '🐾', color: '#d97706',
+    resources: [
+      { name: 'ASPCA',                  description: 'Pet care resources and emergency assistance', url: 'https://aspca.org',                type: 'resource' },
+      { name: 'RedRover Relief',        description: 'Financial aid for urgent pet care needs',     url: 'https://redrover.org/relief',      type: 'resource' },
+      { name: 'Rover',                  description: 'Pet sitting/boarding during housing transitions', url: 'https://rover.com',           type: 'service' },
+      { name: 'PetFinder',              description: 'Rehoming help — connect with shelters if needed', url: 'https://petfinder.com',       type: 'directory' },
+    ]
+  },
+  documentation: {
+    title: 'Documentation & Records', icon: '📋', color: '#475569',
+    resources: [
+      { name: 'Safety Plan Guide',      description: 'How to document incidents effectively',       url: 'https://www.thehotline.org/plan-for-safety', type: 'resource' },
+      { name: 'Google Drive',           description: 'Free secure cloud storage for your documents', url: 'https://drive.google.com',       type: 'tool' },
+      { name: 'Signal',                 description: 'Encrypted messaging — keep evidence private', url: 'https://signal.org',              type: 'tool' },
+    ]
+  },
+  self_care: {
+    title: 'Self-Care & Wellbeing', icon: '🌿', color: '#7c3aed',
+    resources: [
+      { name: 'Calm',                   description: 'Meditation and sleep support app',            url: 'https://calm.com',                 type: 'service' },
+      { name: 'Headspace',              description: 'Guided meditation and stress management',     url: 'https://headspace.com',            type: 'service' },
+      { name: 'Woebot',                 description: 'Free AI mental health support — no waitlist', url: 'https://woebothealth.com',         type: 'service' },
     ]
   },
 }
 
 const KEYWORD_RESOURCE_MAP = [
-  { k: ['safety contact', 'safe space', 'escape', 'danger', 'abuse', 'violence', 'emergency', 'immediate safety'],      cats: ['crisis', 'safety_planning'] },
-  { k: ['incident log', 'documentation log', 'document incident', 'record'],                                             cats: ['legal', 'safety_planning'] },
-  { k: ['legal', 'court', 'rights', 'protection order', 'restraining', 'attorney', 'lawyer', 'divorce', 'separation'],  cats: ['legal'] },
-  { k: ['housing', 'shelter', 'rent', 'apartment', 'lease', 'landlord', 'move out', 'new place', 'living situation'],   cats: ['housing', 'legal'] },
-  { k: ['bank account', 'financial', 'money', 'credit', 'funds', 'income', 'savings', 'accounts separate', 'budget'],   cats: ['financial', 'legal'] },
-  { k: ['children', 'child', 'custody', 'co-parent', 'coparent', 'school', 'daycare', 'kids', 'parenting plan'],        cats: ['parenting', 'legal'] },
-  { k: ['pet', 'pets', 'animal', 'dog', 'cat'],                                                                          cats: ['emotional_support'] },
-  { k: ['communicate', 'communication', 'private phone', 'code name', 'contact list', 'support network'],               cats: ['safety_planning', 'emotional_support'] },
-  { k: ['therapist', 'counselor', 'mental health', 'emotional', 'healing', 'process', 'cope', 'wellbeing'],             cats: ['emotional_support'] },
+  // Crisis / immediate safety
+  { k: ['safety contact', 'safe space', 'escape route', 'in danger', 'abuse', 'violence', 'emergency exit', 'emergency safety', 'immediate safety', 'go-bag', 'safe word', 'safety plan', 'dv hotline', 'unsafe', 'need to leave now', 'not safe'], cats: ['crisis', 'safety_planning'] },
+  // Incident documentation — specific, not just "record"
+  { k: ['incident log', 'document incident', 'log incident', 'record abuse', 'document abuse', 'document events', 'evidence of'], cats: ['documentation', 'safety_planning'] },
+  // Legal — only clearly legal tasks
+  { k: ['legal', 'court', 'protection order', 'restraining order', 'attorney', 'lawyer', 'divorce', 'separation agreement', 'file for divorce', 'legal aid', 'legal rights', 'legal help'], cats: ['legal'] },
+  // Tenant/housing with legal angle
+  { k: ['tenant rights', 'lease agreement', 'eviction', 'landlord dispute', 'break lease'], cats: ['housing', 'legal'] },
+  // Housing — without auto-attaching legal
+  { k: ['housing', 'shelter', 'apartment', 'rent', 'lease', 'move out', 'new place', 'living situation', 'find housing', 'place to live', 'temporary housing', 'affordable housing'], cats: ['housing'] },
+  // Financial — without auto-attaching legal
+  { k: ['bank account', 'credit report', 'credit freeze', 'savings account', 'budget', 'financial plan', 'direct deposit', 'joint account', 'marital assets', 'financial records', 'open account'], cats: ['financial'] },
+  // Gig / income
+  { k: ['dasher', 'doordash', 'instacart', 'uber', 'lyft', 'gig', 'side income', 'freelance', 'extra income', 'delivery job', 'earn money', 'income source', 'make money', 'rover', 'taskrabbit'], cats: ['income'] },
+  // Job search / employment
+  { k: ['job', 'employment', 'work', 'career', 'resume', 'interview', 'apply for job', 'unemployment', 'job search', 'find work', 'full-time', 'part-time'], cats: ['job_search'] },
+  // Children / co-parenting
+  { k: ['children', 'child', 'custody', 'co-parent', 'coparent', 'school', 'daycare', 'kids', 'parenting plan', 'child support', 'school pickup', 'childcare'], cats: ['parenting'] },
+  // Pets — now gets real pet resources
+  { k: ['pet', 'pets', 'animal', 'dog', 'cat', 'vet', 'veterinarian', 'boarding', 'foster pet', 'pet care', 'pet sitting'], cats: ['pets'] },
+  // Communication / digital privacy
+  { k: ['private phone', 'code name', 'contact list', 'support network', 'encrypted', 'privacy', 'private communication', 'signal', 'safe contact'], cats: ['safety_planning'] },
+  // Emotional / therapy
+  { k: ['therapist', 'counselor', 'mental health', 'emotional support', 'healing', 'cope', 'wellbeing', 'anxiety', 'grief', 'overwhelmed', 'process feelings', 'therapy'], cats: ['emotional_support'] },
+  // Self-care / routines
+  { k: ['self-care', 'self care', 'new routine', 'exercise', 'meditation', 'sleep routine', 'breathing', 'grounding', 'stabilize'], cats: ['self_care'] },
+  // Relationship / DV support
+  { k: ['relationship', 'toxic relationship', 'controlling', 'manipulation', 'gaslighting', 'emotional abuse', 'coercive'], cats: ['relationship'] },
 ]
 
 function getTaskResources(task) {
@@ -134,7 +203,7 @@ function getTaskResources(task) {
       if (!seen.has(r.name)) { seen.add(r.name); result.push({ ...r, cat_title: lib.title, cat_icon: lib.icon, cat_color: lib.color }) }
     }
   }
-  return result.slice(0, 5)
+  return result.slice(0, 7)
 }
 
 // ── Resource chip ──────────────────────────────────────────────────────────────
