@@ -492,12 +492,28 @@ function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
         {task.status === 'done' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: '#10b981' }}>✓ Completed</span>
-            <button
-              style={{ ...btn('ghost'), fontSize: 11 }}
-              onClick={() => handleStatus('backlog')}
-            >Reopen</button>
+            <button style={{ ...btn('ghost'), fontSize: 11 }} onClick={() => handleStatus('backlog')}>Reopen</button>
           </div>
         )}
+
+        {/* Delete task */}
+        {(() => {
+          const [deleting, setDeleting] = [false, () => {}]
+          return null  // placeholder — handled via deleteBtn below
+        })()}
+        <div style={{ paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+          <button
+            style={{ ...btn('ghost', { fontSize: 11, color: '#ef444488', borderColor: '#ef444422', width: '100%' }) }}
+            onClick={async () => {
+              if (!window.confirm('Delete this task? This cannot be undone.')) return
+              try {
+                await api.delete(`/api/exit-plan/tasks/${task.id}`)
+                onClose()
+                if (onRefresh) onRefresh()
+              } catch (e) { console.error('Delete failed', e) }
+            }}
+          >🗑 Delete task</button>
+        </div>
 
         {/* Resources */}
         {(() => {
@@ -640,13 +656,53 @@ function TodayTab({ plan, onStatusChange, onSelectTask, selectedTaskId }) {
 
 // ── Phases tab ─────────────────────────────────────────────────────────────────
 
-function PhasesTab({ phases, onSelectTask, selectedTaskId }) {
-  const [open, setOpen] = useState(() => {
+function PhasesTab({ phases, onSelectTask, selectedTaskId, onRefresh }) {
+  const [open,         setOpen]         = useState(() => {
     const active = phases.find(p => p.status === 'active')
     return active ? { [active.id]: true } : {}
   })
+  const [addingFor,    setAddingFor]    = useState(null)
+  const [newTitle,     setNewTitle]     = useState('')
+  const [newPriority,  setNewPriority]  = useState('normal')
+  const [saving,       setSaving]       = useState(false)
+  const [enrichingIds, setEnrichingIds] = useState(new Set())
+  const [deletingIds,  setDeletingIds]  = useState(new Set())
 
-  const toggle = (id) => setOpen(o => ({ ...o, [id]: !o[id] }))
+  const toggle    = (id) => setOpen(o => ({ ...o, [id]: !o[id] }))
+  const startAdd  = (pid) => { setAddingFor(pid); setNewTitle(''); setNewPriority('normal') }
+  const cancelAdd = () => setAddingFor(null)
+
+  const submitTask = async (phaseId) => {
+    if (!newTitle.trim()) return
+    setSaving(true)
+    try {
+      const r = await api.post('/api/exit-plan/tasks', { phase_id: phaseId, title: newTitle.trim(), priority: newPriority })
+      const taskId = r.data.task_id
+      setAddingFor(null)
+      setNewTitle('')
+      if (onRefresh) await onRefresh()
+      // Fire AI enrichment in background — non-blocking
+      setEnrichingIds(prev => new Set([...prev, taskId]))
+      api.post(`/api/exit-plan/tasks/${taskId}/enrich`).then(() => {
+        setEnrichingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
+        if (onRefresh) onRefresh()
+      }).catch(() => {
+        setEnrichingIds(prev => { const s = new Set(prev); s.delete(taskId); return s })
+      })
+    } catch (e) { console.error('Failed to add task', e) }
+    finally { setSaving(false) }
+  }
+
+  const deleteTask = async (taskId, e) => {
+    e.stopPropagation()
+    if (!window.confirm('Delete this task? This cannot be undone.')) return
+    setDeletingIds(prev => new Set([...prev, taskId]))
+    try {
+      await api.delete(`/api/exit-plan/tasks/${taskId}`)
+      if (onRefresh) await onRefresh()
+    } catch (err) { console.error('Failed to delete task', err) }
+    finally { setDeletingIds(prev => { const s = new Set(prev); s.delete(taskId); return s }) }
+  }
 
   const statusColor = { active: 'var(--accent)', locked: 'var(--text-muted)', completed: '#10b981' }
 
@@ -692,40 +748,119 @@ function PhasesTab({ phases, onSelectTask, selectedTaskId }) {
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks yet.</div>
               ) : (
                 (phase.tasks || []).map(task => {
-                  const isSelected = selectedTaskId === task.id
+                  const isSelected   = selectedTaskId === task.id
+                  const isEnriching  = enrichingIds.has(task.id)
+                  const isDeleting   = deletingIds.has(task.id)
                   return (
                     <div
                       key={task.id}
                       onClick={() => phase.status !== 'locked' && onSelectTask(task, phase)}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
+                        display: 'flex', alignItems: 'center', gap: 10,
                         padding: '8px 10px', borderRadius: 7, marginBottom: 2,
                         cursor: phase.status !== 'locked' ? 'pointer' : 'default',
-                        opacity: task.status === 'skipped' ? 0.4 : 1,
+                        opacity: (task.status === 'skipped' || isDeleting) ? 0.4 : 1,
                         background: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent',
                         border: isSelected ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent',
                         transition: 'background 0.12s',
                       }}
                     >
-                      <span style={{ fontSize: 12, color: task.status === 'done' ? '#10b981' : PRIORITY_COLORS[task.priority] || 'var(--text-muted)', width: 14, textAlign: 'center' }}>
+                      <span style={{ fontSize: 12, color: task.status === 'done' ? '#10b981' : PRIORITY_COLORS[task.priority] || 'var(--text-muted)', width: 14, textAlign: 'center', flexShrink: 0 }}>
                         {task.status === 'done' ? '✓' : task.status === 'doing' ? '→' : task.status === 'skipped' ? '⊘' : '○'}
                       </span>
                       <span style={{
                         fontSize: 12, flex: 1,
-                        color:         task.status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
+                        color:          task.status === 'done' ? 'var(--text-muted)' : 'var(--text-secondary)',
                         textDecoration: task.status === 'done' ? 'line-through' : 'none',
                       }}>
                         {task.title}
+                        {!task.ai_generated && (
+                          <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 6, fontFamily: 'IBM Plex Mono' }}>you</span>
+                        )}
                       </span>
+                      {isEnriching && (
+                        <span style={{ fontSize: 9, color: 'var(--accent)', fontFamily: 'IBM Plex Mono', flexShrink: 0 }}>✨ AI writing…</span>
+                      )}
                       {task.note_count > 0 && (
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>📝 {task.note_count}</span>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>📝 {task.note_count}</span>
                       )}
                       {task.priority !== 'normal' && (
-                        <span style={{ ...pill(PRIORITY_COLORS[task.priority]), fontSize: 9 }}>{task.priority}</span>
+                        <span style={{ ...pill(PRIORITY_COLORS[task.priority]), fontSize: 9, flexShrink: 0 }}>{task.priority}</span>
+                      )}
+                      {phase.status !== 'locked' && !isDeleting && (
+                        <button
+                          onClick={(e) => deleteTask(task.id, e)}
+                          title="Delete task"
+                          style={{
+                            flexShrink: 0, background: 'transparent', border: 'none',
+                            cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12,
+                            padding: '0 2px', lineHeight: 1, opacity: 0,
+                            transition: 'opacity 0.15s, color 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#ef4444' }}
+                          onMouseLeave={e => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                        >🗑</button>
                       )}
                     </div>
                   )
                 })
+              )}
+
+              {/* Add Task UI — only for unlocked phases */}
+              {phase.status !== 'locked' && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(255,255,255,0.07)' }}>
+                  {addingFor === phase.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <input
+                        autoFocus
+                        value={newTitle}
+                        onChange={e => setNewTitle(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') submitTask(phase.id); if (e.key === 'Escape') cancelAdd() }}
+                        placeholder="Task title — AI will write the details…"
+                        style={{
+                          width: '100%', boxSizing: 'border-box',
+                          background: 'rgba(255,255,255,0.05)', border: '1px solid var(--accent)',
+                          borderRadius: 6, padding: '7px 10px', color: 'var(--text-primary)',
+                          fontSize: 12, outline: 'none', fontFamily: 'DM Sans',
+                        }}
+                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Priority:</span>
+                        {['critical','high','normal','low'].map(p => (
+                          <button key={p} onClick={() => setNewPriority(p)} style={{
+                            padding: '3px 9px', borderRadius: 99, fontSize: 10, fontWeight: 600,
+                            cursor: 'pointer', border: 'none', fontFamily: 'DM Sans',
+                            background: newPriority === p ? (PRIORITY_COLORS[p] || 'var(--accent)') + '33' : 'rgba(255,255,255,0.04)',
+                            color: newPriority === p ? (PRIORITY_COLORS[p] || 'var(--accent)') : 'var(--text-muted)',
+                            outline: newPriority === p ? `1px solid ${(PRIORITY_COLORS[p] || 'var(--accent)')}55` : 'none',
+                          }}>{p}</button>
+                        ))}
+                        <div style={{ flex: 1 }} />
+                        <button
+                          style={{ ...btn('primary', { padding: '4px 12px', fontSize: 11 }) }}
+                          onClick={() => submitTask(phase.id)}
+                          disabled={saving || !newTitle.trim()}
+                        >{saving ? '…' : 'Add + AI Fill'}</button>
+                        <button style={{ ...btn('ghost', { padding: '4px 10px', fontSize: 11 }) }} onClick={cancelAdd}>Cancel</button>
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        ✨ AI will generate: what to do, why it matters, and resources
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      style={{
+                        width: '100%', padding: '6px 0', borderRadius: 6,
+                        background: 'transparent', border: '1px dashed rgba(255,255,255,0.1)',
+                        color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', fontFamily: 'DM Sans',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.07)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)'; e.currentTarget.style.color = 'var(--accent)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                      onClick={() => { startAdd(phase.id); setOpen(o => ({ ...o, [phase.id]: true })) }}
+                    >+ Add your own task</button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -1031,6 +1166,90 @@ function CreatePlanFlow({ detectData, onCreated, onDismiss }) {
   )
 }
 
+// ── Network tab (support contacts from journal) ────────────────────────────
+
+function NetworkTab() {
+  const [contacts,  setContacts]  = useState([])
+  const [loading,   setLoading]   = useState(true)
+  const [total,     setTotal]     = useState(0)
+  const [lastFetch, setLastFetch] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await api.get('/api/exit-plan/support-contacts')
+      setContacts(r.data.contacts || [])
+      setTotal(r.data.total || 0)
+      setLastFetch(new Date())
+    } catch {
+      setContacts([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const tierColor = (n) => n >= 10 ? '#10b981' : n >= 5 ? '#6366f1' : n >= 2 ? '#f59e0b' : 'var(--text-muted)'
+  const tierLabel = (n) => n >= 10 ? 'Frequently mentioned' : n >= 5 ? 'Mentioned often' : n >= 2 ? 'Mentioned a few times' : 'Mentioned once'
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>👥 Your Support Network</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 520 }}>
+            People detected from your journal entries. Updates live as you write — never affects task progress.
+          </div>
+        </div>
+        <button style={{ ...btn('ghost', { fontSize: 11, flexShrink: 0, marginLeft: 16 }) }} onClick={load} disabled={loading}>
+          {loading ? '…' : '⟳ Refresh'}
+        </button>
+      </div>
+      {lastFetch && (
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono', marginBottom: 16 }}>
+          Updated {lastFetch.toLocaleTimeString()} · {total} unique people found
+        </div>
+      )}
+      <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 8, padding: '12px 16px', marginBottom: 20 }}>
+        <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, marginBottom: 4 }}>💡 How to use this</div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+          The "Build your support network" task in Phase 1 is where you'll document who you can count on.
+          Use this list as a starting point — these are people your journal already knows about.
+        </div>
+      </div>
+      {loading ? (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>Loading your network…</div>
+      ) : contacts.length === 0 ? (
+        <div style={{ ...card({ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }) }}>
+          <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.3 }}>👤</div>
+          No people detected yet. Keep writing — they'll appear here as you mention them.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
+          {contacts.map((c, i) => (
+            <div key={i} style={{ ...card({ padding: '14px 16px' }), borderLeft: `3px solid ${tierColor(c.count)}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{c.name}</div>
+                <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: tierColor(c.count), background: tierColor(c.count) + '18', padding: '2px 7px', borderRadius: 99 }}>×{c.count}</span>
+              </div>
+              <div style={{ fontSize: 10, color: tierColor(c.count), marginBottom: 8 }}>{tierLabel(c.count)}</div>
+              {c.contexts?.slice(0, 2).map((ctx, ci) => (
+                <div key={ci} style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, padding: '5px 8px', borderRadius: 5, background: 'rgba(255,255,255,0.03)', marginBottom: 4, fontStyle: 'italic' }}>
+                  "{ctx}"
+                </div>
+              ))}
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontFamily: 'IBM Plex Mono' }}>
+                Last seen: {c.last_seen ? new Date(c.last_seen).toLocaleDateString() : '—'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function ExitPlanFull() {
@@ -1125,10 +1344,11 @@ export default function ExitPlanFull() {
   }
 
   const TABS = [
-    { id: 'today',  label: 'Today',     count: (plan?.today_tasks || []).length },
-    { id: 'phases', label: 'Phases' },
-    { id: 'kanban', label: 'Kanban' },
-    { id: 'notes',  label: 'Notes' },
+    { id: 'today',   label: 'Today',      count: (plan?.today_tasks || []).length },
+    { id: 'phases',  label: 'Phases' },
+    { id: 'kanban',  label: 'Kanban' },
+    { id: 'notes',   label: 'Notes' },
+    { id: 'network', label: '👥 Network' },
   ]
 
   // ── Header bar (always rendered) ─────────────────────────────────────────────
@@ -1317,6 +1537,7 @@ export default function ExitPlanFull() {
                 phases={plan?.phases || []}
                 onSelectTask={handleSelectTask}
                 selectedTaskId={selectedTask?.id}
+                onRefresh={loadPlan}
               />
             )}
             {activeTab === 'kanban' && (
@@ -1329,6 +1550,9 @@ export default function ExitPlanFull() {
             )}
             {activeTab === 'notes' && (
               <NotesTab planId={plan?.id} />
+            )}
+            {activeTab === 'network' && (
+              <NetworkTab />
             )}
           </div>
         </div>

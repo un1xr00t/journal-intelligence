@@ -54,6 +54,16 @@ class CheckUpdatesRequest(BaseModel):
     apply: bool = False
 
 
+class AddCustomTaskRequest(BaseModel):
+    phase_id: int
+    title: str
+    priority: Optional[str] = "normal"
+
+
+class EnrichTaskRequest(BaseModel):
+    pass  # task_id is in the URL
+
+
 # ── DB schema ──────────────────────────────────────────────────────────────────
 
 def _ensure_tables(conn):
@@ -252,6 +262,8 @@ RULES:
 - resource_keys must be from this set: ["grounding", "emotional_support", "mental_health", "relationship", "parenting", "legal", "housing", "financial", "crisis"]
 - Each phase has 4–8 tasks. No more.
 - Exactly 5 phases total.
+- unlock_threshold: MUST be null for Phase 1, and exactly 0.5 for Phases 2-5. It is a decimal between 0.0 and 1.0 ONLY — NEVER an integer like 4 or 50.
+- Phase 1 MUST include a task titled "Build your support network" with concrete steps to identify 2-3 trusted people (friend, family member, therapist, or advocate) who can provide emotional, practical, or logistical support during this transition.
 - Phase 1 status is "active", all others are "locked".
 - Priority values: "critical" | "high" | "normal" | "low"
 
@@ -280,6 +292,47 @@ Return this exact JSON structure:
 }
 
 due_offset_days: null for no due date, or an integer (days from today) if time-sensitive."""
+
+
+_ENRICH_SYSTEM = """You are an assistant helping someone navigate a major life transition.
+Given a task title the user wrote themselves, generate a helpful description, a short "why it matters"
+explanation, and a list of resource keys.
+
+RULES:
+- Return ONLY valid JSON. No preamble, no markdown, no explanation outside the JSON.
+- description: 2-4 sentences of concrete, actionable steps they should take for this task.
+- why_it_matters: 1-2 sentences explaining why this matters right now, in plain empathetic language.
+- resource_keys: choose 0-3 from this set ONLY: ["grounding", "emotional_support", "mental_health",
+  "relationship", "parenting", "legal", "housing", "financial", "crisis"]
+
+Return EXACTLY this structure:
+{
+  "description": "...",
+  "why_it_matters": "...",
+  "resource_keys": ["legal"]
+}"""
+
+
+def _normalize_threshold(value, phase_order: int):
+    """
+    Normalize AI-generated unlock_threshold values.
+    AI sometimes returns integers (4, 50) instead of decimals (0.04, 0.5).
+    Phase 1 always gets None (it is auto-active). All others default to 0.5.
+    """
+    if phase_order == 1:
+        return None
+    if value is None:
+        return 0.5
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+    if v > 1.0:
+        v = round(v / 100.0, 2)
+    # Snap suspiciously tiny values (e.g. 0.04) to 0.5
+    if 0.0 < v < 0.05:
+        v = 0.5
+    return round(min(max(v, 0.0), 1.0), 2)
 
 
 def _build_plan_prompt(memory: dict, branch_scores: dict, plan_type: str, active_branches: list,
@@ -647,7 +700,7 @@ def register_exit_plan_routes(app, require_any_user):
                        VALUES (?,?,?,?,?,?)""",
                     (plan_id, phase_data["phase_order"], phase_data["title"],
                      phase_data.get("description", ""), phase_data.get("status", "locked"),
-                     phase_data.get("unlock_threshold") or 0.5)
+                     _normalize_threshold(phase_data.get("unlock_threshold"), phase_data.get("phase_order", 2)))
                 )
                 phase_id = pc.lastrowid
                 task_count = 0
@@ -846,6 +899,164 @@ def register_exit_plan_routes(app, require_any_user):
                 "overall_progress": overall,
                 "phase_progresses": phase_progresses,
             }
+        finally:
+            conn.close()
+
+    # ── POST /api/exit-plan/tasks ─────────────────────────────────────────────────
+    @app.post("/api/exit-plan/tasks")
+    async def add_custom_task(
+        body: AddCustomTaskRequest,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """Add a user-created custom task to an unlocked phase."""
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            phase = conn.execute(
+                """SELECT ep2.id as phase_id, ep2.plan_id, ep2.status
+                   FROM exit_plan_phases ep2
+                   JOIN exit_plans ep ON ep2.plan_id = ep.id
+                   WHERE ep2.id = ? AND ep.user_id = ?""",
+                (body.phase_id, current_user["id"])
+            ).fetchone()
+            if not phase:
+                raise HTTPException(404, "Phase not found")
+            if phase["status"] == "locked":
+                raise HTTPException(400, "Cannot add tasks to a locked phase")
+
+            VALID_PRI = {"critical", "high", "normal", "low"}
+            priority = body.priority if body.priority in VALID_PRI else "normal"
+            title = body.title.strip()
+            if not title:
+                raise HTTPException(400, "Task title is required")
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cur = conn.execute(
+                """INSERT INTO exit_plan_tasks
+                   (phase_id, plan_id, title, description, why_it_matters,
+                    status, priority, due_date, completed_at, skipped_reason,
+                    ai_generated, resource_keys, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (body.phase_id, phase["plan_id"], title, None, None,
+                 "backlog", priority, None, None, None, 0, "[]", now_iso, now_iso)
+            )
+            task_id = cur.lastrowid
+            conn.commit()
+            return {"task_id": task_id, "phase_id": body.phase_id, "title": title,
+                    "status": "backlog", "priority": priority, "ai_generated": False}
+        finally:
+            conn.close()
+
+    # ── POST /api/exit-plan/tasks/{task_id}/enrich ─────────────────────────────
+    # ── POST /api/exit-plan/tasks/{task_id}/enrich ─────────────────────────────
+    # ── POST /api/exit-plan/tasks/{task_id}/enrich ─────────────────────────────
+    @app.post("/api/exit-plan/tasks/{task_id}/enrich")
+    async def enrich_task(
+        task_id: int,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """AI-generate description, why_it_matters, resource_keys for any task."""
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            row = conn.execute(
+                """SELECT t.*, ep.user_id as plan_user_id FROM exit_plan_tasks t
+                   JOIN exit_plans ep ON t.plan_id = ep.id WHERE t.id = ?""",
+                (task_id,)
+            ).fetchone()
+            if not row or row["plan_user_id"] != current_user["id"]:
+                raise HTTPException(404, "Task not found")
+
+            try:
+                memory = load_user_memory(current_user["id"]) or {}
+                ctx = memory.get("situation_story", "")[:200] if memory.get("situation_story") else ""
+            except Exception:
+                ctx = ""
+
+            prompt_parts = [
+                "Task title: \"" + row["title"] + "\"",
+            ]
+            if ctx:
+                prompt_parts.append("User situation: " + ctx)
+            prompt_parts.append("Generate the JSON now.")
+            user_prompt = ("\n").join(prompt_parts)
+
+            try:
+                from src.api.ai_client import create_message as _cm
+                raw = _cm(
+                    current_user["id"],
+                    system=_ENRICH_SYSTEM,
+                    user_prompt=user_prompt,
+                    max_tokens=600,
+                ).strip()
+                if raw.startswith("```"):
+                    raw = ("\n").join(raw.split("\n")[1:])
+                if raw.endswith("```"):
+                    raw = ("\n").join(raw.split("\n")[:-1])
+                enriched = json.loads(raw.strip())
+            except json.JSONDecodeError as e:
+                logger.error("[enrich_task] JSON parse error: %s", e)
+                raise HTTPException(502, "AI returned invalid JSON")
+            except Exception as e:
+                logger.error("[enrich_task] AI error: %s", e)
+                raise HTTPException(502, "AI enrichment failed: " + str(e))
+
+            desc    = enriched.get("description", "")
+            why     = enriched.get("why_it_matters", "")
+            rkeys   = json.dumps(enriched.get("resource_keys", []))
+            now_iso = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                "UPDATE exit_plan_tasks SET description=?, why_it_matters=?, resource_keys=?, updated_at=? WHERE id=?",
+                (desc, why, rkeys, now_iso, task_id)
+            )
+            conn.commit()
+            return {
+                "task_id":        task_id,
+                "description":    desc,
+                "why_it_matters": why,
+                "resource_keys":  enriched.get("resource_keys", []),
+                "enriched":       True,
+            }
+        finally:
+            conn.close()
+
+    # ── DELETE /api/exit-plan/tasks/{task_id} ──────────────────────────────────
+    @app.delete("/api/exit-plan/tasks/{task_id}")
+    async def delete_task(
+        task_id: int,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """Delete a task (custom or AI-generated). Recalculates phase progress."""
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            row = conn.execute(
+                """SELECT t.phase_id, t.plan_id, ep.user_id as plan_user_id
+                   FROM exit_plan_tasks t
+                   JOIN exit_plans ep ON t.plan_id = ep.id WHERE t.id = ?""",
+                (task_id,)
+            ).fetchone()
+            if not row or row["plan_user_id"] != current_user["id"]:
+                raise HTTPException(404, "Task not found")
+
+            phase_id = row["phase_id"]
+            plan_id  = row["plan_id"]
+
+            # Delete notes associated with task first
+            conn.execute("DELETE FROM exit_plan_notes WHERE task_id = ?", (task_id,))
+            conn.execute("DELETE FROM exit_plan_tasks WHERE id = ?", (task_id,))
+            conn.commit()
+
+            # Recalc progress for affected phase
+            tasks = [dict(t) for t in conn.execute(
+                "SELECT status FROM exit_plan_tasks WHERE phase_id = ?", (phase_id,)
+            ).fetchall()]
+            phase_progress = _calc_phase_progress(tasks)
+
+            # Check if any phases should unlock after deletion (edge case)
+            _maybe_unlock_phases(conn, plan_id)
+
+            return {"deleted": True, "task_id": task_id, "phase_progress": phase_progress}
         finally:
             conn.close()
 
@@ -1261,7 +1472,7 @@ def register_exit_plan_routes(app, require_any_user):
                         phase_data.get("title", ""),
                         phase_data.get("description"),
                         phase_data.get("status", "locked"),
-                        phase_data.get("unlock_threshold", 0.5),
+                        _normalize_threshold(phase_data.get("unlock_threshold"), phase_data.get("phase_order", 2)),
                     )
                 )
                 new_phase_id = p_cur.lastrowid
@@ -1319,3 +1530,53 @@ def register_exit_plan_routes(app, require_any_user):
             }
         finally:
             conn.close()
+
+    # ── GET /api/exit-plan/support-contacts ────────────────────────────────────
+    @app.get("/api/exit-plan/support-contacts")
+    async def get_support_contacts(current_user: dict = Depends(require_any_user)):
+        """
+        Returns a deduplicated, frequency-ranked list of PERSON entities from
+        the user's journal entries for the Support Network tab.
+        Read-only — never affects task progress.
+        """
+        conn = get_db()
+        user_id = current_user["id"]
+        try:
+            rows = conn.execute("""
+                SELECT ds.entities, e.entry_date
+                FROM derived_summaries ds
+                JOIN entries e ON ds.entry_id = e.id
+                WHERE e.user_id = ? AND e.is_current = 1 AND ds.entities IS NOT NULL
+                ORDER BY e.entry_date DESC LIMIT 90
+            """, (user_id,)).fetchall()
+        except Exception:
+            rows = []
+
+        SKIP_NAMES = {"i", "me", "myself", "us", "we", "you", "they", "he", "she",
+                      "him", "her", "them", "my", "therapist", "doctor", "attorney"}
+        person_map = {}
+        for row in rows:
+            try:
+                entities = json.loads(row["entities"] or "[]")
+            except Exception:
+                continue
+            for entity in entities:
+                if entity.get("type") != "PERSON":
+                    continue
+                name = (entity.get("name") or "").strip()
+                if not name or name.lower() in SKIP_NAMES or len(name) < 2:
+                    continue
+                key = name.lower()
+                if key not in person_map:
+                    person_map[key] = {"name": name, "count": 0, "contexts": [], "last_seen": row["entry_date"]}
+                person_map[key]["count"] += 1
+                ctx = (entity.get("context") or "").strip()
+                if ctx and len(person_map[key]["contexts"]) < 3:
+                    person_map[key]["contexts"].append(ctx)
+                if row["entry_date"] > person_map[key]["last_seen"]:
+                    person_map[key]["last_seen"] = row["entry_date"]
+
+        contacts = sorted(person_map.values(), key=lambda x: x["count"], reverse=True)[:20]
+        return {"contacts": contacts, "total": len(person_map)}
+
+# end register_exit_plan_routes
