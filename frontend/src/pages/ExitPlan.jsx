@@ -840,6 +840,46 @@ export default function ExitPlan() {
     } catch {}
   }
 
+  const handleExport = async () => {
+    try {
+      const r = await api.get('/api/exit-plan/export', { responseType: 'blob' })
+      const cd = r.headers['content-disposition'] || ''
+      const match = cd.match(/filename="?([^"]+)"?/)
+      const filename = match ? match[1] : 'exit_plan.json'
+      const url = window.URL.createObjectURL(new Blob([r.data], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      alert('Export failed. Check that you have an active plan.')
+    }
+  }
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    try {
+      const text = await file.text()
+      const payload = JSON.parse(text)
+      const hasPlan = mode === 'plan'
+      const msg = hasPlan
+        ? 'This will REPLACE your current exit plan and all progress with the imported one. Continue?'
+        : 'Import this exit plan into your account?'
+      if (!window.confirm(msg)) return
+      await api.post('/api/exit-plan/import', payload)
+      setLoading(true)
+      setMode('loading')
+      await loadPlan()
+    } catch (err) {
+      alert('Import failed — make sure the file is a valid exit plan export.')
+    }
+  }
+
   // ── Render: loading ─────────────────────────────────────────────────────────
 
   if (loading) {
@@ -869,6 +909,10 @@ export default function ExitPlan() {
           <button style={btn('primary')} onClick={() => setMode('create')}>
             Create My Plan
           </button>
+          <label style={{ ...btn('ghost'), marginTop: 10, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Restore a plan from a previous account">
+            ⬆ Import Existing Plan
+            <input type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={handleImport} />
+          </label>
         </div>
       </div>
     )
@@ -963,6 +1007,11 @@ export default function ExitPlan() {
               {checkingUp ? '…' : '⚠ Updates available'}
             </button>
           )}
+          <button style={{ ...btn('ghost'), fontSize: 11 }} onClick={handleExport} title="Download your exit plan as a JSON backup">⬇ Export</button>
+          <label style={{ ...btn('ghost'), fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }} title="Import a previously exported plan">
+            ⬆ Import
+            <input type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={handleImport} />
+          </label>
           <button style={{ ...btn('ghost'), fontSize: 11 }} onClick={() => setMode('create')}>Regenerate</button>
           <button style={{ ...btn('ghost'), fontSize: 11, color: '#ef4444', borderColor: '#ef444433' }} onClick={handleDeletePlan}>Delete Plan</button>
         </div>

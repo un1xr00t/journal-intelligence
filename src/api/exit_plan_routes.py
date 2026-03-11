@@ -1095,3 +1095,227 @@ def register_exit_plan_routes(app, require_any_user):
         from src.api.onboarding_routes import save_user_memory
         save_user_memory(current_user["id"], memory)
         return {"dismissed": True}
+
+    # ── GET /api/exit-plan/export ───────────────────────────────────────────────
+    @app.get("/api/exit-plan/export")
+    async def export_exit_plan(current_user: dict = Depends(require_any_user)):
+        """
+        Export the current user's exit plan as a portable JSON file.
+        No user IDs, no attachment paths — safe to import into any account.
+        """
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            plan_row = conn.execute(
+                "SELECT * FROM exit_plans WHERE user_id = ? AND status != 'deleted'",
+                (current_user["id"],)
+            ).fetchone()
+
+            if not plan_row:
+                raise HTTPException(status_code=404, detail="No active exit plan found.")
+
+            plan = dict(plan_row)
+            plan_id = plan["id"]
+
+            phases_rows = conn.execute(
+                "SELECT * FROM exit_plan_phases WHERE plan_id = ? ORDER BY phase_order",
+                (plan_id,)
+            ).fetchall()
+
+            phases_out = []
+            for pr in phases_rows:
+                phase = dict(pr)
+                tasks_rows = conn.execute(
+                    "SELECT * FROM exit_plan_tasks WHERE phase_id = ? ORDER BY id",
+                    (phase["id"],)
+                ).fetchall()
+
+                tasks_out = []
+                for tr in tasks_rows:
+                    t = dict(tr)
+                    notes_rows = conn.execute(
+                        "SELECT note_text, created_at FROM exit_plan_notes WHERE task_id = ? ORDER BY id",
+                        (t["id"],)
+                    ).fetchall()
+                    tasks_out.append({
+                        "title":          t["title"],
+                        "description":    t.get("description"),
+                        "why_it_matters": t.get("why_it_matters"),
+                        "status":         t.get("status", "backlog"),
+                        "priority":       t.get("priority", "normal"),
+                        "due_date":       t.get("due_date"),
+                        "completed_at":   t.get("completed_at"),
+                        "skipped_reason": t.get("skipped_reason"),
+                        "ai_generated":   t.get("ai_generated", 1),
+                        "resource_keys":  json.loads(t.get("resource_keys") or "[]"),
+                        "notes":          [{"text": r["note_text"], "created_at": r["created_at"]} for r in notes_rows],
+                    })
+
+                phases_out.append({
+                    "phase_order":      phase["phase_order"],
+                    "title":            phase["title"],
+                    "description":      phase.get("description"),
+                    "status":           phase.get("status", "locked"),
+                    "unlock_threshold": phase.get("unlock_threshold", 0.5),
+                    "tasks":            tasks_out,
+                })
+
+            # Plan-level notes (task_id IS NULL)
+            plan_notes_rows = conn.execute(
+                "SELECT note_text, created_at FROM exit_plan_notes WHERE plan_id = ? AND task_id IS NULL ORDER BY id",
+                (plan_id,)
+            ).fetchall()
+
+            export_payload = {
+                "format_version": "1.0",
+                "exported_at":    datetime.now(timezone.utc).isoformat(),
+                "plan_type":      plan["plan_type"],
+                "branches":       json.loads(plan.get("branches") or "[]"),
+                "status":         plan.get("status", "active"),
+                "generated_at":   plan.get("generated_at"),
+                "phases":         phases_out,
+                "plan_notes":     [{"text": r["note_text"], "created_at": r["created_at"]} for r in plan_notes_rows],
+            }
+
+            from fastapi.responses import JSONResponse
+            filename = f"exit_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            return JSONResponse(
+                content=export_payload,
+                headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+            )
+        finally:
+            conn.close()
+
+
+    # ── POST /api/exit-plan/import ──────────────────────────────────────────────
+    @app.post("/api/exit-plan/import")
+    async def import_exit_plan(
+        payload: dict,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """
+        Import a previously exported exit plan JSON into the current user's account.
+        If the user already has an active plan, it is deleted first.
+        Attachments are not restored (file paths are not portable).
+        """
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+
+            fmt_version = payload.get("format_version")
+            if fmt_version not in ("1.0",):
+                raise HTTPException(status_code=400, detail=f"Unsupported format_version: {fmt_version}")
+
+            plan_type = payload.get("plan_type")
+            branches  = payload.get("branches", [])
+            phases    = payload.get("phases", [])
+            plan_notes = payload.get("plan_notes", [])
+
+            if not plan_type or not phases:
+                raise HTTPException(status_code=400, detail="Invalid export file — missing plan_type or phases.")
+
+            now = datetime.now(timezone.utc).isoformat()
+
+            # ── Delete existing plan if present ─────────────────────────────────
+            existing = conn.execute(
+                "SELECT id FROM exit_plans WHERE user_id = ? AND status != 'deleted'",
+                (current_user["id"],)
+            ).fetchone()
+
+            if existing:
+                old_plan_id = existing["id"]
+                phase_ids = [r["id"] for r in conn.execute(
+                    "SELECT id FROM exit_plan_phases WHERE plan_id = ?", (old_plan_id,)
+                ).fetchall()]
+                for pid in phase_ids:
+                    task_ids = [r["id"] for r in conn.execute(
+                        "SELECT id FROM exit_plan_tasks WHERE phase_id = ?", (pid,)
+                    ).fetchall()]
+                    for tid in task_ids:
+                        conn.execute("DELETE FROM exit_plan_notes WHERE task_id = ?", (tid,))
+                        conn.execute("DELETE FROM exit_plan_attachments WHERE task_id = ?", (tid,))
+                    conn.execute("DELETE FROM exit_plan_tasks WHERE phase_id = ?", (pid,))
+                conn.execute("DELETE FROM exit_plan_phases WHERE plan_id = ?", (old_plan_id,))
+                conn.execute("DELETE FROM exit_plan_notes WHERE plan_id = ?", (old_plan_id,))
+                conn.execute("DELETE FROM exit_plan_attachments WHERE plan_id = ?", (old_plan_id,))
+                conn.execute("DELETE FROM exit_plan_events WHERE plan_id = ?", (old_plan_id,))
+                conn.execute("DELETE FROM exit_plan_signal_snapshots WHERE plan_id = ?", (old_plan_id,))
+                conn.execute("DELETE FROM exit_plans WHERE id = ?", (old_plan_id,))
+
+            # ── Insert new plan ─────────────────────────────────────────────────
+            cur = conn.execute(
+                """INSERT INTO exit_plans (user_id, plan_type, branches, status, generated_at, updated_at)
+                   VALUES (?, ?, ?, 'active', ?, ?)""",
+                (current_user["id"], plan_type, json.dumps(branches), now, now)
+            )
+            new_plan_id = cur.lastrowid
+
+            # ── Insert phases and tasks ─────────────────────────────────────────
+            for phase_data in phases:
+                p_cur = conn.execute(
+                    """INSERT INTO exit_plan_phases (plan_id, phase_order, title, description, status, unlock_threshold)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        new_plan_id,
+                        phase_data.get("phase_order", 1),
+                        phase_data.get("title", ""),
+                        phase_data.get("description"),
+                        phase_data.get("status", "locked"),
+                        phase_data.get("unlock_threshold", 0.5),
+                    )
+                )
+                new_phase_id = p_cur.lastrowid
+
+                for task_data in phase_data.get("tasks", []):
+                    t_cur = conn.execute(
+                        """INSERT INTO exit_plan_tasks
+                           (plan_id, phase_id, title, description, why_it_matters,
+                            status, priority, due_date, completed_at, skipped_reason,
+                            ai_generated, resource_keys, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            new_plan_id,
+                            new_phase_id,
+                            task_data.get("title", ""),
+                            task_data.get("description"),
+                            task_data.get("why_it_matters"),
+                            task_data.get("status", "backlog"),
+                            task_data.get("priority", "normal"),
+                            task_data.get("due_date"),
+                            task_data.get("completed_at"),
+                            task_data.get("skipped_reason"),
+                            task_data.get("ai_generated", 1),
+                            json.dumps(task_data.get("resource_keys", [])),
+                            now,
+                            now,
+                        )
+                    )
+                    new_task_id = t_cur.lastrowid
+
+                    for note in task_data.get("notes", []):
+                        note_text = note.get("text") if isinstance(note, dict) else str(note)
+                        conn.execute(
+                            "INSERT INTO exit_plan_notes (task_id, plan_id, note_text, created_at) VALUES (?, ?, ?, ?)",
+                            (new_task_id, new_plan_id, note_text, note.get("created_at", now) if isinstance(note, dict) else now)
+                        )
+
+            # ── Plan-level notes ────────────────────────────────────────────────
+            for note in plan_notes:
+                note_text = note.get("text") if isinstance(note, dict) else str(note)
+                conn.execute(
+                    "INSERT INTO exit_plan_notes (task_id, plan_id, note_text, created_at) VALUES (NULL, ?, ?, ?)",
+                    (new_plan_id, note_text, note.get("created_at", now) if isinstance(note, dict) else now)
+                )
+
+            conn.commit()
+            logger.info(f"[exit_plan] imported plan for user={current_user['id']} plan_id={new_plan_id}")
+
+            return {
+                "imported": True,
+                "plan_id":  new_plan_id,
+                "plan_type": plan_type,
+                "phases_imported": len(phases),
+                "message": "Exit plan imported successfully.",
+            }
+        finally:
+            conn.close()
