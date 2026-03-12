@@ -60,6 +60,7 @@ from src.auth.middleware import (
 # ── Config ────────────────────────────────────────────────────────────────────
 
 from src.config import CONFIG_PATH, AUDIT_LOG, load_config
+from src.api.upload_security import run_upload_security
 
 
 def load_config() -> dict:
@@ -1182,6 +1183,9 @@ async def upload_file_web(
     if not body:
         raise HTTPException(status_code=400, detail="Empty file")
 
+    # ── Security: rate limit, filename sanitize, magic byte check ──
+    filename = run_upload_security(request, body, filename)
+
     # If filename has no date pattern, default to today so ingest doesn't fail
     import datetime as _dt, re as _re
     if not _re.search(r'\d{4}[-_]\d{2}[-_]\d{2}', filename):
@@ -1244,7 +1248,10 @@ async def upload_entry(
     if not body:
         raise HTTPException(status_code=400, detail="Empty request body")
     owner_user_id: int = api_user["id"]
-    filename = request.headers.get("X-Filename", "entry.txt")
+    raw_filename = request.headers.get("X-Filename", "entry.txt")
+
+    # ── Security: rate limit, filename sanitize, magic byte check ──
+    filename = run_upload_security(request, body, raw_filename)
 
     # Step 1: Ingest
     ingest_result = ingest_file(filename, body, user_id=owner_user_id)
