@@ -563,21 +563,30 @@ async def list_entries(
     return {"entries": entries, "total": total, "limit": limit, "offset": offset}
 
 
-@app.get("/api/entries/{entry_date}")
+@app.get("/api/entries/{entry_ref}")
 async def get_entry(
-    entry_date: str,
+    entry_ref: str,
     current_user: dict = Depends(require_any_user),
 ):
     from src.auth.auth_db import get_db
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT e.*, ds.*
-        FROM entries e
-        LEFT JOIN derived_summaries ds ON e.id = ds.entry_id
-        WHERE e.entry_date = ? AND e.is_current = 1 AND e.user_id = ?
-    """, (entry_date, current_user["id"]))
+    # Support lookup by numeric ID or by entry_date string
+    if entry_ref.isdigit():
+        cursor.execute("""
+            SELECT e.*, ds.*
+            FROM entries e
+            LEFT JOIN derived_summaries ds ON e.id = ds.entry_id
+            WHERE e.id = ? AND e.user_id = ?
+        """, (int(entry_ref), current_user["id"]))
+    else:
+        cursor.execute("""
+            SELECT e.*, ds.*
+            FROM entries e
+            LEFT JOIN derived_summaries ds ON e.id = ds.entry_id
+            WHERE e.entry_date = ? AND e.is_current = 1 AND e.user_id = ?
+        """, (entry_ref, current_user["id"]))
     row = cursor.fetchone()
     conn.close()
 

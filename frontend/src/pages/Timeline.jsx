@@ -67,7 +67,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
     setSaveError(null);
     setLoadingRaw(true);
     try {
-      const res = await api.get(`/api/entries/${entry.entry_date}`);
+      const res = await api.get(`/api/entries/${entry.id}`);
       setEditText(res.data.data?.normalized_text || "");
       setEditMode(true);
       setExpanded(false);
