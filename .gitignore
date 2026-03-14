@@ -231,3 +231,4 @@ restore_journal.sh
 # Implementation plans/scripts
 feature_gap_tracker.md
 migrate_cascade.py
+migration_embeddings.sql

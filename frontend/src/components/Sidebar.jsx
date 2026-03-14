@@ -3,18 +3,19 @@ import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 
 const NAV_LINKS = [
-  { to: '/write',         icon: '✎', label: 'Write'      },
   { to: '/',              icon: '◈', label: 'Timeline'       },
+  { to: '/write',         icon: '✎', label: 'Write'         },
+  { to: '/ask',           icon: '⌖', label: 'Ask My Journal' },
   { to: '/patterns',      icon: '⬡', label: 'Patterns'       },
   { to: '/people',        icon: '◎', label: 'People & Topics'},
   { to: '/nervous',       icon: '〜', label: 'Nervous System' },
   { to: '/evidence',      icon: '◷', label: 'Evidence Vault' },
   { to: '/contradictions', icon:'⊕', label: 'Contradictions' },
-  { to: '/resources',     icon: '✦', label: 'Resources'  },
-  { to: '/exit-plan',     icon: '🗺', label: 'Exit Plan'  },
   { to: '/exports',       icon: '⊞', label: 'Exports',  ownerOnly: true },
   { to: '/admin',         icon: '⊙', label: 'Admin',    ownerOnly: true },
   { to: '/settings',      icon: '⚙', label: 'Settings'  },
+  { to: '/resources',     icon: '✦', label: 'Resources'  },
+  { to: '/exit-plan',     icon: '🗺', label: 'Exit Plan'  },
 ]
 
 export default function Sidebar({ filters, onFilterChange, alerts = [], onRefresh, isMobile = false, isOpen = false, onClose }) {

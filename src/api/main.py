@@ -1781,3 +1781,6 @@ register_auth_routes(app, require_any_user)
 from src.api.settings_routes import register_settings_routes, register_reflect_mode_routes
 register_settings_routes(app, require_any_user)
 register_reflect_mode_routes(app, require_any_user)
+
+from src.api.rag_routes import register_rag_routes
+register_rag_routes(app, require_any_user)

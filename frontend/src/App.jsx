@@ -18,6 +18,7 @@ import Resources from './pages/Resources'
 import ExitPlan from './pages/ExitPlan'
 import ExitPlanFull from './pages/ExitPlanFull'
 import JournalWrite from './pages/JournalWrite'
+import AskMyJournal from './pages/AskMyJournal'
 import api from './services/api'
 
 function LoadingScreen() {
@@ -199,7 +200,8 @@ function Shell() {
             <Route path="/resources"       element={<ProtectedRoute><Resources /></ProtectedRoute>} />
             <Route path="/exit-plan"       element={<ProtectedRoute><ExitPlan /></ProtectedRoute>} />
             <Route path="/exitplan-full"   element={<ProtectedRoute><ExitPlanFull /></ProtectedRoute>} />
-            <Route path="/write"           element={<ProtectedRoute><JournalWrite /></ProtectedRoute>} />
+            <Route path="/write" element={<ProtectedRoute><JournalWrite /></ProtectedRoute>} />
+            <Route path="/ask" element={<ProtectedRoute><AskMyJournal /></ProtectedRoute>} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
         </main>
