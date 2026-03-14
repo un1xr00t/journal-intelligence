@@ -168,6 +168,10 @@ def create_initial_master_summary() -> dict:
     prompt_config = prompts["master_summary_initial"]
     
     system = prompt_config["system"]
+    from src.api.onboarding_routes import load_user_memory as _lum, build_memory_context_string as _bmcs
+    _owner_mem = _bmcs(_lum(1))
+    if _owner_mem:
+        system = _owner_mem + "\n\n" + system
     user = prompt_config["user"].format(
         all_daily_summaries=format_daily_summaries_for_prompt(daily_summaries)
     )
@@ -212,6 +216,10 @@ def update_master_summary(new_entry_date: str, new_daily_summary: str) -> dict:
     prompt_config = prompts["master_summary_update"]
     
     system = prompt_config["system"]
+    from src.api.onboarding_routes import load_user_memory as _lum, build_memory_context_string as _bmcs
+    _owner_mem = _bmcs(_lum(1))
+    if _owner_mem:
+        system = _owner_mem + "\n\n" + system
     user = prompt_config["user"].format(
         previous_master_summary=format_master_summary_for_prompt(current),
         new_entry_date=new_entry_date,

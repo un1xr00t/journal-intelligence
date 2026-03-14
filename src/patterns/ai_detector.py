@@ -168,6 +168,12 @@ def run_ai_analysis(alert_id: int, force: bool = False) -> dict:
         period_summaries=evidence_context,
     )
 
+    # Inject owner memory context
+    from src.api.onboarding_routes import load_user_memory as _lum, build_memory_context_string as _bmcs
+    _owner_mem = _bmcs(_lum(1))
+    if _owner_mem:
+        system_prompt = _owner_mem + "\n\n" + system_prompt
+
     # Call Claude via ai_client (respects per-user API key)
     try:
         from src.api.ai_client import create_message

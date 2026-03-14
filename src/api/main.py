@@ -1670,9 +1670,12 @@ async def get_therapist_insight(
 
     try:
         from src.api.ai_client import create_message as _create_message
+        from src.api.onboarding_routes import load_user_memory as _lum, build_memory_context_string as _bmcs
+        _mem_ctx = _bmcs(_lum(current_user["id"]))
+        _tone_system = (_mem_ctx + "\n\n" + tone_config["system"]) if _mem_ctx else tone_config["system"]
         insight_text = _create_message(
             current_user["id"],
-            system=tone_config["system"],
+            system=_tone_system,
             user_prompt=user_prompt,
             max_tokens=900,
         ).strip()

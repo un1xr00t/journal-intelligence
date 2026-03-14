@@ -645,9 +645,12 @@ def register_exit_plan_routes(app, require_any_user):
 
         try:
             from src.api.ai_client import create_message as _cm
+            from src.api.onboarding_routes import load_user_memory as _lum, build_memory_context_string as _bmcs
+            _mem_ctx = _bmcs(_lum(current_user["id"]))
+            _plan_system = (_mem_ctx + "\n\n" + _PLAN_SYSTEM) if _mem_ctx else _PLAN_SYSTEM
             raw = _cm(
                 current_user["id"],
-                system=_PLAN_SYSTEM,
+                system=_plan_system,
                 user_prompt=prompt,
                 max_tokens=4000,
             ).strip()
