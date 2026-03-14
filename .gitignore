@@ -228,5 +228,6 @@ migrate_paths.py
 backup_journal.sh
 restore_journal.sh
 
-#implementation plans
+# Implementation plans/scripts
 feature_gap_tracker.md
+migrate_cascade.py
