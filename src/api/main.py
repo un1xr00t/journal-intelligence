@@ -1499,7 +1499,7 @@ async def get_therapist_insight_status(
     new_entry_row = cursor.execute("""
         SELECT 1 FROM entries
         WHERE user_id = ? AND is_current = 1
-          AND ingested_at > ?
+          AND datetime(replace(ingested_at, 'T', ' ')) > datetime(replace(?, 'T', ' '))
         LIMIT 1
     """, (current_user["id"], cached["generated_at"])).fetchone()
     conn.close()
