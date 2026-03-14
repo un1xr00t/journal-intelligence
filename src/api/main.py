@@ -1775,6 +1775,9 @@ register_resources_routes(app, require_any_user)
 from src.api.exit_plan_routes import register_exit_plan_routes
 register_exit_plan_routes(app, require_any_user)
 
+from src.api.auth_routes import register_auth_routes
+register_auth_routes(app, require_any_user)
+
 from src.api.settings_routes import register_settings_routes, register_reflect_mode_routes
 register_settings_routes(app, require_any_user)
 register_reflect_mode_routes(app, require_any_user)
