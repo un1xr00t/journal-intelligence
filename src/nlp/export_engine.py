@@ -82,7 +82,7 @@ def _db() -> sqlite3.Connection:
     return conn
 
 
-def _fetch_data(date_start: str, date_end: str) -> dict:
+def _fetch_data(date_start: str, date_end: str, user_id: int = None) -> dict:
     """Pull entries, summaries, alerts, and evidence for a date range."""
     conn = _db()
     try:
@@ -97,26 +97,31 @@ def _fetch_data(date_start: str, date_end: str) -> dict:
             LEFT JOIN derived_summaries ds ON ds.entry_id = e.id
             WHERE e.entry_date BETWEEN ? AND ?
               AND e.is_current = 1
+              AND (? IS NULL OR e.user_id = ?)
             ORDER BY e.entry_date ASC
-        """, (date_start, date_end)).fetchall()
+        """, (date_start, date_end, user_id, user_id)).fetchall()
 
-        # Alerts overlapping range
+        # Alerts overlapping range — scoped to user_id directly
         alerts = conn.execute("""
             SELECT id, alert_type, priority_score, date_range_start, date_range_end,
                    description, ai_analysis, acknowledged
             FROM alerts
             WHERE date_range_end >= ? AND date_range_start <= ?
+              AND (? IS NULL OR user_id = ?)
             ORDER BY priority_score DESC
-        """, (date_start, date_end)).fetchall()
+        """, (date_start, date_end, user_id, user_id)).fetchall()
 
-        # Evidence in range
+        # Evidence in range — scoped to user via entry_id join
         evidence = conn.execute("""
             SELECT ev.id, ev.label, ev.quote_text, ev.evidence_type,
                    ev.source_date, ev.is_bookmarked
             FROM evidence ev
+            JOIN entries e ON e.id = ev.entry_id
             WHERE ev.source_date BETWEEN ? AND ?
+              AND e.is_current = 1
+              AND (? IS NULL OR e.user_id = ?)
             ORDER BY ev.source_date ASC
-        """, (date_start, date_end)).fetchall()
+        """, (date_start, date_end, user_id, user_id)).fetchall()
 
         # Master summary (latest)
         master_row = conn.execute("""
@@ -210,7 +215,8 @@ PACKET_TYPES_WITH_AI = {"therapy_summary", "incident_packet", "pattern_report", 
 
 
 def _call_ai_narrative(packet_type: str, data: dict,
-                        date_start: str, date_end: str) -> str:
+                        date_start: str, date_end: str,
+                        user_id: int = None) -> str:
     prompts = _load_prompts()
     prompt_key = f"export_{packet_type}"
 
@@ -274,141 +280,233 @@ def _call_ai_narrative(packet_type: str, data: dict,
         alerts_summary=alerts_text,
     )
 
-    client = _anthropic_client()
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=3000,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return response.content[0].text.strip()
+    try:
+        from src.api.ai_client import create_message
+        result = create_message(user_id=user_id, system=system_prompt, user_prompt=user_prompt, max_tokens=3000)
+        return result.strip()
+    except Exception as ai_err:
+        log.warning(f"ai_client failed ({ai_err}), trying direct client")
+        client = _anthropic_client()
+        response = client.messages.create(model="claude-sonnet-4-6", max_tokens=3000, system=system_prompt, messages=[{"role": "user", "content": user_prompt}])
+        return response.content[0].text.strip()
 
 
 # ── HTML Templates ─────────────────────────────────────────────────────────────
 
 _BASE_CSS = """
+/* ── Page Setup ─────────────────────────────────────────── */
+@page {
+    size: letter;
+    margin: 0.9in 0.85in 1in 0.85in;
+    @top-center {
+        content: string(doc-title);
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-size: 8px;
+        color: #8892a4;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 4px;
+    }
+    @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-size: 8px;
+        color: #8892a4;
+    }
+    @bottom-left {
+        content: "CONFIDENTIAL — Journal Intelligence System";
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        font-size: 8px;
+        color: #c4310a;
+        letter-spacing: 0.04em;
+    }
+}
+@page cover { margin: 0; }
 body {
-    font-family: Georgia, 'Times New Roman', serif;
-    color: #1a1a2e;
-    margin: 48px;
-    line-height: 1.7;
-    font-size: 13px;
+    font-family: 'Helvetica Neue', Arial, 'Liberation Sans', sans-serif;
+    color: #1e2535;
+    font-size: 10.5px;
+    line-height: 1.75;
+    background: #ffffff;
 }
-h1 { color: #2c2c54; border-bottom: 3px solid #6366f1; padding-bottom: 8px; font-size: 22px; }
-h2 { color: #40407a; margin-top: 2.2em; font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-h3 { color: #555; font-size: 13px; margin-top: 1.5em; text-transform: uppercase; letter-spacing: 0.08em; }
-p  { margin: 0.6em 0; }
-.meta { color: #777; font-size: 11px; margin-bottom: 1.6em; }
-.badge {
-    display: inline-block;
-    background: #f0f0ff;
-    color: #5558aa;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    margin-right: 4px;
+.cover {
+    page: cover;
+    width: 100%;
+    height: 100vh;
+    background: #0f1623;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    page-break-after: always;
 }
-.badge-red   { background: #fff0f0; color: #c0392b; }
-.badge-green { background: #f0fff4; color: #27ae60; }
-.badge-orange{ background: #fff8f0; color: #e67e22; }
-.ai-narrative {
-    background: #f8f8ff;
-    border-left: 4px solid #6366f1;
-    padding: 16px 20px;
-    margin: 20px 0;
-    border-radius: 0 6px 6px 0;
-}
-.entry-block {
-    border: 1px solid #e8e8f0;
-    border-radius: 6px;
-    padding: 12px 16px;
-    margin-bottom: 12px;
-    page-break-inside: avoid;
-}
-.entry-date { font-weight: bold; color: #2c2c54; font-size: 12px; }
-.entry-summary { color: #333; margin: 6px 0; }
-.mood-row { font-size: 11px; color: #777; margin-top: 4px; }
-.quote {
-    border-left: 3px solid #a5b4fc;
-    padding: 6px 12px;
-    font-style: italic;
-    color: #555;
-    margin: 8px 0;
-    font-size: 12px;
-}
-.alert-box {
-    background: #fff3f3;
-    border: 1px solid #ffaaaa;
-    padding: 12px;
-    border-radius: 4px;
-    margin-bottom: 10px;
-}
-.alert-box.medium { background: #fff9f0; border-color: #ffc88a; }
-.alert-box.low    { background: #f9f9f9; border-color: #ccc; }
-.evidence-item {
-    border-bottom: 1px solid #eee;
-    padding: 8px 0;
-}
-.evidence-label { font-weight: bold; font-size: 12px; color: #2c2c54; }
-.chronology-row {
-    display: grid;
-    grid-template-columns: 120px 80px 80px 1fr;
-    gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 12px;
-}
-.chronology-header {
-    font-weight: bold;
-    font-size: 11px;
-    text-transform: uppercase;
-    color: #999;
-    letter-spacing: 0.06em;
-}
-footer {
-    margin-top: 3em;
-    padding-top: 1em;
-    font-size: 10px;
-    color: #aaa;
-    border-top: 1px solid #ddd;
-}
+.cover-accent { height: 6px; background: linear-gradient(90deg, #d97706 0%, #f59e0b 50%, #fbbf24 100%); }
+.cover-body { padding: 72px 80px; flex: 1; }
+.cover-label { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #d97706; font-weight: 700; margin-bottom: 8px; }
+.cover-title { font-size: 32px; font-weight: 800; color: #f8fafc; line-height: 1.15; margin: 0 0 8px 0; string-set: doc-title content(); }
+.cover-subtitle { font-size: 13px; color: #94a3b8; margin: 0 0 48px 0; font-weight: 400; }
+.cover-divider { width: 48px; height: 3px; background: #d97706; margin-bottom: 48px; }
+.cover-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 480px; }
+.cover-meta-item label { display: block; font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: #64748b; margin-bottom: 3px; }
+.cover-meta-item span { font-size: 12px; color: #e2e8f0; font-weight: 600; }
+.cover-footer { padding: 24px 80px; border-top: 1px solid #1e2d40; display: flex; justify-content: space-between; align-items: center; }
+.cover-footer-brand { font-size: 9px; color: #475569; letter-spacing: 0.08em; text-transform: uppercase; }
+.cover-confidential { font-size: 8px; color: #c4310a; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; border: 1px solid #c4310a; padding: 3px 8px; border-radius: 2px; }
+h1 { string-set: doc-title content(); font-size: 18px; font-weight: 800; color: #0f1623; border-bottom: 3px solid #d97706; padding-bottom: 8px; margin: 0 0 4px 0; display: none; }
+h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #d97706; margin: 2.4em 0 0.8em; padding-bottom: 5px; border-bottom: 1px solid #f1e4c8; }
+h3 { font-size: 10px; font-weight: 700; color: #334155; margin: 1.4em 0 0.4em; }
+p { margin: 0.5em 0; }
+.ai-narrative { background: #faf7f0; border-left: 4px solid #d97706; border-radius: 0 6px 6px 0; padding: 18px 22px; margin: 16px 0 24px; page-break-inside: avoid; }
+.ai-narrative-label { font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: #d97706; font-weight: 700; margin-bottom: 10px; }
+.ai-narrative p { font-size: 10.5px; line-height: 1.8; color: #2d3748; margin: 0.5em 0; }
+.entry-block { border: 1px solid #e8edf4; border-left: 4px solid #94a3b8; border-radius: 0 6px 6px 0; padding: 11px 15px; margin-bottom: 10px; page-break-inside: avoid; background: #fafbfc; }
+.entry-block.mood-high { border-left-color: #22c55e; background: #f8fff9; }
+.entry-block.mood-mid  { border-left-color: #f59e0b; background: #fffdf5; }
+.entry-block.mood-low  { border-left-color: #ef4444; background: #fff8f8; }
+.entry-date { font-weight: 700; font-size: 10px; color: #334155; margin-bottom: 5px; }
+.entry-summary { font-size: 10px; color: #475569; line-height: 1.65; margin: 4px 0; }
+.mood-row { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; }
+.mood-chart { margin: 12px 0 20px; }
+.mood-bar-row { display: flex; align-items: center; margin-bottom: 5px; gap: 8px; font-size: 9px; }
+.mood-bar-date { width: 78px; color: #64748b; flex-shrink: 0; }
+.mood-bar-track { flex: 1; height: 10px; background: #f1f5f9; border-radius: 5px; overflow: hidden; }
+.mood-bar-fill { height: 100%; border-radius: 5px; background: #22c55e; }
+.mood-bar-fill.mid { background: #f59e0b; }
+.mood-bar-fill.low { background: #ef4444; }
+.mood-bar-val { width: 28px; text-align: right; color: #64748b; flex-shrink: 0; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 600; background: #f1f5f9; color: #475569; }
+.badge-green  { background: #dcfce7; color: #166534; }
+.badge-amber  { background: #fef3c7; color: #92400e; }
+.badge-red    { background: #fee2e2; color: #991b1b; }
+.badge-purple { background: #ede9fe; color: #6d28d9; }
+.quote { border-left: 3px solid #d97706; padding: 6px 12px; font-style: italic; color: #334155; margin: 8px 0; font-size: 10px; background: #fdfaf4; border-radius: 0 4px 4px 0; }
+.alert-card { border: 1px solid #fca5a5; border-left: 5px solid #ef4444; background: #fff8f8; border-radius: 0 6px 6px 0; padding: 12px 16px; margin-bottom: 10px; page-break-inside: avoid; }
+.alert-card.medium { border-color: #fcd34d; border-left-color: #f59e0b; background: #fffdf0; }
+.alert-card.low    { border-color: #cbd5e1; border-left-color: #94a3b8; background: #f8fafc; }
+.alert-type { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #991b1b; margin-bottom: 4px; }
+.alert-card.medium .alert-type { color: #92400e; }
+.alert-card.low    .alert-type { color: #475569; }
+.alert-desc { font-size: 10px; color: #334155; margin: 4px 0; }
+.alert-ai { font-size: 9.5px; color: #475569; font-style: italic; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f1f5f9; }
+.evidence-table { width: 100%; border-collapse: collapse; font-size: 9.5px; margin: 12px 0; }
+.evidence-table th { background: #0f1623; color: #f8fafc; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; padding: 7px 10px; text-align: left; font-weight: 700; }
+.evidence-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; color: #334155; }
+.evidence-table tr:nth-child(even) td { background: #f8fafc; }
+.evidence-table .ev-quote { font-style: italic; color: #64748b; font-size: 9px; margin-top: 3px; }
+.ev-bookmarked { color: #d97706; font-weight: 700; }
+.chron-table { width: 100%; border-collapse: collapse; font-size: 9.5px; margin: 12px 0; }
+.chron-table th { background: #1e2535; color: #94a3b8; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; padding: 7px 10px; text-align: left; }
+.chron-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; color: #334155; }
+.chron-table tr:nth-child(even) td { background: #fafbfd; }
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0 24px; }
+.stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-top: 3px solid #d97706; border-radius: 0 0 6px 6px; padding: 12px 14px; text-align: center; }
+.stat-value { font-size: 22px; font-weight: 800; color: #0f1623; line-height: 1; margin-bottom: 4px; }
+.stat-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
+.section-break { page-break-before: always; }
+ul { padding-left: 18px; margin: 4px 0; }
+li { margin-bottom: 2px; font-size: 10px; color: #475569; }
+footer { margin-top: 3em; padding-top: 10px; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; text-align: center; display: none; }
 """
 
 
 def _html_wrap(title: str, date_start: str, date_end: str,
                packet_type: str, redacted: bool, body: str) -> str:
-    generated = datetime.now().strftime("%Y-%m-%d %H:%M")
-    redact_badge = '<span class="badge badge-orange">REDACTED</span>' if redacted else ''
+    generated = datetime.now().strftime("%B %d, %Y at %H:%M")
     type_label = packet_type.replace("_", " ").title()
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>{title}</title>
-<style>{_BASE_CSS}</style>
-</head>
-<body>
-<h1>{title}</h1>
-<div class="meta">
-  <span class="badge">{type_label}</span>
-  <span class="badge">Period: {date_start} – {date_end}</span>
-  {redact_badge}
-  &nbsp;Generated: {generated}
-</div>
-{body}
-<footer>Journal Intelligence System · CONFIDENTIAL</footer>
-</body>
-</html>"""
+    redact_banner = (
+        '<div style="background:#c4310a;color:#fff;text-align:center;font-size:9px;'
+        'letter-spacing:0.12em;text-transform:uppercase;padding:5px;font-weight:700;">'
+        '&#9888; REDACTED VERSION &#8212; Names and identifying information have been replaced'
+        '</div>'
+    ) if redacted else ""
+    confidential_label = "REDACTED" if redacted else "Confidential"
+    return (
+        f"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n"
+        f"<title>{title}</title>\n<style>{_BASE_CSS}</style>\n</head>\n<body>\n"
+        f'<div class="cover">'
+        f'<div class="cover-accent"></div>'
+        f'<div class="cover-body">'
+        f'<div class="cover-label">{type_label}</div>'
+        f'<div class="cover-title">{title}</div>'
+        f'<div class="cover-subtitle">Journal Intelligence &#8212; Personal Record</div>'
+        f'<div class="cover-divider"></div>'
+        f'<div class="cover-meta-grid">'
+        f'<div class="cover-meta-item"><label>Period Start</label><span>{date_start}</span></div>'
+        f'<div class="cover-meta-item"><label>Period End</label><span>{date_end}</span></div>'
+        f'<div class="cover-meta-item"><label>Report Type</label><span>{type_label}</span></div>'
+        f'<div class="cover-meta-item"><label>Generated</label><span>{generated}</span></div>'
+        f'</div>'
+        f'</div>'
+        f'<div class="cover-footer">'
+        f'<div class="cover-footer-brand">journal.williamthomas.name</div>'
+        f'<div class="cover-confidential">{confidential_label}</div>'
+        f'</div>'
+        f'</div>'
+        f'{redact_banner}'
+        f'{body}'
+        f'\n</body>\n</html>'
+    )
 
 
 def _mood_color_class(score) -> str:
     try:
         s = float(score)
         if s >= 7:   return "badge-green"
-        if s >= 4:   return "badge"
+        if s >= 4:   return "badge-amber"
         return "badge-red"
     except Exception:
         return "badge"
+
+
+def _entry_mood_class(score) -> str:
+    try:
+        s = float(score)
+        if s >= 7: return "mood-high"
+        if s >= 4: return "mood-mid"
+        return "mood-low"
+    except Exception:
+        return ""
+
+
+def _bar_class(score) -> str:
+    try:
+        s = float(score)
+        if s >= 7: return ""
+        if s >= 4: return "mid"
+        return "low"
+    except Exception:
+        return ""
+
+
+
+
+def _notable_entries(entries: list, max_count: int = 8) -> list:
+    """
+    Return only the most notable entries for report display.
+    Priority: high severity > has quotes > has key events > most recent.
+    Caps at max_count to keep reports concise.
+    """
+    import json as _json
+
+    def score(e):
+        s = 0
+        try: s += float(e.get("severity") or 0) * 2
+        except Exception: pass
+        try:
+            if _json.loads(e.get("notable_quotes") or "[]"): s += 3
+        except Exception: pass
+        try:
+            if _json.loads(e.get("key_events") or "[]"): s += 2
+        except Exception: pass
+        try: s += float(e.get("mood_score") or 5) * 0.1
+        except Exception: pass
+        return s
+
+    ranked = sorted(entries, key=score, reverse=True)
+    # Always include chronological order in final output
+    top = sorted(ranked[:max_count], key=lambda e: e.get("entry_date", ""))
+    return top
 
 
 def _alert_severity_class(score) -> str:
@@ -448,64 +546,117 @@ def _render_ai_analysis(ai_json: str) -> str:
 # ── Per-Packet Body Builders ──────────────────────────────────────────────────
 
 def _body_therapy_summary(data: dict, narrative: str) -> str:
-    entries = data["entries"]
-    alerts  = data["alerts"]
+    entries  = data["entries"]
+    alerts   = data["alerts"]
     evidence = data["evidence"]
+    parts    = []
+    notable  = _notable_entries(entries, max_count=6)
 
-    # Narrative section
-    parts = [f'<h2>AI-Generated Narrative</h2><div class="ai-narrative">{_nl2p(narrative)}</div>']
+    # Stats row
+    scores      = [float(e["mood_score"]) for e in entries if e.get("mood_score") not in (None, "")]
+    avg_mood    = f"{sum(scores)/len(scores):.1f}" if scores else "—"
+    high_alerts = sum(1 for a in alerts if float(a.get("priority_score") or 0) >= 7)
+    parts.append(
+        '<div class="stats-row">'
+        f'<div class="stat-box"><div class="stat-value">{len(entries)}</div><div class="stat-label">Entries Analyzed</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{avg_mood}</div><div class="stat-label">Avg Mood Score</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{high_alerts}</div><div class="stat-label">High Priority Alerts</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{len(evidence)}</div><div class="stat-label">Evidence Items</div></div>'
+        '</div>'
+    )
 
-    # Mood arc table
-    parts.append("<h2>Daily Mood Arc</h2>")
-    parts.append('<div>')
+    # AI Narrative — the actual report
+    if narrative:
+        parts.append(
+            '<h2>Clinical Narrative</h2>'
+            '<div class="ai-narrative">'
+            '<div class="ai-narrative-label">&#10022; AI-Generated Analysis</div>'
+            + _nl2p(narrative) +
+            '</div>'
+        )
+
+    # Mood bar chart
+    parts.append('<h2>Mood Arc</h2><div class="mood-chart">')
     for e in entries:
-        mood  = e.get("mood_label", "—")
         score = e.get("mood_score", "")
-        sev   = e.get("severity", "")
-        summ  = e.get("summary_text") or ""
-        cls   = _mood_color_class(score)
+        try:
+            pct  = int(float(score) * 10)
+            bcls = _bar_class(score)
+        except Exception:
+            pct, bcls = 0, ""
         score_str = f"{float(score):.1f}" if score != "" else "—"
-        sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
-        parts.append(f"""
-        <div class="entry-block">
-          <div class="entry-date">{e['entry_date']}</div>
-          <div class="mood-row">
-            <span class="badge {cls}">{mood} {score_str}</span>
-            <span class="badge">severity {sev_str}</span>
-          </div>
-          <div class="entry-summary">{summ}</div>
-        </div>""")
+        parts.append(
+            '<div class="mood-bar-row">'
+            f'<div class="mood-bar-date">{e["entry_date"]}</div>'
+            f'<div class="mood-bar-track"><div class="mood-bar-fill {bcls}" style="width:{pct}%"></div></div>'
+            f'<div class="mood-bar-val">{score_str}</div>'
+            '</div>'
+        )
     parts.append("</div>")
+
+    # Notable entries only
+    if notable:
+        parts.append(f'<h2>Notable Entries <span style="font-size:9px;color:#94a3b8;font-weight:400;text-transform:none;">({len(notable)} of {len(entries)} shown)</span></h2>')
+        for e in notable:
+            import json as _j
+            mood      = e.get("mood_label", "—")
+            score     = e.get("mood_score", "")
+            sev       = e.get("severity", "")
+            summ      = e.get("summary_text") or ""
+            mcls      = _mood_color_class(score)
+            ecls      = _entry_mood_class(score)
+            score_str = f"{float(score):.1f}" if score != "" else "—"
+            sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
+            quotes = []
+            try: quotes = _j.loads(e.get("notable_quotes") or "[]")
+            except Exception: pass
+            qt_html = "".join(f'<div class="quote">{q}</div>' for q in quotes[:1])
+            parts.append(
+                f'<div class="entry-block {ecls}">'
+                f'<div class="entry-date">{e["entry_date"]}</div>'
+                f'<div class="mood-row">'
+                f'<span class="badge {mcls}">{mood} {score_str}</span>'
+                f'<span class="badge badge-purple">sev {sev_str}</span>'
+                f'</div>'
+                f'<div class="entry-summary">{summ}</div>'
+                f'{qt_html}'
+                f'</div>'
+            )
 
     # Alerts
     if alerts:
-        parts.append("<h2>Patterns & Alerts</h2>")
+        parts.append("<h2>Patterns &amp; Alerts</h2>")
         for a in alerts:
-            cls  = _alert_severity_class(a.get("priority_score", 0))
-            desc = a.get("description") or ""
-            ai   = a.get("ai_analysis") or ""
-            parts.append(f"""
-            <div class="alert-box {cls}">
-              <strong>[{a['alert_type'].upper()}]</strong>
-              {a.get('date_range_start','')} – {a.get('date_range_end','')}
-              · priority {a.get('priority_score','—')}<br>
-              {desc}
-              {_render_ai_analysis(a.get('ai_analysis',''))}
-            </div>""")
+            cls      = _alert_severity_class(a.get("priority_score", 0))
+            ai       = _render_ai_analysis(a.get("ai_analysis", ""))
+            ai_block = f'<div class="alert-ai">{ai}</div>' if ai else ""
+            parts.append(
+                f'<div class="alert-card {cls}">'
+                f'<div class="alert-type">{a["alert_type"].replace("_"," ").upper()} &middot; Priority {a.get("priority_score","—")}</div>'
+                f'<div class="alert-desc">{a.get("description","")}</div>'
+                f'<div style="font-size:9px;color:#94a3b8;">{a.get("date_range_start","")} – {a.get("date_range_end","")}</div>'
+                f'{ai_block}'
+                f'</div>'
+            )
 
-    # Evidence
+    # Evidence table
     if evidence:
-        parts.append("<h2>Evidence Vault</h2>")
+        rows = ""
         for ev in evidence:
-            bm   = "★ " if ev.get("is_bookmarked") else ""
-            qt   = ev.get("quote_text") or ""
-            qt_html = f'<div class="quote">{qt}</div>' if qt else ""
-            parts.append(f"""
-            <div class="evidence-item">
-              <div class="evidence-label">{bm}{ev['label']}</div>
-              <div class="mood-row">{ev['evidence_type']} · {ev['source_date']}</div>
-              {qt_html}
-            </div>""")
+            bm      = '<span class="ev-bookmarked">&#9733;</span> ' if ev.get("is_bookmarked") else ""
+            qt      = ev.get("quote_text") or ""
+            qt_html = f'<div class="ev-quote">"{qt}"</div>' if qt else ""
+            rows   += (
+                f'<tr><td>{ev["source_date"]}</td>'
+                f'<td><span class="badge">{ev["evidence_type"]}</span></td>'
+                f'<td>{bm}{ev["label"]}{qt_html}</td></tr>'
+            )
+        parts.append(
+            '<h2>Evidence Vault</h2>'
+            '<table class="evidence-table">'
+            '<thead><tr><th>Date</th><th>Type</th><th>Item</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>'
+        )
 
     return "\n".join(parts)
 
@@ -515,67 +666,88 @@ def _body_incident_packet(data: dict, narrative: str) -> str:
     alerts   = data["alerts"]
     evidence = data["evidence"]
     parts    = []
+    notable  = _notable_entries(entries, max_count=10)
 
-    parts.append(f'<h2>Incident Narrative</h2><div class="ai-narrative">{_nl2p(narrative)}</div>')
+    high_sev = sum(1 for e in entries if float(e.get("severity") or 0) >= 7)
+    parts.append(
+        '<div class="stats-row">'
+        f'<div class="stat-box"><div class="stat-value">{len(entries)}</div><div class="stat-label">Entries</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{high_sev}</div><div class="stat-label">High Severity Days</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{len(alerts)}</div><div class="stat-label">Pattern Alerts</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{len(evidence)}</div><div class="stat-label">Evidence Items</div></div>'
+        '</div>'
+    )
 
-    # Chronological entries with full context
-    parts.append("<h2>Entry Timeline</h2>")
-    for e in entries:
-        summ   = e.get("summary_text") or ""
-        events = []
-        try:
-            events = json.loads(e.get("key_events") or "[]")
-        except Exception:
-            pass
-        quotes = []
-        try:
-            quotes = json.loads(e.get("notable_quotes") or "[]")
-        except Exception:
-            pass
-        mood  = e.get("mood_label", "—")
-        score = e.get("mood_score", "")
-        sev   = e.get("severity", "")
-        score_str = f"{float(score):.1f}" if score != "" else "—"
-        sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
-        cls   = _mood_color_class(score)
+    if narrative:
+        parts.append(
+            '<h2>Incident Narrative</h2>'
+            '<div class="ai-narrative">'
+            '<div class="ai-narrative-label">&#10022; AI-Generated Analysis</div>'
+            + _nl2p(narrative) +
+            '</div>'
+        )
 
-        events_html = "".join(f"<li>{ev}</li>" for ev in events[:6])
-        quotes_html = "".join(f'<div class="quote">{q}</div>' for q in quotes[:3])
-
-        parts.append(f"""
-        <div class="entry-block">
-          <div class="entry-date">{e['entry_date']}</div>
-          <div class="mood-row">
-            <span class="badge {cls}">{mood} {score_str}</span>
-            <span class="badge">severity {sev_str}</span>
-          </div>
-          <p class="entry-summary">{summ}</p>
-          {'<ul>' + events_html + '</ul>' if events_html else ''}
-          {quotes_html}
-        </div>""")
+    if notable:
+        parts.append(f'<h2>Key Entries <span style="font-size:9px;color:#94a3b8;font-weight:400;text-transform:none;">({len(notable)} of {len(entries)} shown)</span></h2>')
+        for e in notable:
+            import json as _j
+            summ      = e.get("summary_text") or ""
+            mood      = e.get("mood_label", "—")
+            score     = e.get("mood_score", "")
+            sev       = e.get("severity", "")
+            mcls      = _mood_color_class(score)
+            ecls      = _entry_mood_class(score)
+            score_str = f"{float(score):.1f}" if score != "" else "—"
+            sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
+            events, quotes = [], []
+            try: events = _j.loads(e.get("key_events") or "[]")
+            except Exception: pass
+            try: quotes = _j.loads(e.get("notable_quotes") or "[]")
+            except Exception: pass
+            ev_html  = "".join(f"<li>{x}</li>" for x in events[:4])
+            qt_html  = "".join(f'<div class="quote">{q}</div>' for q in quotes[:1])
+            ul_block = f"<ul>{ev_html}</ul>" if ev_html else ""
+            parts.append(
+                f'<div class="entry-block {ecls}">'
+                f'<div class="entry-date">{e["entry_date"]}</div>'
+                f'<div class="mood-row">'
+                f'<span class="badge {mcls}">{mood} {score_str}</span>'
+                f'<span class="badge badge-purple">sev {sev_str}</span>'
+                f'</div>'
+                f'<p class="entry-summary">{summ}</p>'
+                f'{ul_block}{qt_html}'
+                f'</div>'
+            )
 
     if alerts:
-        parts.append("<h2>Active Alerts in Range</h2>")
+        parts.append("<h2>Active Pattern Alerts</h2>")
         for a in alerts:
             cls = _alert_severity_class(a.get("priority_score", 0))
-            parts.append(f"""
-            <div class="alert-box {cls}">
-              <strong>[{a['alert_type'].upper()}]</strong>
-              {a.get('date_range_start','')} – {a.get('date_range_end','')}
-              · priority {a.get('priority_score','—')}<br>
-              {a.get('description','')}
-            </div>""")
+            parts.append(
+                f'<div class="alert-card {cls}">'
+                f'<div class="alert-type">{a["alert_type"].replace("_"," ").upper()} &middot; Priority {a.get("priority_score","—")}</div>'
+                f'<div class="alert-desc">{a.get("description","")}</div>'
+                f'<div style="font-size:9px;color:#94a3b8;">{a.get("date_range_start","")} – {a.get("date_range_end","")}</div>'
+                f'</div>'
+            )
 
     if evidence:
-        parts.append("<h2>Supporting Evidence</h2>")
+        rows = ""
         for ev in evidence:
-            qt = ev.get("quote_text") or ""
-            parts.append(f"""
-            <div class="evidence-item">
-              <div class="evidence-label">{ev['label']}</div>
-              <div class="mood-row">{ev['evidence_type']} · {ev['source_date']}</div>
-              {'<div class="quote">' + qt + '</div>' if qt else ''}
-            </div>""")
+            bm      = '<span class="ev-bookmarked">&#9733;</span> ' if ev.get("is_bookmarked") else ""
+            qt      = ev.get("quote_text") or ""
+            qt_html = f'<div class="ev-quote">"{qt}"</div>' if qt else ""
+            rows   += (
+                f'<tr><td>{ev["source_date"]}</td>'
+                f'<td><span class="badge">{ev["evidence_type"]}</span></td>'
+                f'<td>{bm}{ev["label"]}{qt_html}</td></tr>'
+            )
+        parts.append(
+            '<h2>Supporting Evidence</h2>'
+            '<table class="evidence-table">'
+            '<thead><tr><th>Date</th><th>Type</th><th>Item</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>'
+        )
 
     return "\n".join(parts)
 
@@ -585,39 +757,59 @@ def _body_pattern_report(data: dict, narrative: str) -> str:
     entries = data["entries"]
     parts   = []
 
-    parts.append(f'<h2>Pattern Analysis</h2><div class="ai-narrative">{_nl2p(narrative)}</div>')
+    high = sum(1 for a in alerts if float(a.get("priority_score") or 0) >= 7)
+    mid  = sum(1 for a in alerts if 4 <= float(a.get("priority_score") or 0) < 7)
+    parts.append(
+        '<div class="stats-row">'
+        f'<div class="stat-box"><div class="stat-value">{len(alerts)}</div><div class="stat-label">Total Alerts</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{high}</div><div class="stat-label">High Priority</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{mid}</div><div class="stat-label">Medium Priority</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{len(entries)}</div><div class="stat-label">Entries Analyzed</div></div>'
+        '</div>'
+    )
+
+    if narrative:
+        parts.append(
+            '<h2>Pattern Analysis</h2>'
+            '<div class="ai-narrative">'
+            '<div class="ai-narrative-label">&#10022; AI-Generated Analysis</div>'
+            + _nl2p(narrative) +
+            '</div>'
+        )
 
     parts.append("<h2>Detected Alerts</h2>")
     if not alerts:
         parts.append("<p>No alerts detected in this date range.</p>")
     for a in alerts:
-        cls  = _alert_severity_class(a.get("priority_score", 0))
-        ai   = a.get("ai_analysis") or ""
-        parts.append(f"""
-        <div class="alert-box {cls}">
-          <strong>[{a['alert_type'].upper()}]</strong>
-          {a.get('date_range_start','')} – {a.get('date_range_end','')}
-          · priority score {a.get('priority_score','—')}<br>
-          <strong>Description:</strong> {a.get('description','')}<br>
-          {_render_ai_analysis(a.get('ai_analysis',''))}
-        </div>""")
+        cls      = _alert_severity_class(a.get("priority_score", 0))
+        ai       = _render_ai_analysis(a.get("ai_analysis", ""))
+        ai_block = f'<div class="alert-ai">{ai}</div>' if ai else ""
+        parts.append(
+            f'<div class="alert-card {cls}">'
+            f'<div class="alert-type">{a["alert_type"].replace("_"," ").upper()} &middot; Priority {a.get("priority_score","—")}</div>'
+            f'<div class="alert-desc">{a.get("description","")}</div>'
+            f'<div style="font-size:9px;color:#94a3b8;">{a.get("date_range_start","")} – {a.get("date_range_end","")}</div>'
+            f'{ai_block}'
+            f'</div>'
+        )
 
-    parts.append("<h2>Mood & Severity Data</h2>")
+    parts.append('<h2>Mood Arc</h2><div class="mood-chart">')
     for e in entries:
-        mood  = e.get("mood_label", "—")
         score = e.get("mood_score", "")
-        sev   = e.get("severity", "")
+        try:
+            pct  = int(float(score) * 10)
+            bcls = _bar_class(score)
+        except Exception:
+            pct, bcls = 0, ""
         score_str = f"{float(score):.1f}" if score != "" else "—"
-        sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
-        cls   = _mood_color_class(score)
-        summ  = e.get("summary_text") or ""
-        parts.append(f"""
-        <div class="entry-block">
-          <div class="entry-date">{e['entry_date']}</div>
-          <span class="badge {cls}">{mood} {score_str}</span>
-          <span class="badge">severity {sev_str}</span>
-          <p class="entry-summary">{summ}</p>
-        </div>""")
+        parts.append(
+            '<div class="mood-bar-row">'
+            f'<div class="mood-bar-date">{e["entry_date"]}</div>'
+            f'<div class="mood-bar-track"><div class="mood-bar-fill {bcls}" style="width:{pct}%"></div></div>'
+            f'<div class="mood-bar-val">{score_str}</div>'
+            '</div>'
+        )
+    parts.append("</div>")
 
     return "\n".join(parts)
 
@@ -626,80 +818,124 @@ def _body_weekly_digest(data: dict, narrative: str) -> str:
     entries  = data["entries"]
     alerts   = data["alerts"]
     parts    = []
+    notable  = _notable_entries(entries, max_count=7)
+
+    scores     = [float(e["mood_score"]) for e in entries if e.get("mood_score") not in (None, "")]
+    avg_mood   = f"{sum(scores)/len(scores):.1f}" if scores else "—"
+    best_day   = max(entries, key=lambda e: float(e.get("mood_score") or 0), default={})
+    best_label = best_day.get("entry_date", "—") if best_day else "—"
+
+    parts.append(
+        '<div class="stats-row">'
+        f'<div class="stat-box"><div class="stat-value">{len(entries)}</div><div class="stat-label">Days Journaled</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{avg_mood}</div><div class="stat-label">Avg Mood</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{len(alerts)}</div><div class="stat-label">Alerts</div></div>'
+        f'<div class="stat-box"><div class="stat-value">{best_label}</div><div class="stat-label">Best Day</div></div>'
+        '</div>'
+    )
 
     if narrative:
-        parts.append(f'<h2>Week in Review</h2><div class="ai-narrative">{_nl2p(narrative)}</div>')
+        parts.append(
+            '<h2>Week in Review</h2>'
+            '<div class="ai-narrative">'
+            '<div class="ai-narrative-label">&#10022; AI-Generated Analysis</div>'
+            + _nl2p(narrative) +
+            '</div>'
+        )
 
-    # Per-day bullet list
-    parts.append("<h2>Daily Summary</h2>")
+    parts.append('<h2>Mood Overview</h2><div class="mood-chart">')
     for e in entries:
-        summ   = e.get("summary_text") or "(no summary)"
-        events = []
-        try:
-            events = json.loads(e.get("key_events") or "[]")
-        except Exception:
-            pass
-        mood  = e.get("mood_label", "—")
         score = e.get("mood_score", "")
-        sev   = e.get("severity", "")
+        try:
+            pct  = int(float(score) * 10)
+            bcls = _bar_class(score)
+        except Exception:
+            pct, bcls = 0, ""
         score_str = f"{float(score):.1f}" if score != "" else "—"
-        sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
-        cls   = _mood_color_class(score)
+        parts.append(
+            '<div class="mood-bar-row">'
+            f'<div class="mood-bar-date">{e["entry_date"]}</div>'
+            f'<div class="mood-bar-track"><div class="mood-bar-fill {bcls}" style="width:{pct}%"></div></div>'
+            f'<div class="mood-bar-val">{score_str}</div>'
+            '</div>'
+        )
+    parts.append("</div>")
 
-        events_html = "".join(f"<li>{ev}</li>" for ev in events[:4])
-        parts.append(f"""
-        <div class="entry-block">
-          <div class="entry-date">{e['entry_date']}</div>
-          <span class="badge {cls}">{mood} {score_str}</span>
-          <span class="badge">severity {sev_str}</span>
-          <p class="entry-summary">{summ}</p>
-          {'<ul>' + events_html + '</ul>' if events_html else ''}
-        </div>""")
+    if notable:
+        parts.append(f'<h2>Highlights <span style="font-size:9px;color:#94a3b8;font-weight:400;text-transform:none;">({len(notable)} of {len(entries)} shown)</span></h2>')
+        for e in notable:
+            import json as _j
+            summ      = e.get("summary_text") or "(no summary)"
+            mood      = e.get("mood_label", "—")
+            score     = e.get("mood_score", "")
+            sev       = e.get("severity", "")
+            mcls      = _mood_color_class(score)
+            ecls      = _entry_mood_class(score)
+            score_str = f"{float(score):.1f}" if score != "" else "—"
+            sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
+            events = []
+            try: events = _j.loads(e.get("key_events") or "[]")
+            except Exception: pass
+            ev_html  = "".join(f"<li>{x}</li>" for x in events[:3])
+            ul_block = f"<ul>{ev_html}</ul>" if ev_html else ""
+            parts.append(
+                f'<div class="entry-block {ecls}">'
+                f'<div class="entry-date">{e["entry_date"]}</div>'
+                f'<div class="mood-row">'
+                f'<span class="badge {mcls}">{mood} {score_str}</span>'
+                f'<span class="badge badge-purple">sev {sev_str}</span>'
+                f'</div>'
+                f'<p class="entry-summary">{summ}</p>'
+                f'{ul_block}'
+                f'</div>'
+            )
 
     if alerts:
-        parts.append("<h2>Alerts This Week</h2>")
+        parts.append("<h2>Alerts This Period</h2>")
         for a in alerts:
             cls = _alert_severity_class(a.get("priority_score", 0))
-            parts.append(f"""
-            <div class="alert-box {cls}">
-              <strong>[{a['alert_type'].upper()}]</strong>
-              · priority {a.get('priority_score','—')}<br>
-              {a.get('description','')}
-            </div>""")
+            parts.append(
+                f'<div class="alert-card {cls}">'
+                f'<div class="alert-type">{a["alert_type"].replace("_"," ").upper()} &middot; Priority {a.get("priority_score","—")}</div>'
+                f'<div class="alert-desc">{a.get("description","")}</div>'
+                f'</div>'
+            )
 
     return "\n".join(parts)
 
 
 def _body_chronology(data: dict) -> str:
     entries = data["entries"]
-    parts   = []
-    parts.append("""
-    <h2>Chronological Record</h2>
-    <div class="chronology-row chronology-header">
-      <div>Date</div><div>Mood</div><div>Severity</div><div>Key Events</div>
-    </div>""")
+    rows    = ""
 
     for e in entries:
+        import json as _j
         events = []
-        try:
-            events = json.loads(e.get("key_events") or "[]")
-        except Exception:
-            pass
-        mood  = e.get("mood_label", "—")
-        score = e.get("mood_score", "")
-        sev   = e.get("severity", "")
+        try: events = _j.loads(e.get("key_events") or "[]")
+        except Exception: pass
+        mood      = e.get("mood_label", "—")
+        score     = e.get("mood_score", "")
+        sev       = e.get("severity", "")
+        mcls      = _mood_color_class(score)
         score_str = f"{float(score):.1f}" if score != "" else "—"
         sev_str   = f"{float(sev):.1f}"   if sev   != "" else "—"
-        events_str = "; ".join(events[:3]) or "—"
-        parts.append(f"""
-        <div class="chronology-row">
-          <div>{e['entry_date']}</div>
-          <div>{mood} {score_str}</div>
-          <div>{sev_str}</div>
-          <div>{events_str}</div>
-        </div>""")
+        ev_str    = "; ".join(events[:3]) or "—"
+        rows += (
+            f'<tr>'
+            f'<td>{e["entry_date"]}</td>'
+            f'<td><span class="badge {mcls}">{mood} {score_str}</span></td>'
+            f'<td>{sev_str}</td>'
+            f'<td>{ev_str}</td>'
+            f'</tr>'
+        )
 
-    return "\n".join(parts)
+    return (
+        '<h2>Chronological Record</h2>'
+        '<table class="chron-table">'
+        '<thead><tr><th>Date</th><th>Mood</th><th>Severity</th><th>Key Events</th></tr></thead>'
+        f'<tbody>{rows}</tbody>'
+        '</table>'
+    )
 
 
 def _nl2p(text: str) -> str:
@@ -905,7 +1141,7 @@ def generate_packet(
     log.info(f"Generating {packet_type} export {date_start}→{date_end} fmt={fmt} redact={redact}")
 
     # 1. Fetch all data
-    data = _fetch_data(date_start, date_end)
+    data = _fetch_data(date_start, date_end, user_id=user_id)
 
     # 2. Apply redaction if requested
     if redact:
@@ -916,7 +1152,7 @@ def generate_packet(
     narrative = ""
     if packet_type in PACKET_TYPES_WITH_AI:
         try:
-            narrative = _call_ai_narrative(packet_type, data, date_start, date_end)
+            narrative = _call_ai_narrative(packet_type, data, date_start, date_end, user_id=user_id)
         except Exception as e:
             log.error(f"AI narrative generation failed: {e}")
             narrative = f"(AI narrative unavailable: {e})"

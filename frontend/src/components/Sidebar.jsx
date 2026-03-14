@@ -11,7 +11,7 @@ const NAV_LINKS = [
   { to: '/nervous',       icon: '〜', label: 'Nervous System' },
   { to: '/evidence',      icon: '◷', label: 'Evidence Vault' },
   { to: '/contradictions', icon:'⊕', label: 'Contradictions' },
-  { to: '/exports',       icon: '⊞', label: 'Exports',  ownerOnly: true },
+  { to: '/exports',       icon: '⊞', label: 'Exports' },
   { to: '/admin',         icon: '⊙', label: 'Admin',    ownerOnly: true },
   { to: '/settings',      icon: '⚙', label: 'Settings'  },
   { to: '/resources',     icon: '✦', label: 'Resources'  },

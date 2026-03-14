@@ -1753,20 +1753,108 @@ async def get_reflection_audit(current_user: dict = Depends(require_any_user)):
 
 
 
-# ── Export routes (owner only) ────────────────────────────────────────────────
+# ── Export routes ─────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BaseModel
+from typing import Optional as _Optional, List as _List
+from fastapi.responses import FileResponse as _FileResponse
+import os as _os
+
+
+class ExportRequest(_BaseModel):
+    packet_type: str
+    date_start:  str
+    date_end:    str
+    format:      str = "pdf"
+    redact:      bool = False
+    alert_ids:   _Optional[_List[int]] = []
+
 
 @app.post("/api/export/generate")
-async def generate_export(current_user: dict = Depends(require_owner)):
-    # TODO: implement export engine (next milestone)
-    return {"message": "Export generation not yet implemented"}
+async def generate_export(
+    req: ExportRequest,
+    current_user: dict = Depends(require_any_user),
+):
+    from src.nlp.export_engine import generate_packet
+
+    valid_types = {"therapy_summary", "incident_packet", "pattern_report",
+                   "weekly_digest", "chronology"}
+    if req.packet_type not in valid_types:
+        raise HTTPException(status_code=400,
+            detail=f"Invalid packet_type. Must be one of: {', '.join(sorted(valid_types))}")
+
+    valid_formats = {"pdf", "html", "md", "json", "csv"}
+    if req.format not in valid_formats:
+        raise HTTPException(status_code=400,
+            detail=f"Invalid format. Must be one of: {', '.join(sorted(valid_formats))}")
+
+    try:
+        result = generate_packet(
+            packet_type = req.packet_type,
+            date_start  = req.date_start,
+            date_end    = req.date_end,
+            fmt         = req.format,
+            redact      = req.redact,
+            user_id     = current_user["id"],
+            alert_ids   = req.alert_ids or [],
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Export generation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Export generation failed: {e}")
+
+    return {
+        "export_id":   result["export_id"],
+        "filename":    result["filename"],
+        "format":      result["format"],
+        "entry_count": result["entry_count"],
+        "alert_count": result["alert_count"],
+        "message":     f"Export generated successfully — {result['entry_count']} entries, "
+                       f"{result['alert_count']} alerts",
+    }
 
 
 @app.get("/api/export/{export_id}")
 async def download_export(
     export_id: int,
-    current_user: dict = Depends(require_owner),
+    current_user: dict = Depends(require_any_user),
 ):
-    raise HTTPException(status_code=404, detail="Export not found")
+    from src.auth.auth_db import get_db
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT file_path, packet_type, format FROM exports WHERE id = ?",
+            (export_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Export not found")
+
+    file_path = row["file_path"]
+    if not _os.path.exists(file_path):
+        raise HTTPException(status_code=404,
+            detail="Export file not found on disk. It may have been deleted.")
+
+    mime_map = {
+        "pdf":  "application/pdf",
+        "html": "text/html",
+        "md":   "text/markdown",
+        "json": "application/json",
+        "csv":  "text/csv",
+    }
+    media_type = mime_map.get(row["format"], "application/octet-stream")
+    filename   = _os.path.basename(file_path)
+
+    return _FileResponse(
+        path       = file_path,
+        media_type = media_type,
+        filename   = filename,
+    )
 
 # ── Onboarding + Memory routes ──────────────────────────────────────────────
 from src.api.onboarding_routes import register_onboarding_routes

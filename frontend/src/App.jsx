@@ -194,7 +194,7 @@ function Shell() {
             <Route path="/nervous"         element={<ProtectedRoute><NervousSystem /></ProtectedRoute>} />
             <Route path="/evidence"        element={<ProtectedRoute><Evidence /></ProtectedRoute>} />
             <Route path="/contradictions"  element={<ProtectedRoute><Contradictions /></ProtectedRoute>} />
-            <Route path="/exports"         element={<ProtectedRoute ownerOnly><Exports /></ProtectedRoute>} />
+            <Route path="/exports"         element={<ProtectedRoute><Exports /></ProtectedRoute>} />
             <Route path="/admin"           element={<ProtectedRoute ownerOnly><Admin /></ProtectedRoute>} />
             <Route path="/settings"        element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/resources"       element={<ProtectedRoute><Resources /></ProtectedRoute>} />
