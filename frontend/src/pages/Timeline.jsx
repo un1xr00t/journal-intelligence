@@ -670,6 +670,8 @@ function TherapistInsight() {
   const [entryCount, setEntryCount] = useState(null);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(null);
+  const [isStale, setIsStale]       = useState(false);
+  const [staleDismissed, setStaleDismissed] = useState(false);
   const fetchedRef = useRef(false);
   // token + cache metadata per tone
   const [meta, setMeta] = useState({});
@@ -679,17 +681,23 @@ function TherapistInsight() {
   const borderColor = toneObj?.border || "rgba(167,139,250,0.3)";
   const accentColor = toneObj?.color  || "#a78bfa";
 
-  // Auto-load cached insight on mount — use preferred_tone from memory if set
+  // On mount: check reflect-mode setting, then auto-generate or read cache only.
   useEffect(() => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
     let resolvedTone = "therapist";
-    api.get("/api/memory")
+    const toneP = api.get("/api/memory")
       .then(r => { resolvedTone = r.data?.memory?.preferred_tone || "therapist"; setActiveTone(resolvedTone); })
-      .catch(() => {})
-      .finally(() => {
-        api.post("/api/therapist/insight", { force: false, tone: resolvedTone })
-          .then(res => {
+      .catch(() => {});
+    toneP.finally(() => {
+      api.get("/api/settings/reflect-mode")
+        .then(r => r.data.auto_reflect)
+        .catch(() => true)
+        .then(autoReflect => {
+          const endpoint = autoReflect
+            ? api.post("/api/therapist/insight", { force: false, tone: resolvedTone })
+            : api.get("/api/therapist/insight/status?tone=" + resolvedTone);
+          endpoint.then(res => {
             const d = res.data;
             if (d.insight) {
               setDateRange(d.entry_date);
@@ -697,9 +705,10 @@ function TherapistInsight() {
               setCache(prev => ({ ...prev, [resolvedTone]: { insight: d.insight, generatedAt: d.generated_at } }));
               setMeta(prev => ({ ...prev, [resolvedTone]: { cached: d.cached, inputTokens: d.input_tokens, outputTokens: d.output_tokens, hash: d.source_hash } }));
             }
-          })
-          .catch(() => {});
-      });
+            setIsStale(d.is_stale || false);
+          }).catch(() => {});
+        });
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generate = useCallback(async (tone, force = false) => {
@@ -718,6 +727,9 @@ function TherapistInsight() {
       setEntryCount(d.entry_count);
       setCache(prev => ({ ...prev, [tone]: { insight: d.insight, generatedAt: d.generated_at } }));
       setMeta(prev => ({ ...prev, [tone]: { cached: d.cached, inputTokens: d.input_tokens, outputTokens: d.output_tokens, hash: d.source_hash } }));
+      setIsStale(false);
+      setStaleDismissed(false);
+      setIsStale(false);
     } catch {
       setError("Could not generate — check API logs.");
     } finally {
@@ -759,20 +771,39 @@ function TherapistInsight() {
             </span>
           )}
         </div>
-        {hasSomething && (
-          <button
-            onClick={() => generate(activeTone, true)}
-            disabled={loading}
-            style={{
-              fontSize: 11, padding: "3px 10px", borderRadius: 8,
-              background: "transparent",
-              border: `1px solid ${borderColor}`,
-              color: loading ? "#334155" : accentColor,
-              cursor: loading ? "not-allowed" : "pointer",
-              transition: "color 0.2s",
-            }}
-          >{loading ? "…" : "Refresh"}</button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {isStale && !loading && !staleDismissed && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              fontSize: 10, fontFamily: "IBM Plex Mono",
+              color: "rgba(165,180,252,0.6)",
+              background: "rgba(99,102,241,0.08)",
+              border: "1px solid rgba(99,102,241,0.2)",
+              borderRadius: 99, padding: "2px 8px 2px 10px",
+            }}>
+              <span>new entries — refresh to update</span>
+              <button onClick={() => setStaleDismissed(true)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: "rgba(165,180,252,0.4)", fontSize: 12,
+                padding: 0, lineHeight: 1, display: "flex", alignItems: "center",
+              }} title="Dismiss">×</button>
+            </div>
+          )}
+          {hasSomething && (
+            <button
+              onClick={() => generate(activeTone, true)}
+              disabled={loading}
+              style={{
+                fontSize: 11, padding: "3px 10px", borderRadius: 8,
+                background: isStale && !staleDismissed ? "rgba(99,102,241,0.15)" : "transparent",
+                border: `1px solid ${isStale && !staleDismissed ? "rgba(99,102,241,0.4)" : borderColor}`,
+                color: loading ? "#334155" : isStale && !staleDismissed ? "#a5b4fc" : accentColor,
+                cursor: loading ? "not-allowed" : "pointer",
+                transition: "all 0.2s",
+              }}
+            >{loading ? "…" : "Refresh"}</button>
+          )}
+        </div>
       </div>
 
       {/* ── Tone picker ─────────────────────────────────────── */}

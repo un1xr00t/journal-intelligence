@@ -1410,6 +1410,117 @@ def _write_audit(record: dict):
         _logger.warning(f"[reflection_audit] write failed: {e}")
 
 
+
+@app.get("/api/therapist/insight/status")
+async def get_therapist_insight_status(
+    tone: str = "therapist",
+    current_user: dict = Depends(require_any_user),
+):
+    """
+    Returns the latest cached reflection for the given tone + whether it is stale
+    (i.e. new entries exist that the cached reflection hasn't seen).
+    Never triggers AI generation — read-only.
+    """
+    tone = tone.lower().strip()
+    if tone not in _VALID_TONES:
+        raise HTTPException(status_code=400, detail=f"Invalid tone.")
+
+    from src.auth.auth_db import get_db as _get_db
+    conn = _get_db()
+    cursor = conn.cursor()
+
+    # Ensure table exists
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reflection_cache (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            tone          TEXT NOT NULL,
+            source_hash   TEXT NOT NULL,
+            insight_text  TEXT NOT NULL,
+            entry_ids     TEXT NOT NULL,
+            entry_count   INTEGER,
+            date_range    TEXT,
+            input_tokens  INTEGER,
+            output_tokens INTEGER,
+            generated_at  TEXT,
+            UNIQUE(user_id, tone, source_hash)
+        )
+    """)
+    conn.commit()
+
+    # Compute current source hash from entries in the 14-day window
+    window_start = (_datetime.now(_timezone.utc) - _timedelta(days=_INSIGHT_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    cursor.execute("""
+        SELECT e.id FROM entries e
+        WHERE e.is_current = 1 AND e.user_id = ?
+          AND e.entry_date >= ?
+          AND (e.normalized_text IS NOT NULL AND LENGTH(e.normalized_text) > 50)
+        ORDER BY e.entry_date ASC
+    """, (current_user["id"], window_start))
+    rows = cursor.fetchall()
+    if not rows:
+        cursor.execute("""
+            SELECT e.id FROM entries e
+            WHERE e.is_current = 1 AND e.user_id = ?
+              AND e.normalized_text IS NOT NULL AND LENGTH(e.normalized_text) > 50
+            ORDER BY e.entry_date DESC LIMIT 1
+        """, (current_user["id"],))
+        rows = cursor.fetchall()
+
+    current_hash = _compute_source_hash([r["id"] for r in rows]) if rows else None
+
+    # Get most recent cached insight for this tone (regardless of hash)
+    cursor.execute("""
+        SELECT insight_text, source_hash, entry_count, date_range,
+               input_tokens, output_tokens, generated_at
+        FROM reflection_cache
+        WHERE user_id = ? AND tone = ?
+        ORDER BY generated_at DESC
+        LIMIT 1
+    """, (current_user["id"], tone))
+    cached = cursor.fetchone()
+
+    if not cached:
+        conn.close()
+        return {
+            "has_cache":    False,
+            "is_stale":     bool(rows),
+            "insight":      None,
+            "generated_at": None,
+            "entry_count":  None,
+            "entry_date":   None,
+            "tone":         tone,
+            "tone_name":    _TONE_CONFIGS[tone]["name"],
+        }
+
+    # Stale if hash changed (processed entries) OR if any entry was ingested
+    # after the reflection was generated (catches unprocessed new entries too)
+    hash_stale = (current_hash != cached["source_hash"]) if current_hash else False
+    new_entry_row = cursor.execute("""
+        SELECT 1 FROM entries
+        WHERE user_id = ? AND is_current = 1
+          AND ingested_at > ?
+        LIMIT 1
+    """, (current_user["id"], cached["generated_at"])).fetchone()
+    conn.close()
+    is_stale = hash_stale or (new_entry_row is not None)
+
+    return {
+        "has_cache":    True,
+        "is_stale":     is_stale,
+        "insight":      cached["insight_text"],
+        "generated_at": cached["generated_at"],
+        "entry_count":  cached["entry_count"],
+        "entry_date":   cached["date_range"],
+        "tone":         tone,
+        "tone_name":    _TONE_CONFIGS[tone]["name"],
+        "input_tokens":  cached["input_tokens"],
+        "output_tokens": cached["output_tokens"],
+        "source_hash":   cached["source_hash"],
+        "cached":        True,
+    }
+
+
 @app.post("/api/therapist/insight")
 async def get_therapist_insight(
     body: TherapistInsightRequest,
@@ -1664,5 +1775,6 @@ register_resources_routes(app, require_any_user)
 from src.api.exit_plan_routes import register_exit_plan_routes
 register_exit_plan_routes(app, require_any_user)
 
-from src.api.settings_routes import register_settings_routes
+from src.api.settings_routes import register_settings_routes, register_reflect_mode_routes
 register_settings_routes(app, require_any_user)
+register_reflect_mode_routes(app, require_any_user)

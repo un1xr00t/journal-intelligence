@@ -143,3 +143,48 @@ def _validate_anthropic_key(key: str):
     except Exception as e:
         # Non-auth errors (rate limits, network) — save anyway
         logger.warning(f"[settings] Anthropic key validation non-auth error (saving anyway): {e}")
+
+
+
+# ─── Reflect Mode Routes ──────────────────────────────────────────────────────
+
+class ReflectModeRequest(BaseModel):
+    auto_reflect: bool
+
+
+def register_reflect_mode_routes(app, require_any_user):
+
+    @app.get("/api/settings/reflect-mode")
+    async def get_reflect_mode(current_user: dict = Depends(require_any_user)):
+        """Return auto_reflect flag. Default True = auto-generate when stale."""
+        from src.auth.auth_db import get_db
+        conn = get_db()
+        row = conn.execute(
+            "SELECT auto_reflect FROM user_settings WHERE user_id = ?",
+            (current_user["id"],),
+        ).fetchone()
+        conn.close()
+        val = (row["auto_reflect"] if (row and row["auto_reflect"] is not None) else 1) == 1
+        return {"auto_reflect": val}
+
+    @app.put("/api/settings/reflect-mode")
+    async def set_reflect_mode(
+        body: ReflectModeRequest,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """Save auto_reflect preference."""
+        from src.auth.auth_db import get_db
+        conn = get_db()
+        conn.execute(
+            """
+            INSERT INTO user_settings (user_id, auto_reflect, updated_at)
+            VALUES (?, ?, datetime('now'))
+            ON CONFLICT(user_id) DO UPDATE SET
+                auto_reflect = excluded.auto_reflect,
+                updated_at   = excluded.updated_at
+            """,
+            (current_user["id"], 1 if body.auto_reflect else 0),
+        )
+        conn.commit()
+        conn.close()
+        return {"status": "saved", "auto_reflect": body.auto_reflect}

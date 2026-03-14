@@ -373,6 +373,73 @@ useEffect(() => { if (memory?.preferred_tone && tone === null) setTone(memory.pr
   )
 }
 
+// ─── Auto Reflect Section ─────────────────────────────────────────────────────
+function AutoReflectSection() {
+  const [autoReflect, setAutoReflect] = useState(true)
+  const [loading, setLoading]         = useState(true)
+  const [saving, setSaving]           = useState(false)
+  const [status, setStatus]           = useState(null)
+
+  useEffect(() => {
+    api.get('/api/settings/reflect-mode')
+      .then(r => setAutoReflect(r.data.auto_reflect))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleToggle = async (val) => {
+    setAutoReflect(val)
+    setSaving(true)
+    setStatus(null)
+    try {
+      await api.put('/api/settings/reflect-mode', { auto_reflect: val })
+      setStatus({ type: 'success', msg: val
+        ? 'Reflection will auto-generate when new entries are detected.'
+        : 'Reflection will only generate when you click Refresh.'
+      })
+    } catch (e) {
+      setStatus({ type: 'error', msg: e.response?.data?.detail || 'Failed to save' })
+      setAutoReflect(!val)
+    } finally { setSaving(false) }
+  }
+
+  if (loading) return null
+
+  return (
+    <Card>
+      <Label>Reflection on Page Load</Label>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'IBM Plex Mono', monospace", marginBottom: 16, lineHeight: 1.6 }}>
+        Each reflection call costs tokens. Auto mode generates when new entries are detected. Manual mode only generates when you click Refresh.
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {[
+          { val: true,  icon: '⚡', label: 'Auto-generate', desc: 'Runs when new entries detected' },
+          { val: false, icon: '◎', label: 'Manual only',    desc: 'Only on Refresh click' },
+        ].map(opt => (
+          <button
+            key={String(opt.val)}
+            onClick={() => !saving && handleToggle(opt.val)}
+            disabled={saving}
+            style={{
+              flex: 1, padding: '10px 12px', borderRadius: 8,
+              cursor: saving ? 'not-allowed' : 'pointer',
+              textAlign: 'left',
+              background: autoReflect === opt.val ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
+              border: '1px solid ' + (autoReflect === opt.val ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)'),
+              transition: 'all 0.15s',
+            }}
+          >
+            <div style={{ fontSize: 13, marginBottom: 3 }}>{opt.icon}</div>
+            <div style={{ fontSize: 11, fontFamily: 'Syne, sans-serif', fontWeight: 700, color: autoReflect === opt.val ? '#a5b4fc' : 'rgba(255,255,255,0.5)', marginBottom: 2 }}>{opt.label}</div>
+            <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: 'rgba(255,255,255,0.3)' }}>{opt.desc}</div>
+          </button>
+        ))}
+      </div>
+      {status && <StatusBadge type={status.type === 'success' ? 'success' : 'error'} msg={status.msg} />}
+    </Card>
+  )
+}
+
 // ─── AI Provider Section ──────────────────────────────────────────────────────
 const PROVIDERS = [
   { id: 'anthropic',     icon: '✦', label: 'Anthropic Claude',   desc: 'Claude Sonnet / Opus / Haiku', needsUrl: false },
@@ -1115,6 +1182,7 @@ export default function Settings() {
     {tab === 'ai' && (
       <>
         <SectionTitle icon="〜" title="AI Preferences" subtitle="Provider key, model, and reflection voice" />
+        <AutoReflectSection />
         <AIProviderSection />
         {memErr
             ? <StatusBadge type="info" msg="Memory profile not loaded — complete Memory Profile tab first." />
