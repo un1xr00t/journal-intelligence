@@ -1484,7 +1484,7 @@ async def get_therapist_insight_status(
         conn.close()
         return {
             "has_cache":    False,
-            "is_stale":     bool(rows),
+            "is_stale":     False,
             "insight":      None,
             "generated_at": None,
             "entry_count":  None,
@@ -1495,7 +1495,6 @@ async def get_therapist_insight_status(
 
     # Stale if hash changed (processed entries) OR if any entry was ingested
     # after the reflection was generated (catches unprocessed new entries too)
-    hash_stale = (current_hash != cached["source_hash"]) if current_hash else False
     new_entry_row = cursor.execute("""
         SELECT 1 FROM entries
         WHERE user_id = ? AND is_current = 1
@@ -1503,7 +1502,7 @@ async def get_therapist_insight_status(
         LIMIT 1
     """, (current_user["id"], cached["generated_at"])).fetchone()
     conn.close()
-    is_stale = hash_stale or (new_entry_row is not None)
+    is_stale = (new_entry_row is not None)
 
     return {
         "has_cache":    True,
