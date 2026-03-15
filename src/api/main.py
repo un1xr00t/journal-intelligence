@@ -404,10 +404,23 @@ async def delete_user(
         cursor.execute("DELETE FROM evidence WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM rollups WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM master_summaries WHERE user_id = ?", (user_id,))
-        # derived_summaries has entry_id FK → entries, must go before entries
+        # all tables with entry_id FK must go before entries
         cursor.execute(
             "DELETE FROM derived_summaries WHERE entry_id IN "
             "(SELECT id FROM entries WHERE user_id = ?)", (user_id,)
+        )
+        cursor.execute(
+            "DELETE FROM entry_embeddings WHERE entry_id IN "
+            "(SELECT id FROM entries WHERE user_id = ?)", (user_id,)
+        )
+        cursor.execute(
+            "DELETE FROM ingest_log WHERE entry_id IN "
+            "(SELECT id FROM entries WHERE user_id = ?)", (user_id,)
+        )
+        cursor.execute(
+            "DELETE FROM revisions WHERE previous_id IN "
+            "(SELECT id FROM entries WHERE user_id = ?) "
+            "OR new_id IN (SELECT id FROM entries WHERE user_id = ?)", (user_id, user_id)
         )
         cursor.execute("DELETE FROM entries WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM user_memory WHERE user_id = ?", (user_id,))
@@ -436,9 +449,12 @@ async def delete_user(
             "DELETE FROM exit_plan_phases WHERE plan_id IN "
             "(SELECT id FROM exit_plans WHERE user_id = ?)", (user_id,)
         )
+        cursor.execute("DELETE FROM exit_plan_contacts WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM exit_plans WHERE user_id = ?", (user_id,))
         # Misc user-scoped tables (IF they exist — safe to ignore if not)
-        for tbl in ("resource_profiles", "reflection_cache", "user_settings"):
+        cursor.execute("DELETE FROM exports WHERE created_by = ?", (user_id,))
+        for tbl in ("resource_profiles", "reflection_cache", "user_settings",
+                    "journal_prompt_cache", "user_profiles", "ingest_log"):
             try:
                 cursor.execute(f"DELETE FROM {tbl} WHERE user_id = ?", (user_id,))
             except Exception:
@@ -455,6 +471,13 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+    # Wipe attachment files from disk (DB rows already gone)
+    import shutil, os
+    attachment_dir = os.path.join("data", "exit_plan", f"user_{user_id}")
+    if os.path.isdir(attachment_dir):
+        shutil.rmtree(attachment_dir)
+        _logger.info(f"[delete_user] wiped attachment dir: {attachment_dir}")
 
     return {"message": f"User {user_id} deleted"}
 
