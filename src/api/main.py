@@ -1900,3 +1900,6 @@ register_rag_routes(app, require_any_user)
 
 from src.api.journal_prompt_route import register_journal_prompt_routes
 register_journal_prompt_routes(app, require_any_user)
+
+from src.api.crisis_routes import register_crisis_routes
+register_crisis_routes(app, require_any_user)

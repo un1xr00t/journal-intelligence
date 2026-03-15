@@ -19,6 +19,7 @@ import ExitPlan from './pages/ExitPlan'
 import ExitPlanFull from './pages/ExitPlanFull'
 import JournalWrite from './pages/JournalWrite'
 import AskMyJournal from './pages/AskMyJournal'
+import CrisisBanner from './components/CrisisBanner'
 import api from './services/api'
 
 function LoadingScreen() {
@@ -78,6 +79,7 @@ function Shell() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', overflow: 'hidden' }}>
+      {user && <CrisisBanner />}
       {/* Mobile top bar */}
       {isMobile && !hideSidebar && user && (
         <div style={{
