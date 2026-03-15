@@ -16,7 +16,7 @@ from typing import Optional
 
 import anthropic
 import yaml
-from fastapi import Depends, HTTPException, UploadFile, File, Form
+from fastapi import Depends, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -1629,5 +1629,252 @@ def register_exit_plan_routes(app, require_any_user):
         conn.execute("DELETE FROM exit_plan_contacts WHERE id = ?", (contact_id,))
         conn.commit()
         return {"deleted": True}
+
+    # ── Attachment routes ─────────────────────────────────────────────────────────
+    # POST   /api/exit-plan/tasks/{task_id}/attachments  — upload a file
+    # GET    /api/exit-plan/tasks/{task_id}/attachments  — list attachments
+    # GET    /api/exit-plan/attachments/{id}/download    — download a file (auth-gated)
+    # DELETE /api/exit-plan/attachments/{id}             — delete
+
+    import uuid as _uuid
+    import shutil as _shutil
+    from src.api.upload_security import run_attachment_security, ATTACHMENT_MAX_BYTES
+
+    def _attachment_dir(user_id: int) -> "Path":
+        d = ATTACHMENT_BASE / f"user_{user_id}" / "attachments"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _user_attachment_total(conn, plan_id: int) -> int:
+        """Return total bytes of attachments for this plan."""
+        row = conn.execute(
+            "SELECT COALESCE(SUM(file_size), 0) FROM exit_plan_attachments WHERE plan_id = ?",
+            (plan_id,)
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    def _resolve_task_plan(conn, task_id: int, user_id: int):
+        """
+        Return (task_row, plan_row) if task belongs to user.
+        Raises 404 if not found or wrong user.
+        """
+        task = conn.execute(
+            """SELECT t.*, ph.plan_id FROM exit_plan_tasks t
+               JOIN exit_plan_phases ph ON t.phase_id = ph.id
+               WHERE t.id = ?""",
+            (task_id,)
+        ).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found.")
+        plan = conn.execute(
+            "SELECT * FROM exit_plans WHERE id = ? AND user_id = ?",
+            (task["plan_id"], user_id)
+        ).fetchone()
+        if not plan:
+            raise HTTPException(status_code=403, detail="Not authorized.")
+        return dict(task), dict(plan)
+
+    @app.post("/api/exit-plan/tasks/{task_id}/attachments")
+    async def upload_task_attachment(
+        task_id: int,
+        request: Request,
+        file: UploadFile = File(...),
+        current_user: dict = Depends(require_any_user),
+    ):
+        """Upload a file attachment to a task. Auth-gated, magic-byte validated."""
+        body = await file.read()
+        original_name = file.filename or "upload"
+
+        # Security pipeline
+        safe_name, media_type = run_attachment_security(request, body, original_name)
+
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            task, plan = _resolve_task_plan(conn, task_id, current_user["id"])
+
+            # 50 MB per-plan cap
+            total_bytes = _user_attachment_total(conn, plan["id"])
+            if total_bytes + len(body) > 50 * 1024 * 1024:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Storage limit reached. Max 50 MB of attachments per plan.",
+                )
+
+            # Store with UUID prefix to prevent enumeration / collisions
+            unique_name = f"{_uuid.uuid4().hex[:8]}_{safe_name}"
+            dest = _attachment_dir(current_user["id"]) / unique_name
+            dest.write_bytes(body)
+
+            now = datetime.now(timezone.utc).isoformat()
+            cur = conn.execute(
+                """INSERT INTO exit_plan_attachments
+                   (task_id, plan_id, filename, file_path, file_size, uploaded_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (task_id, plan["id"], safe_name, str(dest), len(body), now)
+            )
+            conn.commit()
+
+            logger.info(
+                "[attach] upload task=%s user=%s file=%s size=%d",
+                task_id, current_user["id"], safe_name, len(body)
+            )
+            return {
+                "attachment_id": cur.lastrowid,
+                "filename":      safe_name,
+                "media_type":    media_type,
+                "file_size":     len(body),
+                "uploaded_at":   now,
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("[attach] upload error: %s", exc)
+            raise HTTPException(status_code=500, detail="Upload failed.")
+        finally:
+            conn.close()
+
+    @app.get("/api/exit-plan/tasks/{task_id}/attachments")
+    async def list_task_attachments(
+        task_id: int,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """List attachments for a task. Verifies ownership."""
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            _resolve_task_plan(conn, task_id, current_user["id"])
+            rows = conn.execute(
+                """SELECT id, filename, file_size, uploaded_at
+                   FROM exit_plan_attachments WHERE task_id = ?
+                   ORDER BY uploaded_at ASC""",
+                (task_id,)
+            ).fetchall()
+            return {"attachments": [dict(r) for r in rows]}
+        finally:
+            conn.close()
+
+    @app.get("/api/exit-plan/attachments/{attachment_id}/download")
+    async def download_attachment(
+        attachment_id: int,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """
+        Serve an attachment file. Auth-gated — ownership verified against plan.
+        Path is never exposed in the URL; resolved server-side from attachment_id.
+        """
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            row = conn.execute(
+                "SELECT * FROM exit_plan_attachments WHERE id = ?",
+                (attachment_id,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Attachment not found.")
+
+            # Verify ownership
+            plan = conn.execute(
+                "SELECT id FROM exit_plans WHERE id = ? AND user_id = ?",
+                (row["plan_id"], current_user["id"])
+            ).fetchone()
+            if not plan:
+                raise HTTPException(status_code=403, detail="Not authorized.")
+
+            file_path = Path(row["file_path"])
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="File not found on server.")
+
+            return FileResponse(
+                path=str(file_path),
+                filename=row["filename"],
+                headers={"Content-Disposition": f'attachment; filename="{row["filename"]}"'},
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("[attach] download error: %s", exc)
+            raise HTTPException(status_code=500, detail="Download failed.")
+        finally:
+            conn.close()
+
+    @app.delete("/api/exit-plan/attachments/{attachment_id}")
+    async def delete_attachment(
+        attachment_id: int,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """Delete an attachment (DB record + file on disk). Verifies ownership."""
+        conn = get_db()
+        try:
+            _ensure_tables(conn)
+            row = conn.execute(
+                "SELECT * FROM exit_plan_attachments WHERE id = ?",
+                (attachment_id,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Attachment not found.")
+
+            # Verify ownership
+            plan = conn.execute(
+                "SELECT id FROM exit_plans WHERE id = ? AND user_id = ?",
+                (row["plan_id"], current_user["id"])
+            ).fetchone()
+            if not plan:
+                raise HTTPException(status_code=403, detail="Not authorized.")
+
+            # Remove file from disk
+            fp = Path(row["file_path"])
+            if fp.exists():
+                fp.unlink()
+
+            conn.execute("DELETE FROM exit_plan_attachments WHERE id = ?", (attachment_id,))
+            conn.commit()
+            logger.info("[attach] deleted id=%s user=%s", attachment_id, current_user["id"])
+            return {"deleted": True}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("[attach] delete error: %s", exc)
+            raise HTTPException(status_code=500, detail="Delete failed.")
+        finally:
+            conn.close()
+
+    # ── POST /api/exit-plan/export-pdf ───────────────────────────────────────────
+    class ExitPlanExportRequest(BaseModel):
+        fmt:               str  = "pdf"    # pdf | html
+        include_notes:     bool = True
+        include_contacts:  bool = True
+        include_narrative: bool = True
+
+    @app.post("/api/exit-plan/export-pdf")
+    async def export_exit_plan_pdf(
+        req: ExitPlanExportRequest,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """Generate a PDF or HTML export of the user's exit plan."""
+        if req.fmt not in ("pdf", "html"):
+            raise HTTPException(status_code=400, detail="Format must be 'pdf' or 'html'.")
+        try:
+            from src.nlp.exit_plan_pdf_export import generate_exit_plan_pdf
+            result = generate_exit_plan_pdf(
+                user_id=current_user["id"],
+                fmt=req.fmt,
+                include_notes=req.include_notes,
+                include_contacts=req.include_contacts,
+                include_narrative=req.include_narrative,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except Exception as exc:
+            logger.exception("[exit_plan_pdf] export error: %s", exc)
+            raise HTTPException(status_code=500, detail="Export failed.")
+
+        media = "application/pdf" if req.fmt == "pdf" else "text/html"
+        return FileResponse(
+            path=result["file_path"],
+            filename=result["filename"],
+            media_type=media,
+            headers={"Content-Disposition": f'attachment; filename="{result["filename"]}"'},
+        )
 
 # end register_exit_plan_routes

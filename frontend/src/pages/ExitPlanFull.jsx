@@ -442,10 +442,13 @@ function LeftPanel({ plan, selectedTask, onSelectTask }) {
 // ── Right panel: task detail ───────────────────────────────────────────────────
 
 function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
-  const [notes,     setNotes]     = useState([])
-  const [noteText,  setNoteText]  = useState('')
-  const [saving,    setSaving]    = useState(false)
-  const [loading,   setLoading]   = useState(false)
+  const [notes,              setNotes]              = useState([])
+  const [noteText,           setNoteText]           = useState('')
+  const [saving,             setSaving]             = useState(false)
+  const [loading,            setLoading]            = useState(false)
+  const [attachments,        setAttachments]        = useState([])
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
+  const [uploadingFile,      setUploadingFile]      = useState(false)
 
   const loadNotes = useCallback(() => {
     if (!task) return
@@ -456,7 +459,17 @@ function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
       .finally(() => setLoading(false))
   }, [task?.id])
 
+  const loadAttachments = useCallback(() => {
+    if (!task) return
+    setLoadingAttachments(true)
+    api.get(`/api/exit-plan/tasks/${task.id}/attachments`)
+      .then(r => setAttachments(r.data.attachments || []))
+      .catch(() => {})
+      .finally(() => setLoadingAttachments(false))
+  }, [task?.id])
+
   useEffect(() => { loadNotes() }, [loadNotes])
+  useEffect(() => { loadAttachments() }, [loadAttachments])
 
   const submitNote = async () => {
     if (!noteText.trim()) return
@@ -639,6 +652,92 @@ function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
               </div>
             ))
           )}
+        {/* Attachments */}
+        <div>
+          <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>
+            Attachments {attachments.length > 0 && `· ${attachments.length}`}
+          </div>
+
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 8, cursor: uploadingFile ? 'not-allowed' : 'pointer',
+            padding: '7px 12px', border: '1px dashed var(--border)', borderRadius: 7,
+            fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, userSelect: 'none',
+            background: 'rgba(255,255,255,0.02)',
+          }}>
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.txt"
+              style={{ display: 'none' }}
+              disabled={uploadingFile}
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                setUploadingFile(true)
+                try {
+                  const fd = new FormData()
+                  fd.append('file', file)
+                  await api.post(`/api/exit-plan/tasks/${task.id}/attachments`, fd, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                  })
+                  loadAttachments()
+                } catch (err) {
+                  const msg = err?.response?.data?.detail || 'Upload failed'
+                  alert(msg)
+                } finally {
+                  setUploadingFile(false)
+                  e.target.value = ''
+                }
+              }}
+            />
+            {uploadingFile ? '⏳ Uploading…' : '📎 Attach file (PDF, image, TXT · max 10 MB)'}
+          </label>
+
+          {loadingAttachments ? (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Loading…</div>
+          ) : attachments.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No attachments yet.</div>
+          ) : (
+            attachments.map(a => (
+              <div key={a.id} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--border)', marginBottom: 6,
+              }}>
+                <span style={{ fontSize: 14 }}>
+                  {a.filename.match(/\.(jpg|jpeg|png|webp)$/i) ? '🖼' : a.filename.match(/\.pdf$/i) ? '📄' : '📝'}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.filename}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono' }}>
+                    {a.file_size ? (a.file_size < 1024 ? `${a.file_size} B` : `${(a.file_size / 1024).toFixed(1)} KB`) : ''} · {new Date(a.uploaded_at).toLocaleDateString()}
+                  </div>
+                </div>
+                <button
+                  style={{ fontSize: 11, color: 'var(--accent)', background: 'none', padding: '3px 8px', border: '1px solid var(--accent)', borderRadius: 4, flexShrink: 0, cursor: 'pointer' }}
+                  onClick={async () => {
+                    try {
+                      const resp = await api.get(`/api/exit-plan/attachments/${a.id}/download`, { responseType: 'blob' })
+                      const url = window.URL.createObjectURL(new Blob([resp.data]))
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.download = a.filename
+                      link.click()
+                      window.URL.revokeObjectURL(url)
+                    } catch { alert('Download failed') }
+                  }}
+                >↓</button>
+                <button
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef444488', fontSize: 13, padding: '2px 4px', flexShrink: 0 }}
+                  onClick={async () => {
+                    if (!window.confirm('Delete this attachment?')) return
+                    await api.delete(`/api/exit-plan/attachments/${a.id}`)
+                    loadAttachments()
+                  }}
+                >✕</button>
+              </div>
+            ))
+          )}
+        </div>
         </div>
       </div>
     </div>
@@ -1429,6 +1528,126 @@ function ContactFormModal({ contact, onSave, onClose }) {
   )
 }
 
+// ── Export tab ────────────────────────────────────────────────────────────────
+
+function ExportTab() {
+  const [exporting,     setExporting]     = useState(false)
+  const [includeNotes,  setIncludeNotes]  = useState(true)
+  const [includeNet,    setIncludeNet]    = useState(true)
+  const [includeAI,     setIncludeAI]     = useState(true)
+  const [fmt,           setFmt]           = useState('pdf')
+  const [error,         setError]         = useState(null)
+
+  const handleExport = async () => {
+    setExporting(true)
+    setError(null)
+    try {
+      const resp = await api.post(
+        '/api/exit-plan/export-pdf',
+        { fmt, include_notes: includeNotes, include_contacts: includeNet, include_narrative: includeAI },
+        { responseType: 'blob' }
+      )
+      const url = window.URL.createObjectURL(new Blob([resp.data]))
+      const a   = document.createElement('a')
+      a.href    = url
+      a.download = `exit_plan_export.${fmt}`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Export failed — check that a PDF backend is installed on the server.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const toggleStyle = (active) => ({
+    display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+    padding: '10px 14px', borderRadius: 8, marginBottom: 8,
+    background: active ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.02)',
+    border: `1px solid ${active ? 'rgba(99,102,241,0.3)' : 'var(--border)'}`,
+    transition: 'all 0.15s',
+  })
+
+  const check = (active) => (
+    <div style={{
+      width: 16, height: 16, borderRadius: 4, border: '2px solid var(--accent)',
+      background: active ? 'var(--accent)' : 'transparent',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }}>
+      {active && <span style={{ fontSize: 10, color: '#fff', fontWeight: 700 }}>✓</span>}
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth: 520 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>↓ Export Plan</div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 24 }}>
+        Generate a printable copy of your exit plan — phases, tasks, notes, and support contacts.
+        No journal entry text is included.
+      </div>
+
+      <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>Format</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {[['pdf', '📄 PDF'], ['html', '🌐 HTML']].map(([val, label]) => (
+          <button
+            key={val}
+            style={{
+              padding: '7px 18px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
+              background: fmt === val ? 'var(--accent)' : 'rgba(255,255,255,0.04)',
+              color: fmt === val ? '#fff' : 'var(--text-secondary)',
+              border: `1px solid ${fmt === val ? 'var(--accent)' : 'var(--border)'}`,
+              fontWeight: fmt === val ? 700 : 400,
+            }}
+            onClick={() => setFmt(val)}
+          >{label}</button>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>Include</div>
+      <div onClick={() => setIncludeNotes(v => !v)} style={toggleStyle(includeNotes)}>
+        {check(includeNotes)}
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>Task notes</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Private notes you added to each task</div>
+        </div>
+      </div>
+      <div onClick={() => setIncludeNet(v => !v)} style={toggleStyle(includeNet)}>
+        {check(includeNet)}
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>Support network</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Your contacts list</div>
+        </div>
+      </div>
+      <div onClick={() => setIncludeAI(v => !v)} style={toggleStyle(includeAI)}>
+        {check(includeAI)}
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>AI progress summary</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>A brief narrative of your progress (uses your API key)</div>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 7, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', fontSize: 12, color: '#ef4444' }}>
+          {error}
+        </div>
+      )}
+
+      <button
+        style={{
+          marginTop: 24, padding: '11px 28px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+          background: exporting ? 'rgba(99,102,241,0.4)' : 'var(--accent)',
+          color: '#fff', border: 'none', cursor: exporting ? 'not-allowed' : 'pointer',
+        }}
+        onClick={handleExport}
+        disabled={exporting}
+      >
+        {exporting ? '⏳ Generating…' : `↓ Download ${fmt.toUpperCase()}`}
+      </button>
+    </div>
+  )
+}
+
 function NetworkTab() {
   const [contacts,   setContacts]   = useState([])
   const [loading,    setLoading]    = useState(true)
@@ -1626,6 +1845,7 @@ export default function ExitPlanFull() {
     { id: 'kanban',  label: 'Kanban' },
     { id: 'notes',   label: 'Notes' },
     { id: 'network', label: '👥 Support Network' },
+    { id: 'export',  label: '↓ Export' },
   ]
 
   // ── Header bar (always rendered) ─────────────────────────────────────────────
@@ -1830,6 +2050,9 @@ export default function ExitPlanFull() {
             )}
             {activeTab === 'network' && (
               <NetworkTab />
+            )}
+            {activeTab === 'export' && (
+              <ExportTab />
             )}
           </div>
         </div>

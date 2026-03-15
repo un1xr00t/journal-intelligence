@@ -656,10 +656,13 @@ function KanbanView({ phases, onTaskClick, onStatusChange }) {
 // ── Task detail drawer ────────────────────────────────────────────────────────
 
 function TaskDetailDrawer({ task, phase, onClose, onStatusChange, onAddNote, onRefresh }) {
-  const [notes,     setNotes]     = useState([])
-  const [noteText,  setNoteText]  = useState('')
-  const [saving,    setSaving]    = useState(false)
-  const [loadingNotes, setLoadingNotes] = useState(false)
+  const [notes,              setNotes]              = useState([])
+  const [noteText,           setNoteText]           = useState('')
+  const [saving,             setSaving]             = useState(false)
+  const [loadingNotes,       setLoadingNotes]       = useState(false)
+  const [attachments,        setAttachments]        = useState([])
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
+  const [uploadingFile,      setUploadingFile]      = useState(false)
 
   useEffect(() => {
     if (!task) return
@@ -669,6 +672,22 @@ function TaskDetailDrawer({ task, phase, onClose, onStatusChange, onAddNote, onR
       .catch(() => {})
       .finally(() => setLoadingNotes(false))
   }, [task?.id])
+
+  useEffect(() => {
+    if (!task) return
+    setLoadingAttachments(true)
+    api.get(`/api/exit-plan/tasks/${task.id}/attachments`)
+      .then(r => setAttachments(r.data.attachments || []))
+      .catch(() => {})
+      .finally(() => setLoadingAttachments(false))
+  }, [task?.id])
+
+  const reloadAttachments = () => {
+    if (!task) return
+    api.get(`/api/exit-plan/tasks/${task.id}/attachments`)
+      .then(r => setAttachments(r.data.attachments || []))
+      .catch(() => {})
+  }
 
   const submitNote = async () => {
     if (!noteText.trim()) return
@@ -795,6 +814,93 @@ function TaskDetailDrawer({ task, phase, onClose, onStatusChange, onAddNote, onR
             {saving ? '…' : 'Add'}
           </button>
         </div>
+
+      {/* Attachments */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>
+          Attachments {attachments.length > 0 && `· ${attachments.length}`}
+        </div>
+
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 8, cursor: uploadingFile ? 'not-allowed' : 'pointer',
+          padding: '7px 12px', border: '1px dashed var(--border)', borderRadius: 7,
+          fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, userSelect: 'none',
+          background: 'rgba(255,255,255,0.02)',
+        }}>
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,.txt"
+            style={{ display: 'none' }}
+            disabled={uploadingFile}
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              setUploadingFile(true)
+              try {
+                const fd = new FormData()
+                fd.append('file', file)
+                await api.post(`/api/exit-plan/tasks/${task.id}/attachments`, fd, {
+                  headers: { 'Content-Type': 'multipart/form-data' }
+                })
+                reloadAttachments()
+              } catch (err) {
+                const msg = err?.response?.data?.detail || 'Upload failed'
+                alert(msg)
+              } finally {
+                setUploadingFile(false)
+                e.target.value = ''
+              }
+            }}
+          />
+          {uploadingFile ? '⏳ Uploading…' : '📎 Attach file (PDF, image, TXT · max 10 MB)'}
+        </label>
+
+        {loadingAttachments ? (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Loading…</div>
+        ) : attachments.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No attachments yet.</div>
+        ) : (
+          attachments.map(a => (
+            <div key={a.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.03)',
+              border: '1px solid var(--border)', marginBottom: 6,
+            }}>
+              <span style={{ fontSize: 14 }}>
+                {a.filename.match(/\.(jpg|jpeg|png|webp)$/i) ? '🖼' : a.filename.match(/\.pdf$/i) ? '📄' : '📝'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.filename}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono' }}>
+                  {a.file_size ? (a.file_size < 1024 ? `${a.file_size} B` : `${(a.file_size / 1024).toFixed(1)} KB`) : ''} · {new Date(a.uploaded_at).toLocaleDateString()}
+                </div>
+              </div>
+              <button
+                style={{ fontSize: 11, color: 'var(--accent)', background: 'none', padding: '3px 8px', border: '1px solid var(--accent)', borderRadius: 4, flexShrink: 0, cursor: 'pointer' }}
+                onClick={async () => {
+                  try {
+                    const resp = await api.get(`/api/exit-plan/attachments/${a.id}/download`, { responseType: 'blob' })
+                    const url = window.URL.createObjectURL(new Blob([resp.data]))
+                    const link = document.createElement('a')
+                    link.href = url
+                    link.download = a.filename
+                    link.click()
+                    window.URL.revokeObjectURL(url)
+                  } catch { alert('Download failed') }
+                }}
+              >↓</button>
+              <button
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef444488', fontSize: 13, padding: '2px 4px', flexShrink: 0 }}
+                onClick={async () => {
+                  if (!window.confirm('Delete this attachment?')) return
+                  await api.delete(`/api/exit-plan/attachments/${a.id}`)
+                  reloadAttachments()
+                }}
+              >✕</button>
+            </div>
+          ))
+        )}
+      </div>
       </div>
     </div>
   )

@@ -189,6 +189,136 @@ def validate_text_body(body: bytes) -> None:
         raise HTTPException(status_code=400, detail="Empty request body.")
 
 
+# ── Attachment Upload Security ────────────────────────────────────────────────
+# Separate from journal entry uploads — allows document types (PDF, images, text).
+
+ATTACHMENT_MAX_BYTES    = 10 * 1024 * 1024   # 10 MB
+ATTACHMENT_MAX_TOTAL_MB = 50                  # 50 MB per user soft cap (checked by caller)
+
+ATTACHMENT_ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".txt"}
+
+# Positive magic-byte allowlist — file MUST match one of these to be accepted.
+ATTACHMENT_MAGIC_ALLOWLIST: list[tuple[bytes, str]] = [
+    (b"%PDF",           "application/pdf"),
+    (b"\xff\xd8\xff",    "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"RIFF",           "image/webp"),    # RIFF....WEBP — further checked below
+]
+
+# Explicit blocklist still applies (executable, archive, binary)
+ATTACHMENT_BLOCKED_EXTENSIONS = {
+    ".exe", ".sh", ".bat", ".cmd", ".ps1", ".py", ".js", ".php",
+    ".rb", ".pl", ".jar", ".class", ".bin", ".dll", ".so",
+}
+
+
+def sanitize_attachment_filename(filename: str) -> str:
+    """
+    Sanitize filename for attachment storage.
+    Returns safe basename. Raises 400 if extension not allowed.
+    """
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename is required.")
+
+    name = Path(filename).name
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name)
+    name = re.sub(r"[^\w.\- ]", "_", name)
+    name = re.sub(r"\.{2,}", ".", name)
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Invalid filename.")
+
+    ext = Path(name).suffix.lower()
+
+    if ext in ATTACHMENT_BLOCKED_EXTENSIONS:
+        raise HTTPException(status_code=415, detail=f"File type not allowed: {ext}")
+
+    if ext not in ATTACHMENT_ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{ext}'. Allowed: PDF, JPEG, PNG, WEBP, TXT.",
+        )
+
+    logger.debug("Sanitized attachment filename: %s -> %s", filename, name)
+    return name
+
+
+def validate_attachment_content(body: bytes, filename: str) -> str:
+    """
+    Validate attachment file content.
+    Returns detected media_type string.
+    Raises HTTPException on any violation.
+    """
+    if len(body) == 0:
+        raise HTTPException(status_code=400, detail="File is empty.")
+
+    if len(body) > ATTACHMENT_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum allowed size is {ATTACHMENT_MAX_BYTES // (1024*1024)} MB.",
+        )
+
+    # Null bytes — binary disguised as text
+    if b"\x00" in body[:512]:
+        ext = Path(filename).suffix.lower()
+        # PDF and images legitimately contain null bytes, only block for .txt
+        if ext == ".txt":
+            raise HTTPException(status_code=415, detail="Text file contains binary content.")
+
+    ext = Path(filename).suffix.lower()
+
+    # For text files: attempt UTF-8/Latin-1 decode
+    if ext == ".txt":
+        try:
+            body.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                body.decode("latin-1")
+            except Exception:
+                raise HTTPException(status_code=415, detail="Text file must be readable UTF-8 or Latin-1.")
+        return "text/plain"
+
+    # For binary types: positive magic byte check
+    for magic, media_type in ATTACHMENT_MAGIC_ALLOWLIST:
+        if body[:len(magic)] == magic:
+            # Extra check for WEBP: bytes 8-12 must be b"WEBP"
+            if media_type == "image/webp":
+                if len(body) >= 12 and body[8:12] == b"WEBP":
+                    return media_type
+                else:
+                    raise HTTPException(status_code=415, detail="Invalid WEBP file.")
+            return media_type
+
+    raise HTTPException(
+        status_code=415,
+        detail=(
+            f"File content does not match its extension ({ext}). "
+            "Only genuine PDF, JPEG, PNG, WEBP, and TXT files are accepted."
+        ),
+    )
+
+
+def run_attachment_security(request: "Request", body: bytes, filename: str) -> tuple[str, str]:
+    """
+    Full security pipeline for attachment uploads.
+
+    1. Rate limit (shared per-IP window)
+    2. Filename sanitization
+    3. Content / magic byte validation
+
+    Returns (safe_filename, media_type).
+    Raises HTTPException on any violation.
+    """
+    ip = get_client_ip(request)
+    _check_rate_limit(ip)
+
+    safe_name  = sanitize_attachment_filename(filename)
+    media_type = validate_attachment_content(body, safe_name)
+
+    logger.info("Attachment upload accepted: %s (%s, %d bytes) from %s", safe_name, media_type, len(body), ip)
+    return safe_name, media_type
+
+
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
 def get_client_ip(request: Request) -> str:
