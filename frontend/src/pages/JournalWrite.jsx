@@ -386,9 +386,19 @@ function WriteMode({ entryDate }) {
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState(null)  // {type, message}
   const [result, setResult] = useState(null)  // saved entry result
+  const [journalPrompt, setJournalPrompt] = useState(null)
+  const [promptDismissed, setPromptDismissed] = useState(false)
 
   const wc = wordCount(text)
   const cc = charCount(text)
+
+  useEffect(() => {
+    let cancelled = false
+    api.get('/api/journal/prompt')
+      .then(r => { if (!cancelled) setJournalPrompt(r.data.prompt || null) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   async function handleSave() {
     if (!text.trim() || saving) return
@@ -461,6 +471,24 @@ function WriteMode({ entryDate }) {
 
   return (
     <>
+      {journalPrompt && !promptDismissed && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          background: 'rgba(200,169,110,0.06)',
+          border: '1px solid rgba(200,169,110,0.18)',
+          borderRadius: 10, padding: '12px 16px', marginBottom: 16,
+        }}>
+          <span style={{ fontSize: 14, lineHeight: 1, marginTop: 2, flexShrink: 0, color: 'rgba(200,169,110,0.6)' }}>✦</span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'rgba(200,169,110,0.7)', lineHeight: 1.6, flex: 1, letterSpacing: '0.02em' }}>
+            {journalPrompt}
+          </span>
+          <button
+            onClick={() => setPromptDismissed(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(200,169,110,0.35)', fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}
+            title='Dismiss'
+          >×</button>
+        </div>
+      )}
       <div className={`jw-editor-wrap ${focused ? 'focused' : ''}`}>
         <div className="jw-editor-inner">
           <RuleLines />

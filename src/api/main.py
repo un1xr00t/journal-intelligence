@@ -216,7 +216,7 @@ async def refresh_token(request: Request, body: RefreshRequest):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
 
-    if not check_rate_limit(ip, "refresh"):
+    if not check_rate_limit(ip, "refresh", max_attempts=120, window_minutes=1):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                             detail="Too many refresh attempts. Please try again later.")
 
@@ -1874,3 +1874,6 @@ register_reflect_mode_routes(app, require_any_user)
 
 from src.api.rag_routes import register_rag_routes
 register_rag_routes(app, require_any_user)
+
+from src.api.journal_prompt_route import register_journal_prompt_routes
+register_journal_prompt_routes(app, require_any_user)
