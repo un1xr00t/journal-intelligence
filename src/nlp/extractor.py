@@ -48,10 +48,10 @@ def get_db() -> sqlite3.Connection:
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
-def call_anthropic(system: str, user: str, max_tokens: int, _user_id=None) -> str:
+def call_anthropic(system: str, user: str, max_tokens: int, _user_id=None, _call_type=None) -> str:
     """Route through unified ai_client."""
     from src.api.ai_client import create_message as _cm
-    return _cm(_user_id, system=system, user_prompt=user, max_tokens=max_tokens)
+    return _cm(_user_id, system=system, user_prompt=user, max_tokens=max_tokens, call_type=_call_type)
 
 # ── Daily Extraction ──────────────────────────────────────────
 
