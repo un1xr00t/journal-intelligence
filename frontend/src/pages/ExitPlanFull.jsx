@@ -1530,6 +1530,140 @@ function ContactFormModal({ contact, onSave, onClose }) {
 
 // ── Export tab ────────────────────────────────────────────────────────────────
 
+// ── Attachments tab ─────────────────────────────────────────────────────
+
+function AttachmentsTab({ plan }) {
+  const [attachments, setAttachments] = useState([])
+  const [loading,     setLoading]     = useState(true)
+
+  useEffect(() => {
+    if (!plan) return
+    const allTasks = (plan.phases || []).flatMap(p =>
+      (p.tasks || []).map(t => ({ id: t.id, title: t.title, phase_title: p.title }))
+    )
+    if (allTasks.length === 0) { setLoading(false); return }
+
+    Promise.all(
+      allTasks.map(task =>
+        api.get(`/api/exit-plan/tasks/${task.id}/attachments`)
+          .then(r => (r.data.attachments || []).map(a => ({
+            ...a,
+            phase_title: task.phase_title,
+            task_title:  task.title,
+          })))
+          .catch(() => [])
+      )
+    ).then(results => {
+      const flat = results.flat()
+      flat.sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at))
+      setAttachments(flat)
+    }).finally(() => setLoading(false))
+  }, [plan?.id])
+
+  const fileIcon = (filename) => {
+    if (/\.(jpg|jpeg|png|webp)$/i.test(filename)) return '🖼'
+    if (/\.pdf$/i.test(filename)) return '📄'
+    return '📝'
+  }
+
+  const fmtSize = (bytes) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const handleDownload = async (a) => {
+    try {
+      const resp = await api.get(`/api/exit-plan/attachments/${a.id}/download`, { responseType: 'blob' })
+      const url  = window.URL.createObjectURL(new Blob([resp.data]))
+      const link = document.createElement('a')
+      link.href     = url
+      link.download = a.filename
+      link.click()
+      window.URL.revokeObjectURL(url)
+    } catch { alert('Download failed') }
+  }
+
+  if (loading) return (
+    <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 32, textAlign: 'center' }}>Loading…</div>
+  )
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          📎 All Attachments
+        </div>
+        {attachments.length > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono' }}>
+            {attachments.length} file{attachments.length !== 1 ? 's' : ''} across all tasks
+          </span>
+        )}
+      </div>
+
+      {attachments.length === 0 ? (
+        <div style={{
+          background: 'var(--bg-card)', border: '1px dashed var(--border)',
+          borderRadius: 10, padding: '40px 24px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📎</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+            No attachments yet.<br />
+            Open a task and use the Attachments section to upload files.
+          </div>
+        </div>
+      ) : (
+        attachments.map(a => (
+          <div key={a.id} style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: '14px 16px', marginBottom: 8,
+            display: 'flex', alignItems: 'center', gap: 14,
+          }}>
+            <span style={{ fontSize: 22, flexShrink: 0 }}>{fileIcon(a.filename)}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {a.filename}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px' }}>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono' }}>
+                  {a.phase_title}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>→</span>
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: 'IBM Plex Mono' }}>
+                  {a.task_title}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono' }}>
+                {fmtSize(a.file_size)}
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono' }}>
+                {new Date(a.uploaded_at).toLocaleDateString()}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button
+                onClick={() => handleDownload(a)}
+                style={{ fontSize: 11, color: 'var(--accent)', background: 'none', padding: '4px 10px', border: '1px solid var(--accent)', borderRadius: 5, cursor: 'pointer' }}
+              >↓ Download</button>
+              <button
+                onClick={async () => {
+                  if (!window.confirm('Delete this attachment?')) return
+                  await api.delete(`/api/exit-plan/attachments/${a.id}`)
+                  setAttachments(prev => prev.filter(x => x.id !== a.id))
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef444488', fontSize: 15, padding: '2px 4px' }}
+              >✕</button>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 function ExportTab() {
   const [exporting,     setExporting]     = useState(false)
   const [includeNotes,  setIncludeNotes]  = useState(true)
@@ -1845,6 +1979,7 @@ export default function ExitPlanFull() {
     { id: 'kanban',  label: 'Kanban' },
     { id: 'notes',   label: 'Notes' },
     { id: 'network', label: '👥 Support Network' },
+    { id: 'attachments', label: '📎 Attachments' },
     { id: 'export',  label: '↓ Export' },
   ]
 
@@ -2050,6 +2185,9 @@ export default function ExitPlanFull() {
             )}
             {activeTab === 'network' && (
               <NetworkTab />
+            )}
+            {activeTab === 'attachments' && (
+              <AttachmentsTab plan={plan} />
             )}
             {activeTab === 'export' && (
               <ExportTab />

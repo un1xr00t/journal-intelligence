@@ -425,7 +425,16 @@ function Account({ d, set, next, back, onReg }) {
       setApiKey(res.data.api_key || null)
       if (!res.data.api_key) onReg()
     } catch (err) {
-      setErrors({ general: err.response?.data?.detail || 'Registration failed. Username or email may be taken.' })
+      const detail = err.response?.data?.detail || ''
+      const alreadyExists = err.response?.status === 409 ||
+        detail.toLowerCase().includes('already') ||
+        detail.toLowerCase().includes('taken') ||
+        detail.toLowerCase().includes('exists')
+      if (alreadyExists) {
+        onReg()
+        return
+      }
+      setErrors({ general: detail || 'Registration failed. Username or email may be taken.' })
     } finally { setLoading(false) }
   }
   const copyKey = async () => {
@@ -485,9 +494,6 @@ function Account({ d, set, next, back, onReg }) {
       )}
       <div style={{ marginBottom:12 }}>
         <Label c="Confirm Password" /><TInput type="password" val={d.confirmPassword} set={v=>set({confirmPassword:v})} err={!!errors.confirmPassword} /><Err m={errors.confirmPassword} />
-      </div>
-      <div style={{ padding:'8px 12px', background:'rgba(99,102,241,0.05)', border:'1px solid rgba(99,102,241,0.12)', borderRadius:7, fontSize:10, color:'rgba(255,255,255,0.22)', fontFamily:"'IBM Plex Mono',monospace", marginBottom:4 }}>
-        ✦ First account becomes owner. Subsequent accounts are viewer-role.
       </div>
       <Nav back={back} next={submit} nextLabel="Create Account" loading={loading} />
     </div>
@@ -678,11 +684,18 @@ function AIProviderStep({ next, back }) {
           {saving ? <Spin s={13} /> : '⊙ Save & Continue →'}
         </PrimaryBtn>
         <button onClick={() => next()} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 11, fontFamily: "'IBM Plex Mono',monospace",
-          color: 'rgba(255,255,255,0.22)', padding: '6px 0',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.14)',
+          borderRadius: 8,
+          cursor: 'pointer',
+          fontSize: 12,
+          fontFamily: "'IBM Plex Mono',monospace",
+          color: 'rgba(255,255,255,0.5)',
+          padding: '9px 0',
+          width: '100%',
+          letterSpacing: '0.02em',
         }}>
-          Skip for now — I'll add this in Settings later
+          Skip for now — add AI key later in Settings
         </button>
         <button onClick={back} style={{
           background: 'none', border: 'none', cursor: 'pointer',

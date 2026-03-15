@@ -335,7 +335,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
               WebkitLineClamp: expanded ? "unset" : 2,
               WebkitBoxOrient: "vertical",
             }}>
-              {entry.summary_text || "No summary."}
+              {entry.summary_text || entry.normalized_text || "No entry text yet."}
             </p>
           )}
           <div style={{ marginTop: 10 }}>
