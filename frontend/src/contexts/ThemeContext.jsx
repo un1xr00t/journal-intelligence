@@ -1,20 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
-import api from '../services/api'
 
 const ThemeContext = createContext(null)
 
-// ─── Mood-adaptive defaults (default UI theme) ───────────────────────────────
-const DEFAULT_THEME = {
-  accent: '#6366f1',
-  accent2: '#8b5cf6',
-  accentGlow: 'rgba(99,102,241,0.2)',
-  moodName: 'neutral',
-  moodHue: '240',
-  severityColor: '#f59e0b',
-  unsplashQuery: 'dark abstract night',
-}
-
-// ─── UI Theme palettes ────────────────────────────────────────────────────────
 const UI_THEMES = {
   default: {
     '--bg-base':        '#07070f',
@@ -65,55 +52,26 @@ function applyUiThemeVars(name) {
   root.setAttribute('data-ui-theme', name)
 }
 
-function applyMoodTheme(theme, uiThemeName) {
-  const root = document.documentElement
-  if (theme.moodName)      root.style.setProperty('--mood-name', `'${theme.moodName}'`)
-  if (theme.moodHue)       root.style.setProperty('--mood-hue', theme.moodHue)
-  if (theme.severityColor) root.style.setProperty('--severity-color', theme.severityColor)
-  if (uiThemeName !== 'writer') {
-    if (theme.accent)       root.style.setProperty('--accent',        theme.accent)
-    if (theme.accent2)      root.style.setProperty('--accent-2',      theme.accent2)
-    if (theme.accentGlow)   root.style.setProperty('--accent-glow',   theme.accentGlow)
-    if (theme.borderBright) root.style.setProperty('--border-bright', theme.borderBright)
-    if (theme.border)       root.style.setProperty('--border',        theme.border)
-  }
-}
-
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(DEFAULT_THEME)
-  const [sidebarPhoto, setSidebarPhoto] = useState(null)
   const [uiTheme, _setUiTheme] = useState(
     () => localStorage.getItem('ui-theme') || 'default'
   )
-  const uiThemeRef = useRef(uiTheme)
 
   useEffect(() => {
     applyUiThemeVars(uiTheme)
-    uiThemeRef.current = uiTheme
   }, [uiTheme])
 
   const setUiTheme = useCallback((name) => {
     localStorage.setItem('ui-theme', name)
     _setUiTheme(name)
+    applyUiThemeVars(name)
   }, [])
 
-  const fetchTheme = useCallback(async () => {
-    try {
-      const { data } = await api.get('/api/theme')
-      const t = data.data || data
-      applyMoodTheme(t, uiThemeRef.current)
-      setTheme(t)
-      if (t.unsplashQuery) {
-        const q = encodeURIComponent(t.unsplashQuery)
-        setSidebarPhoto(`https://source.unsplash.com/featured/400x900?${q}`)
-      }
-    } catch {
-      // Keep defaults
-    }
-  }, [])
+  // fetchTheme kept as no-op so existing callers don't break
+  const fetchTheme = useCallback(() => {}, [])
 
   return (
-    <ThemeContext.Provider value={{ theme, sidebarPhoto, fetchTheme, uiTheme, setUiTheme }}>
+    <ThemeContext.Provider value={{ fetchTheme, uiTheme, setUiTheme, sidebarPhoto: null, theme: { moodName: 'neutral', moodDescription: 'mood adaptive' } }}>
       {children}
     </ThemeContext.Provider>
   )

@@ -23,6 +23,23 @@ from typing import Optional
 import yaml
 
 logger = logging.getLogger("journal")
+
+
+def _log_usage(user_id, provider: str, model: str, input_tokens: int, output_tokens: int, call_type=None):
+    """Write a token usage row to ai_usage_log. Silent on failure."""
+    try:
+        from src.auth.auth_db import get_db
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO ai_usage_log (user_id, provider, model, input_tokens, output_tokens, call_type) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, provider, model, input_tokens, output_tokens, call_type),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"[ai_client] usage log failed: {e}")
+
 from src.config import CONFIG_PATH, load_config
 
 # Default models per provider
@@ -68,6 +85,7 @@ def create_message(
     user_prompt: str,
     max_tokens: int = 1000,
     model: Optional[str] = None,
+    call_type: Optional[str] = None,
 ) -> str:
     """
     Send a message to the configured AI provider and return the text response.
@@ -82,14 +100,14 @@ def create_message(
     mdl      = model or settings.get("ai_model") or None
 
     if provider == "anthropic":
-        return _call_anthropic(cfg, api_key, mdl, system, user_prompt, max_tokens)
+        return _call_anthropic(cfg, api_key, mdl, system, user_prompt, max_tokens, user_id=user_id, call_type=call_type)
     else:
-        return _call_openai_compat(provider, api_key, base_url, mdl, system, user_prompt, max_tokens)
+        return _call_openai_compat(provider, api_key, base_url, mdl, system, user_prompt, max_tokens, user_id=user_id, call_type=call_type)
 
 
 # ── Anthropic ─────────────────────────────────────────────────────────────────
 
-def _call_anthropic(cfg, api_key, model, system, user_prompt, max_tokens) -> str:
+def _call_anthropic(cfg, api_key, model, system, user_prompt, max_tokens, user_id=None, call_type=None) -> str:
     import anthropic
 
     # Fall back to config.yaml key if user has none set
@@ -106,12 +124,13 @@ def _call_anthropic(cfg, api_key, model, system, user_prompt, max_tokens) -> str
         system=system,
         messages=[{"role": "user", "content": user_prompt}],
     )
+    _log_usage(user_id, "anthropic", mdl, msg.usage.input_tokens, msg.usage.output_tokens, call_type=call_type)
     return msg.content[0].text
 
 
 # ── OpenAI-compatible (covers openai / openai_compat / local) ─────────────────
 
-def _call_openai_compat(provider, api_key, base_url, model, system, user_prompt, max_tokens) -> str:
+def _call_openai_compat(provider, api_key, base_url, model, system, user_prompt, max_tokens, user_id=None, call_type=None) -> str:
     try:
         import openai
     except ImportError:
@@ -141,6 +160,8 @@ def _call_openai_compat(provider, api_key, base_url, model, system, user_prompt,
             {"role": "user",   "content": user_prompt},
         ],
     )
+    usage = resp.usage
+    _log_usage(user_id, provider, mdl, usage.prompt_tokens, usage.completion_tokens, call_type=call_type)
     return resp.choices[0].message.content
 
 

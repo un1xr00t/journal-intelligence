@@ -79,6 +79,7 @@ Please answer their question based on these entries."""
                 system=_ASK_SYSTEM,
                 user_prompt=user_prompt,
                 max_tokens=600,
+                call_type="rag_search",
             )
         except Exception as e:
             logger.error(f"[rag] Claude synthesis failed: {e}")

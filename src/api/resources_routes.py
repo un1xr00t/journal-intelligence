@@ -362,6 +362,7 @@ def register_resources_routes(app, require_any_user):
                 system=_RESOURCES_SYSTEM,
                 user_prompt=prompt,
                 max_tokens=800,
+            call_type="resources",
             ).strip()
             # Strip accidental markdown fences
             if raw.startswith("```"):

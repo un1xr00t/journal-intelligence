@@ -127,6 +127,7 @@ def register_journal_prompt_routes(app, require_any_user):
                 system=system,
                 user_prompt=user_prompt,
                 max_tokens=80,
+                call_type="journal_prompt",
             )
             prompt_text = (prompt_text or "").strip().strip('"').strip("'")
         except Exception as e:

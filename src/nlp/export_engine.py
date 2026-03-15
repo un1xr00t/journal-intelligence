@@ -282,7 +282,7 @@ def _call_ai_narrative(packet_type: str, data: dict,
 
     try:
         from src.api.ai_client import create_message
-        result = create_message(user_id=user_id, system=system_prompt, user_prompt=user_prompt, max_tokens=3000)
+        result = create_message(user_id=user_id, system=system_prompt, user_prompt=user_prompt, max_tokens=3000, call_type="export_narrative")
         return result.strip()
     except Exception as ai_err:
         log.warning(f"ai_client failed ({ai_err}), trying direct client")

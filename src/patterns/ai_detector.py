@@ -180,7 +180,9 @@ def run_ai_analysis(alert_id: int, force: bool = False) -> dict:
         import re as _re
 
         raw = create_message(
-            user_id=alert.get("user_id"),
+            user_id=alert.get("user_id",
+        call_type="pattern_analysis",
+    ),
             system=system_prompt,
             user_prompt=user_prompt,
             max_tokens=1200,

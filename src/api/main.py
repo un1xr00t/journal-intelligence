@@ -516,6 +516,54 @@ async def get_master_summary(current_user: dict = Depends(require_any_user)):
     return {"data": dict(row)}
 
 
+
+@app.get("/api/admin/ai-usage")
+async def get_ai_usage(current_user: dict = Depends(require_owner)):
+    """Per-user + per-feature AI token usage summary (owner only)."""
+    from src.auth.auth_db import get_db
+    conn = get_db()
+    per_user = conn.execute("""
+        SELECT
+            u.username,
+            u.id AS user_id,
+            SUM(l.input_tokens)  AS total_input,
+            SUM(l.output_tokens) AS total_output,
+            SUM(l.input_tokens + l.output_tokens) AS total_tokens,
+            COUNT(*)             AS total_calls,
+            MAX(l.called_at)     AS last_call,
+            GROUP_CONCAT(DISTINCT l.provider) AS providers,
+            GROUP_CONCAT(DISTINCT l.model)    AS models
+        FROM ai_usage_log l
+        LEFT JOIN users u ON u.id = l.user_id
+        GROUP BY l.user_id
+        ORDER BY total_tokens DESC
+    """).fetchall()
+    by_feature = conn.execute("""
+        SELECT
+            COALESCE(call_type, 'unknown') AS feature,
+            SUM(input_tokens)  AS total_input,
+            SUM(output_tokens) AS total_output,
+            SUM(input_tokens + output_tokens) AS total_tokens,
+            COUNT(*) AS total_calls
+        FROM ai_usage_log
+        GROUP BY call_type
+        ORDER BY total_tokens DESC
+    """).fetchall()
+    totals = conn.execute("""
+        SELECT
+            SUM(input_tokens)  AS total_input,
+            SUM(output_tokens) AS total_output,
+            SUM(input_tokens + output_tokens) AS total_tokens,
+            COUNT(*) AS total_calls
+        FROM ai_usage_log
+    """).fetchone()
+    conn.close()
+    return {
+        "per_user":   [dict(r) for r in per_user],
+        "by_feature": [dict(r) for r in by_feature],
+        "totals":     dict(totals) if totals else {},
+    }
+
 @app.get("/api/entries")
 async def list_entries(
     limit: int = 200,
@@ -1700,6 +1748,7 @@ async def get_therapist_insight(
             system=_tone_system,
             user_prompt=user_prompt,
             max_tokens=900,
+            call_type="reflection",
         ).strip()
         input_tokens = len(user_prompt) // 4
         output_tokens = len(insight_text) // 4
@@ -1900,6 +1949,36 @@ register_rag_routes(app, require_any_user)
 
 from src.api.journal_prompt_route import register_journal_prompt_routes
 register_journal_prompt_routes(app, require_any_user)
+
+
+
+@app.get("/api/theme")
+async def get_theme(current_user: dict = Depends(require_any_user)):
+    from src.auth.auth_db import get_db
+    conn = get_db()
+    row = conn.execute(
+        "SELECT ds.mood_score, ds.mood_label FROM entries e JOIN derived_summaries ds ON ds.entry_id = e.id WHERE e.user_id = ? AND e.is_current = 1 ORDER BY e.entry_date DESC LIMIT 1",
+        (current_user["id"],)
+    ).fetchone()
+    conn.close()
+    score = float(row["mood_score"]) if row and row["mood_score"] is not None else None
+    label = (row["mood_label"] or "neutral").lower() if row else "neutral"
+    THEMES = {
+        "great":     {"accent": "#10b981", "accent2": "#34d399", "accentGlow": "rgba(16,185,129,0.2)",  "moodName": "radiant",   "moodHue": "160", "severityColor": "#f59e0b"},
+        "good":      {"accent": "#6366f1", "accent2": "#8b5cf6", "accentGlow": "rgba(99,102,241,0.2)",  "moodName": "grounded",  "moodHue": "240", "severityColor": "#f59e0b"},
+        "okay":      {"accent": "#f59e0b", "accent2": "#fbbf24", "accentGlow": "rgba(245,158,11,0.2)",  "moodName": "drifting",  "moodHue": "45",  "severityColor": "#f97316"},
+        "difficult": {"accent": "#f97316", "accent2": "#fb923c", "accentGlow": "rgba(249,115,22,0.2)",  "moodName": "turbulent", "moodHue": "30",  "severityColor": "#ef4444"},
+        "crisis":    {"accent": "#ef4444", "accent2": "#f87171", "accentGlow": "rgba(239,68,68,0.2)",   "moodName": "crisis",    "moodHue": "0",   "severityColor": "#dc2626"},
+        "neutral":   {"accent": "#6366f1", "accent2": "#8b5cf6", "accentGlow": "rgba(99,102,241,0.2)",  "moodName": "neutral",   "moodHue": "240", "severityColor": "#f59e0b"},
+    }
+    if score is None:   bucket = "neutral"
+    elif score >= 8.0:  bucket = "great"
+    elif score >= 6.5:  bucket = "good"
+    elif score >= 4.0:  bucket = "okay"
+    elif score >= 2.0:  bucket = "difficult"
+    else:               bucket = "crisis"
+    return THEMES.get(bucket, THEMES["neutral"])
+
 
 from src.api.crisis_routes import register_crisis_routes
 register_crisis_routes(app, require_any_user)

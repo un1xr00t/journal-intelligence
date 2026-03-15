@@ -1,3 +1,4 @@
+from fastapi import Depends
 """
 src/api/crisis_routes.py
 GET /api/crisis/status — checks for sustained high-severity streaks
@@ -15,7 +16,7 @@ CRISIS_MIN_DAYS           = 3
 def register_crisis_routes(app, require_any_user):
 
     @app.get("/api/crisis/status")
-    def get_crisis_status(current_user: dict = require_any_user):
+    def get_crisis_status(current_user: dict = Depends(require_any_user)):
         user_id = current_user["id"]
 
         conn = sqlite3.connect(DB_PATH)

@@ -69,7 +69,7 @@ def extract_daily(entry_date: str, entry_text: str, override_client=None, user_i
     )
     
     try:
-        response = call_anthropic(system, user, MAX_TOKENS["daily_extraction"], _user_id=user_id)
+        response = call_anthropic(system, user, MAX_TOKENS["daily_extraction"], _user_id=user_id, _call_type="extraction")
         
         # Parse JSON response
         # Handle potential markdown code blocks
@@ -110,7 +110,7 @@ def generate_daily_summary(entry_date: str, entry_text: str, override_client=Non
     )
     
     try:
-        response = call_anthropic(system, user, MAX_TOKENS["daily_summary"], _user_id=user_id)
+        response = call_anthropic(system, user, MAX_TOKENS["daily_summary"], _user_id=user_id, _call_type="daily_summary")
         
         return {
             "summary_text": response.strip(),

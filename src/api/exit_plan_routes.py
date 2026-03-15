@@ -653,6 +653,7 @@ def register_exit_plan_routes(app, require_any_user):
                 system=_plan_system,
                 user_prompt=prompt,
                 max_tokens=4000,
+            call_type="exit_plan",
             ).strip()
             if raw.startswith("```"):
                 raw = "\n".join(raw.split("\n")[1:])
