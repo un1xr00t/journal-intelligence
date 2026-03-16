@@ -1220,6 +1220,14 @@ async def write_journal_entry(
         from src.patterns.detectors import run_all_detectors
         background_tasks.add_task(run_all_detectors, user_id)
 
+    # Embed entry for RAG search (background)
+    try:
+        from src.api.rag_engine import store_embedding as _store_embedding
+        background_tasks.add_task(_store_embedding, entry_id, user_id, text)
+    except Exception as _emb_err:
+        import logging as _emb_log
+        _emb_log.getLogger("journal").warning(f"[journal/write] embedding task failed to queue: {_emb_err}")
+
     return {
         "status": "success",
         "entry_id": entry_id,
@@ -1295,6 +1303,14 @@ async def upload_file_web(
     if config.get("features", {}).get("pattern_detection_enabled", True):
         from src.patterns.detectors import run_all_detectors
         background_tasks.add_task(run_all_detectors, user_id)
+
+    # Embed entry for RAG search (background)
+    try:
+        from src.api.rag_engine import store_embedding as _store_embedding
+        background_tasks.add_task(_store_embedding, entry_id, user_id, text_content)
+    except Exception as _emb_err:
+        import logging as _emb_log
+        _emb_log.getLogger("journal").warning(f"[upload-file] embedding task failed to queue: {_emb_err}")
 
     return {
         "status": "success",
@@ -1375,6 +1391,14 @@ async def upload_entry(
     if config.get("features", {}).get("pattern_detection_enabled", True):
         from src.patterns.detectors import run_all_detectors
         background_tasks.add_task(run_all_detectors, owner_user_id)
+
+    # Step 5: Embed entry for RAG search (background)
+    try:
+        from src.api.rag_engine import store_embedding as _store_embedding
+        background_tasks.add_task(_store_embedding, entry_id, owner_user_id, text_content)
+    except Exception as _emb_err:
+        import logging as _emb_log
+        _emb_log.getLogger("journal").warning(f"[upload] embedding task failed to queue: {_emb_err}")
 
     return {
         "status": "success",

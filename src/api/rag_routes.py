@@ -117,3 +117,28 @@ Please answer their question based on these entries."""
         ).fetchone()[0]
         conn.close()
         return {"total_entries": total, "indexed_entries": indexed, "coverage_pct": round(indexed / total * 100) if total else 0}
+
+
+    @app.post("/api/journal/ask/backfill")
+    async def backfill_embeddings(
+        background_tasks,
+        current_user: dict = Depends(require_any_user),
+    ):
+        """Index any entries that are missing embeddings for this user."""
+        from fastapi import BackgroundTasks as _BT
+        from src.auth.auth_db import get_db
+        from src.api.rag_engine import store_embedding
+        user_id = current_user["id"]
+        conn = get_db()
+        rows = conn.execute(
+            """SELECT e.id, e.normalized_text FROM entries e
+               WHERE e.user_id = ? AND e.is_current = 1
+               AND e.id NOT IN (SELECT entry_id FROM entry_embeddings WHERE user_id = ?)""",
+            (user_id, user_id)
+        ).fetchall()
+        conn.close()
+        count = len(rows)
+        for row in rows:
+            background_tasks.add_task(store_embedding, row["id"], user_id, row["normalized_text"] or "")
+        logger.info(f"[rag] backfill queued {count} entries for user {user_id}")
+        return {"queued": count, "message": f"Queued {count} entries for indexing"}

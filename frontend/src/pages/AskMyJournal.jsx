@@ -35,6 +35,7 @@ export default function AskMyJournal() {
   const [status, setStatus] = useState(null)
   const [suggPage, setSuggPage] = useState(0)
   const [fadeIn, setFadeIn] = useState(true)
+  const [backfilling, setBackfilling] = useState(false)
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -102,7 +103,26 @@ export default function AskMyJournal() {
             }} />
             {status.indexed_entries} of {status.total_entries} entries indexed ({status.coverage_pct}%)
             {status.coverage_pct < 100 && (
-              <span style={{ color: '#f59e0b' }}>— run backfill to index all</span>
+              <button
+                onClick={async () => {
+                  setBackfilling(true)
+                  try {
+                    const r = await api.post('/api/journal/ask/backfill')
+                    setTimeout(() => {
+                      api.get('/api/journal/ask/status').then(r => setStatus(r.data)).catch(() => {})
+                      setBackfilling(false)
+                    }, 3000)
+                  } catch { setBackfilling(false) }
+                }}
+                disabled={backfilling}
+                style={{
+                  background: 'none', border: 'none', padding: 0,
+                  color: '#f59e0b', fontSize: 12, cursor: backfilling ? 'default' : 'pointer',
+                  textDecoration: backfilling ? 'none' : 'underline',
+                }}
+              >
+                {backfilling ? '— indexing…' : '— index missing entries'}
+              </button>
             )}
           </div>
         )}
