@@ -31,6 +31,30 @@ Journal entries come in as plain text files, straight from your iPhone via Short
 
 ---
 
+## ✦ Project Highlights
+
+These are the features that make this different from a notes app with an API key bolted on.
+
+**🧠 Six-voice reflection engine** — The system reflects your last 14 days back at you in six completely different AI voices: Therapist, Best Friend, Coach, Mentor, Inner Critic, and Chaos Agent. Each one cached, each one startlingly different. Not a chatbot. A mirror with six different angles.
+
+**💬 Ask My Journal** — Natural language search over your entire history using local embeddings and cosine similarity. "When did I last feel okay?" "What usually makes things worse?" Answers grounded in your actual entries, not hallucinated. Your data never leaves your server for the retrieval step.
+
+**🗺 AI-generated exit plan** — If your journal signals you're navigating something serious — leaving a relationship, financial instability, safety concerns — the system builds you a personalized, phased exit plan based entirely on your journal context. Five phases, tasks tailored to your situation, resource links per task, private scratchpad the AI never reads. As you keep writing, it offers incremental updates. You approve everything.
+
+**⬡ Pattern detection that explains itself** — Not just "something is wrong." The system identifies mood spikes, severity streaks, behavioral loops, and emotional cycles — then tells you what the pattern looks like, when it started, and what the data shows. AI deep-analysis on demand for high-priority alerts.
+
+**◷ Evidence Vault** — Auto-populated from every entry. Statements, events, admissions, contradictions, observations. If you ever need documentation — for therapy, for legal purposes, for your own memory — it's organized, searchable, and exportable.
+
+**⊕ Contradiction detection** — The system finds it when someone says one thing and does another, or contradicts themselves across entries weeks apart. Entity-based detection with AI analysis of what the pattern suggests.
+
+**✦ Memory-injected AI** — Every AI call is personalized. Your onboarding profile, situation context, and relationship details get injected into reflections, exit plan generation, resource ranking, and pattern analysis. The AI actually knows your story.
+
+**✦ Personalized resources** — Not a generic list of hotlines. The system reads your memory profile, active alerts, and 30-day emotional averages and generates a ranked resource hub with context explaining why this applies to your specific situation.
+
+**🔒 Fully self-hosted, fully private** — Your data lives in a SQLite database on infrastructure you control. Bring your own Anthropic key, use OpenAI, or run completely locally with Ollama or LM Studio. Zero telemetry. No analytics. No third-party servers touching your journal.
+
+---
+
 ## Features
 
 ### 📖 Timeline
