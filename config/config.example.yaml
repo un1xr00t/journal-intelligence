@@ -1,0 +1,46 @@
+# config/config.example.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file to config/config.yaml and fill in your values.
+# config.yaml is gitignored and never committed.
+#
+# VPS install:   cp config/config.example.yaml config/config.yaml
+# Local install: same — the install scripts do this automatically.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Database ──────────────────────────────────────────────────────────────────
+database:
+  path: db/journal.db             # relative to app root; created automatically
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+storage:
+  base_path: data/                # root for all uploaded entry files
+  raw_entries: entries/           # subdirectory under base_path
+
+# ── JWT ───────────────────────────────────────────────────────────────────────
+jwt:
+  secret_key: CHANGE_ME           # replaced with a random secret by install scripts
+  algorithm: HS256
+  access_token_expire_minutes: 15
+  refresh_token_expire_days: 30
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+cors:
+  allowed_origins:
+    - "http://localhost:5173"     # Vite dev server (local installs)
+    - "http://localhost:8000"     # API itself (local installs)
+    # VPS: add your domain below, e.g.:
+    # - "https://journal.yourdomain.com"
+
+# ── Anthropic (optional fallback key) ────────────────────────────────────────
+# Per-user keys set in Settings → AI Preferences take priority over this.
+# Leave api_key blank to require every user to bring their own key.
+anthropic:
+  api_key: ""                     # sk-ant-... or leave blank
+  model: "claude-sonnet-4-5"      # default model when no user override
+
+# ── Server ────────────────────────────────────────────────────────────────────
+server:
+  host: 0.0.0.0
+  port: 8000
+  workers: 2                      # reduce to 1 for low-RAM VPS (< 1 GB)
+  log_level: info
