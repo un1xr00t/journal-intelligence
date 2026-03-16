@@ -55,6 +55,14 @@ echo "[2/6] Creating directories..."
 cd "$APP_ROOT"
 mkdir -p db logs data/entries backups config exports
 
+echo "  Creating Python package __init__.py files..."
+touch src/__init__.py
+touch src/api/__init__.py
+touch src/auth/__init__.py
+touch src/ingest/__init__.py
+touch src/nlp/__init__.py
+touch src/patterns/__init__.py
+
 # ── Python virtualenv ─────────────────────────────────────────────────────────
 echo "[3/6] Setting up Python virtualenv..."
 

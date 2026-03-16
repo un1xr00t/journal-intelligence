@@ -82,6 +82,15 @@ fi
 # Create required directories
 mkdir -p "$APP_ROOT"/{db,logs,data/entries,backups,config,exports}
 
+# ── 2b. Python package init files ────────────────────────────────────────────
+echo "  Creating Python package __init__.py files..."
+touch "$APP_ROOT/src/__init__.py"
+touch "$APP_ROOT/src/api/__init__.py"
+touch "$APP_ROOT/src/auth/__init__.py"
+touch "$APP_ROOT/src/ingest/__init__.py"
+touch "$APP_ROOT/src/nlp/__init__.py"
+touch "$APP_ROOT/src/patterns/__init__.py"
+
 # ── 3. Python virtualenv ──────────────────────────────────────────────────────
 echo "[3/10] Setting up Python virtualenv..."
 cd "$APP_ROOT"
