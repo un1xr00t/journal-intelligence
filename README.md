@@ -63,6 +63,16 @@ Each tone is cached. Switch between them instantly. It's like having a whole sup
 
 ---
 
+### 💬 Ask My Journal
+Ask natural language questions about your own history and get AI-synthesized answers grounded in your actual entries. "When did I last feel okay?" "What usually makes things worse?" "Who keeps coming up in my worst weeks?" Powered by local embeddings and cosine similarity — your data never leaves your infrastructure for the retrieval step.
+
+---
+
+### ✦ AI Journal Prompts
+Every day, the system generates one specific, personalized writing prompt based on your active threads and recent events — not a generic "how are you feeling" but something that meets you exactly where you are. Dismissable card above the Write editor. Refreshes daily.
+
+---
+
 ### 〜 Nervous System Tracker
 Mood and severity charts over time. Volatility scores. Stability metrics. A visual record of your emotional nervous system - what's dysregulating you, what's helping you stabilize, where the spikes are coming from.
 
@@ -107,14 +117,21 @@ It's the thing I wish had existed when I needed it.
 ---
 
 ### ⊞ Clinical Export Packets
-Generate PDF export packets in multiple formats - timeline summaries, evidence packets, nervous system reports, full case files with optional redaction. Built with WeasyPrint. Useful for therapy appointments, legal documentation, or just having a record you can hold in your hands.
+Generate PDF export packets in multiple formats - timeline summaries, evidence packets, nervous system reports, full case files with optional redaction. Built with WeasyPrint. Dark cover page, mood bar chart, color-coded entry cards, AI narrative. Useful for therapy appointments, legal documentation, or just having a record you can hold in your hands.
 
 ---
 
 ### ⚙ Settings & Memory Profile
-A full onboarding flow that builds a memory profile - your situation, relationship context, what you're navigating, your preferred AI tone. All of this gets injected into AI calls so every reflection, every plan, every resource recommendation is actually personalized to *you*.
+A full onboarding flow that builds a memory profile - your situation, relationship context, what you're navigating, your preferred AI tone. All of this gets injected into every AI call so every reflection, every plan, every resource recommendation is actually personalized to *you*.
 
 Per-user AI provider settings. Bring your own Anthropic key, use OpenAI, or run it completely locally with Ollama or LM Studio - zero data leaving your machine.
+
+Change your password and manage active sessions directly from Settings.
+
+---
+
+### 📱 PWA — Install on Your Home Screen
+The dashboard is a Progressive Web App. On iPhone, tap the share button in Safari and choose "Add to Home Screen" — it installs like a native app, runs full-screen, and works gracefully offline.
 
 ---
 
@@ -148,20 +165,22 @@ Then open `http://localhost:8000`, create your account, and follow the onboardin
 
 ---
 
-## Restarting the API
+## Managing the API (VPS)
 
-If you're on a VPS and need to restart the backend quickly, there's a convenience script included:
-
-```bash
-chmod +x frontend/restartAPI.sh
-./frontend/restartAPI.sh
-```
-
-This kills any running uvicorn process, clears port 8000, and relaunches the API with the correct PYTHONPATH and worker config. Tail the log after to confirm it came up clean:
+The app runs as a systemd service. Use these commands to manage it:
 
 ```bash
-tail -20 logs/api.log
+# Restart the backend
+systemctl restart journal-dashboard
+
+# Check status
+systemctl status journal-dashboard
+
+# Tail the log
+tail -f /opt/journal-dashboard/logs/api.log
 ```
+
+The service is enabled on boot and auto-restarts on crash.
 
 ---
 
@@ -377,10 +396,11 @@ journal-intelligence/
 
 This is early. But the roadmap is ambitious - and I'm not slowing down.
 
-- **Memory injection** - your memory profile actively shapes every AI response, not just onboarding
-- **Native iOS & Android app** - a dedicated mobile experience built for this, not a browser wrapper. Write, review, upload, and get reflections from your phone natively
-- **Improved export engine** - exports are live and working, but this is getting a serious upgrade: better formatting, more packet types, smarter redaction, and therapist-ready clinical layouts
-- **Multi-user support improvements** - better admin tooling, user management, invite flows
+- **Native iOS & Android app** - a dedicated mobile experience built for this, not a browser wrapper. Write, review, upload, and get reflections from your phone natively. Push notifications and crisis alerts that actually reach you.
+- **Attorney-ready export** - Evidence Vault + Timeline formatted as a legal-ready chronological document. For the user who needs to walk into a courtroom or a custody hearing with documentation.
+- **Crisis escalation** - when the nervous system detects sustained high severity, something actually happens. Banners, alerts, emergency contact notifications.
+- **Therapist viewer mode** - let your therapist see patterns, timeline, and leave timestamped notes — without ever reading your raw entries.
+- **Exit plan share links** - token-based read-only URL for an advocate or attorney to view your plan state without logging in.
 - **Deeper pattern intelligence** - longer lookback windows, cross-pattern correlations, predictive mood modeling
 - **Community resources** - user-contributed topic configs, prompt packs, theme presets
 
