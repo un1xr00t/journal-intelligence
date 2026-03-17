@@ -1678,8 +1678,10 @@ function ShareTab() {
   const [creating,  setCreating]  = useState(false)
   const [label,     setLabel]     = useState('')
   const [expiresIn, setExpiresIn] = useState('90d')
-  const [newUrl,    setNewUrl]    = useState(null)
-  const [urlCopied, setUrlCopied] = useState(false)
+  const [newUrl,          setNewUrl]          = useState(null)
+  const [newPassphrase,   setNewPassphrase]   = useState(null)
+  const [urlCopied,       setUrlCopied]       = useState(false)
+  const [passphraseCopied,setPassphraseCopied] = useState(false)
   const [error,     setError]     = useState(null)
   const [revoking,  setRevoking]  = useState(null)
 
@@ -1693,11 +1695,12 @@ function ShareTab() {
   useEffect(() => { loadTokens() }, [])
 
   const create = async () => {
-    setCreating(true); setError(null); setNewUrl(null); setUrlCopied(false)
+    setCreating(true); setError(null); setNewUrl(null); setNewPassphrase(null); setUrlCopied(false); setPassphraseCopied(false)
     try {
       const res = await api.post('/api/exit-plan/share', { label: label.trim() || null, expires_in: expiresIn })
       const url = `${window.location.origin}/share/plan/${res.data.token}`
       setNewUrl(url)
+      setNewPassphrase(res.data.passphrase || null)
       setLabel('')
       loadTokens()
       try { await navigator.clipboard.writeText(url); setUrlCopied(true) } catch {}
@@ -1709,6 +1712,10 @@ function ShareTab() {
 
   const copyUrl = async () => {
     try { await navigator.clipboard.writeText(newUrl); setUrlCopied(true) } catch {}
+  }
+
+  const copyPassphrase = async () => {
+    try { await navigator.clipboard.writeText(newPassphrase); setPassphraseCopied(true) } catch {}
   }
 
   const revoke = async (id) => {
@@ -1792,18 +1799,31 @@ function ShareTab() {
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 28px 24px', maxWidth: 520, width: '100%', boxSizing: 'border-box' }}>
             <div style={{ fontSize: 22, marginBottom: 8 }}>🔗</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Your share link is ready</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.6 }}>Copy this link now — it won't be shown again. Anyone with it can view your plan in read-only mode.</div>
-            <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, wordBreak: 'break-all', fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', userSelect: 'all' }}>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.6 }}>Copy both the link and the passphrase now — neither will be shown again. Share them separately for security.</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Share link</div>
+            <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginBottom: 10, wordBreak: 'break-all', fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', userSelect: 'all' }}>
               {newUrl}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={copyUrl} style={{ flex: 1, padding: '10px 0', fontSize: 14, fontWeight: 700, background: urlCopied ? '#16a34a' : 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-                {urlCopied ? '✓ Copied to clipboard' : 'Copy link'}
-              </button>
-              <button onClick={() => { setNewUrl(null); setUrlCopied(false) }} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
-                Done
-              </button>
-            </div>
+            <button onClick={copyUrl} style={{ width: '100%', padding: '9px 0', fontSize: 13, fontWeight: 700, background: urlCopied ? '#16a34a' : 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', marginBottom: 16 }}>
+              {urlCopied ? '✓ Link copied' : 'Copy link'}
+            </button>
+            {newPassphrase && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Passphrase</div>
+                <div style={{ background: 'var(--bg-base)', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 12px', marginBottom: 8, fontSize: 15, fontFamily: 'monospace', color: 'var(--text-primary)', letterSpacing: '0.06em', userSelect: 'all' }}>
+                  {newPassphrase}
+                </div>
+                <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginBottom: 10, lineHeight: 1.5 }}>
+                  ⚠ Share the passphrase separately from the link — not in the same message.
+                </div>
+                <button onClick={copyPassphrase} style={{ width: '100%', padding: '9px 0', fontSize: 13, fontWeight: 700, background: passphraseCopied ? '#16a34a' : 'transparent', color: passphraseCopied ? '#fff' : 'var(--accent)', border: passphraseCopied ? 'none' : '1.5px solid var(--accent)', borderRadius: 8, cursor: 'pointer', marginBottom: 14 }}>
+                  {passphraseCopied ? '✓ Passphrase copied' : 'Copy passphrase'}
+                </button>
+              </>
+            )}
+            <button onClick={() => { setNewUrl(null); setNewPassphrase(null); setUrlCopied(false); setPassphraseCopied(false) }} style={{ width: '100%', padding: '9px 0', fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+              Done
+            </button>
           </div>
         </div>
       )}

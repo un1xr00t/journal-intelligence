@@ -11,6 +11,9 @@ Security model:
   - _ensure_table() runs once at registration, never inside a request.
   - last_accessed_at update is fire-and-forget, never blocks the response.
   - Max 10 active tokens per plan.
+  - Passphrase generated at creation (3 words + 4-digit number), hash stored.
+  - Correct passphrase returns a stateless session token (HMAC) + grants temp IP access.
+  - /internal/ip-check called by nginx auth_request — checks static CIDRs + temp_access table.
 
 Wire up in main.py (after register_exit_plan_routes):
     from src.api.exit_plan_share_routes import register_exit_plan_share_routes
@@ -18,6 +21,8 @@ Wire up in main.py (after register_exit_plan_routes):
 """
 
 import hashlib
+import hmac
+import ipaddress
 import logging
 import secrets
 import threading
@@ -26,6 +31,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from src.auth.auth_db import check_rate_limit
@@ -35,15 +41,38 @@ logger    = logging.getLogger("journal")
 DB_PATH   = Path(__file__).parent.parent.parent / "db" / "journal.db"
 TOKEN_CAP = 10
 
-# Allowed expiry windows. Key is the value accepted in the API request.
+# Allowed expiry windows.
 ALLOWED_DURATIONS: dict[str, timedelta] = {
-    "1h":     timedelta(hours=1),
-    "24h":    timedelta(hours=24),
-    "1w":     timedelta(weeks=1),
-    "30d":    timedelta(days=30),
-    "90d":    timedelta(days=90),
+    "1h":  timedelta(hours=1),
+    "24h": timedelta(hours=24),
+    "1w":  timedelta(weeks=1),
+    "30d": timedelta(days=30),
+    "90d": timedelta(days=90),
 }
 DEFAULT_DURATION = "90d"
+
+# Static IP allowlist — mirrors nginx config.
+# Add / remove CIDRs here to match your nginx allow directives.
+ALLOWED_CIDRS = [
+    "73.174.44.217/32",   # home
+    "163.114.130.0/24",   # work
+    "172.59.140.0/24",    # mobile
+]
+
+# Wordlist for passphrase generation (3 words + 4-digit PIN)
+WORDS = [
+    "amber","arctic","aspen","azure","birch","blade","bloom","bold","brave","cedar",
+    "chill","clear","cliff","cloud","coral","crane","crisp","delta","dusk","eagle",
+    "ember","flame","frost","ghost","grace","grove","haven","hawk","haze","holly",
+    "ivory","jade","karma","lake","lemon","light","lunar","maple","marsh","mist",
+    "moon","north","ocean","olive","onyx","orbit","peak","pearl","pine","prism",
+    "quest","raven","river","rock","rose","sage","salt","sand","shore","silk",
+    "slate","snow","solar","south","spark","steel","stone","storm","swift","teal",
+    "tiger","trail","vault","violet","wave","whale","willow","wind","wolf","zenith",
+]
+
+# Populated once at startup by _ensure_table via _load_share_secret()
+_SHARE_SECRET: str = ""
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -64,6 +93,7 @@ def _ensure_table(conn):
             plan_id          INTEGER NOT NULL,
             user_id          INTEGER NOT NULL,
             token_hash       TEXT NOT NULL UNIQUE,
+            passphrase_hash  TEXT,
             label            TEXT,
             created_at       TEXT NOT NULL,
             expires_at       TEXT NOT NULL,
@@ -71,11 +101,78 @@ def _ensure_table(conn):
             FOREIGN KEY (plan_id) REFERENCES exit_plans(id) ON DELETE CASCADE
         )
     """)
+
+    # Add passphrase_hash column to existing tables (safe — ignores if already present)
+    try:
+        conn.execute("ALTER TABLE exit_plan_share_tokens ADD COLUMN passphrase_hash TEXT")
+    except Exception:
+        pass
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS share_temp_access (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip         TEXT    NOT NULL,
+            token_id   INTEGER NOT NULL,
+            expires_at TEXT    NOT NULL,
+            created_at TEXT    NOT NULL,
+            UNIQUE(ip, token_id),
+            FOREIGN KEY (token_id) REFERENCES exit_plan_share_tokens(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sta_ip      ON share_temp_access(ip)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sta_expires ON share_temp_access(expires_at)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_config (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
 
+def _load_share_secret(conn):
+    """Load or generate the HMAC secret used to sign session tokens."""
+    global _SHARE_SECRET
+    row = conn.execute("SELECT value FROM app_config WHERE key='share_secret'").fetchone()
+    if row:
+        _SHARE_SECRET = row["value"]
+        return
+    secret = secrets.token_hex(32)
+    conn.execute("INSERT INTO app_config(key, value) VALUES('share_secret', ?)", (secret,))
+    conn.commit()
+    _SHARE_SECRET = secret
+    logger.info("[share] generated new share_secret")
+
+
+# ── Crypto helpers ────────────────────────────────────────────────────────────
+
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _hash_passphrase(raw: str) -> str:
+    """Normalise and SHA-256 hash a passphrase."""
+    return hashlib.sha256(raw.lower().strip().encode()).hexdigest()
+
+
+def _generate_passphrase() -> str:
+    """Return a memorable 3-word + 4-digit passphrase, e.g. 'violet-storm-cedar-4729'."""
+    import random
+    words = random.sample(WORDS, 3)
+    pin   = random.randint(1000, 9999)
+    return f"{words[0]}-{words[1]}-{words[2]}-{pin}"
+
+
+def _make_session_token(passphrase_hash: str, token_id: int) -> str:
+    """Create a stateless HMAC session token from passphrase_hash + token_id."""
+    msg = f"{passphrase_hash}:{token_id}"
+    return hmac.new(_SHARE_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+
+def _verify_session_token(session: str, passphrase_hash: str, token_id: int) -> bool:
+    expected = _make_session_token(passphrase_hash, token_id)
+    return hmac.compare_digest(session, expected)
 
 
 # ── Plan payload builder ──────────────────────────────────────────────────────
@@ -183,7 +280,11 @@ def _touch_accessed(token_id: int):
 
 class CreateShareTokenRequest(BaseModel):
     label:      Optional[str] = None
-    expires_in: Optional[str] = DEFAULT_DURATION  # one of ALLOWED_DURATIONS keys
+    expires_in: Optional[str] = DEFAULT_DURATION
+
+
+class VerifyPassphraseRequest(BaseModel):
+    passphrase: str
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -193,7 +294,45 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
     # Run DDL once at startup
     _c = _db()
     _ensure_table(_c)
+    _load_share_secret(_c)
     _c.close()
+
+    # ── nginx auth_request check ──────────────────────────────────────────────
+    # Called internally by nginx auth_request — never exposed externally.
+    # Returns 200 if IP is allowed (static CIDR or temp access), 401 otherwise.
+
+    @app.get("/internal/ip-check")
+    def internal_ip_check(request: Request):
+        ip_str = request.headers.get("X-Real-IP") or get_client_ip(request)
+
+        # Check static CIDR allowlist
+        try:
+            ip = ipaddress.ip_address(ip_str)
+            for cidr in ALLOWED_CIDRS:
+                if ip in ipaddress.ip_network(cidr, strict=False):
+                    return Response(status_code=200)
+        except ValueError:
+            logger.warning(f"[ip-check] could not parse IP: {ip_str!r}")
+
+        # Check temp access table
+        now  = datetime.now(timezone.utc).isoformat()
+        conn = _db()
+        row  = conn.execute(
+            "SELECT id FROM share_temp_access WHERE ip = ? AND expires_at > ? LIMIT 1",
+            (ip_str, now)
+        ).fetchone()
+
+        # Lazy cleanup of expired entries
+        conn.execute("DELETE FROM share_temp_access WHERE expires_at <= ?", (now,))
+        conn.commit()
+        conn.close()
+
+        if row:
+            logger.debug(f"[ip-check] temp access granted for {ip_str}")
+            return Response(status_code=200)
+
+        logger.info(f"[ip-check] denied {ip_str}")
+        return Response(status_code=401)
 
     # ── Create ────────────────────────────────────────────────────────────────
 
@@ -225,19 +364,21 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
                 detail=f"Maximum of {TOKEN_CAP} share links per plan. Revoke one first."
             )
 
-        raw_token  = secrets.token_urlsafe(32)
-        token_hash = _hash_token(raw_token)
-        now        = datetime.now(timezone.utc)
-        now_iso    = now.isoformat()
-        duration   = ALLOWED_DURATIONS.get(body.expires_in or DEFAULT_DURATION, ALLOWED_DURATIONS[DEFAULT_DURATION])
-        expires_at = (now + duration).isoformat()
-        label      = (body.label or "").strip() or None
+        raw_token       = secrets.token_urlsafe(32)
+        token_hash      = _hash_token(raw_token)
+        passphrase      = _generate_passphrase()
+        passphrase_hash = _hash_passphrase(passphrase)
+        now             = datetime.now(timezone.utc)
+        now_iso         = now.isoformat()
+        duration        = ALLOWED_DURATIONS.get(body.expires_in or DEFAULT_DURATION, ALLOWED_DURATIONS[DEFAULT_DURATION])
+        expires_at      = (now + duration).isoformat()
+        label           = (body.label or "").strip() or None
 
         conn.execute(
             "INSERT INTO exit_plan_share_tokens "
-            "(plan_id, user_id, token_hash, label, created_at, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (plan_id, user_id, token_hash, label, now_iso, expires_at)
+            "(plan_id, user_id, token_hash, passphrase_hash, label, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (plan_id, user_id, token_hash, passphrase_hash, label, now_iso, expires_at)
         )
         conn.commit()
 
@@ -249,10 +390,11 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
 
         logger.info(f"[share] created token id={token_id} user={user_id} plan={plan_id}")
 
-        # Raw token returned ONCE. Never stored. Never retrievable again.
+        # Raw token AND passphrase returned ONCE. Never stored in plaintext. Never retrievable again.
         return {
             "token_id":   token_id,
             "token":      raw_token,
+            "passphrase": passphrase,
             "label":      label,
             "created_at": now_iso,
             "expires_at": expires_at,
@@ -305,19 +447,19 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
         logger.info(f"[share] token {token_id} revoked by user {user_id}")
         return {"revoked": True}
 
-    # ── Public view (no auth) ─────────────────────────────────────────────────
+    # ── Verify passphrase (public) ────────────────────────────────────────────
 
-    @app.get("/api/share/plan/{token}")
-    def public_plan_view(token: str, request: Request):
+    @app.post("/api/share/verify/{token}")
+    def verify_share_passphrase(token: str, body: VerifyPassphraseRequest, request: Request):
         ip = get_client_ip(request)
-        if not check_rate_limit(ip, "share_plan_view", max_attempts=60, window_minutes=5):
-            raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+        if not check_rate_limit(ip, "share_verify", max_attempts=10, window_minutes=15):
+            raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
 
         token_hash = _hash_token(token)
         conn       = _db()
 
         row = conn.execute(
-            "SELECT id, plan_id, label, expires_at "
+            "SELECT id, expires_at, passphrase_hash "
             "FROM exit_plan_share_tokens WHERE token_hash = ?",
             (token_hash,)
         ).fetchone()
@@ -329,6 +471,70 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
         if row["expires_at"] < datetime.now(timezone.utc).isoformat():
             conn.close()
             raise HTTPException(status_code=410, detail="This link has expired.")
+
+        if not row["passphrase_hash"]:
+            conn.close()
+            raise HTTPException(status_code=400, detail="This link was created without passphrase protection. Please generate a new link.")
+
+        candidate = _hash_passphrase(body.passphrase)
+        if not hmac.compare_digest(candidate, row["passphrase_hash"]):
+            conn.close()
+            raise HTTPException(status_code=401, detail="Incorrect passphrase.")
+
+        # Grant temporary IP access until the share token expires
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO share_temp_access (ip, token_id, expires_at, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(ip, token_id) DO UPDATE SET expires_at = excluded.expires_at",
+            (ip, row["id"], row["expires_at"], now)
+        )
+        conn.commit()
+        conn.close()
+
+        session_token = _make_session_token(row["passphrase_hash"], row["id"])
+        logger.info(f"[share] passphrase verified, temp IP access granted to {ip} via token id={row['id']}")
+
+        return {
+            "access_granted": True,
+            "session_token":  session_token,
+            "expires_at":     row["expires_at"],
+        }
+
+    # ── Public plan view (no auth — protected by passphrase session token) ────
+
+    @app.get("/api/share/plan/{token}")
+    def public_plan_view(token: str, request: Request):
+        ip = get_client_ip(request)
+        if not check_rate_limit(ip, "share_plan_view", max_attempts=60, window_minutes=5):
+            raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+
+        token_hash = _hash_token(token)
+        conn       = _db()
+
+        row = conn.execute(
+            "SELECT id, plan_id, label, expires_at, passphrase_hash "
+            "FROM exit_plan_share_tokens WHERE token_hash = ?",
+            (token_hash,)
+        ).fetchone()
+
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Link not found or has been revoked.")
+
+        if row["expires_at"] < datetime.now(timezone.utc).isoformat():
+            conn.close()
+            raise HTTPException(status_code=410, detail="This link has expired.")
+
+        # Validate passphrase session token
+        if row["passphrase_hash"]:
+            auth    = request.headers.get("Authorization", "")
+            session = auth[7:] if auth.startswith("Bearer ") else ""
+            if not session or not _verify_session_token(session, row["passphrase_hash"], row["id"]):
+                conn.close()
+                raise HTTPException(
+                    status_code=401,
+                    detail={"message": "Passphrase required.", "passphrase_required": True}
+                )
 
         plan_data = _build_plan_payload(conn, row["plan_id"])
         conn.close()
