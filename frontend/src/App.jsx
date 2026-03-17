@@ -17,6 +17,7 @@ import Settings from './pages/Settings'
 import Resources from './pages/Resources'
 import ExitPlan from './pages/ExitPlan'
 import ExitPlanFull from './pages/ExitPlanFull'
+import ExitPlanShareView from './pages/ExitPlanShareView'
 import JournalWrite from './pages/JournalWrite'
 import AskMyJournal from './pages/AskMyJournal'
 import CrisisBanner from './components/CrisisBanner'
@@ -51,7 +52,7 @@ function Shell() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
 
   // Pages with no sidebar and no padding — either public or full-screen tool pages
-  const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding'
+  const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding' || location.pathname.startsWith('/share/') || location.pathname.startsWith('/share/')
   const isFullscreenPage = location.pathname === '/exitplan-full'
   const isWritePage      = location.pathname === '/write'
   const hideSidebar      = isPublicPage || isFullscreenPage || isWritePage
@@ -204,6 +205,7 @@ function Shell() {
             <Route path="/exitplan-full"   element={<ProtectedRoute><ExitPlanFull /></ProtectedRoute>} />
             <Route path="/write" element={<ProtectedRoute><JournalWrite /></ProtectedRoute>} />
             <Route path="/ask" element={<ProtectedRoute><AskMyJournal /></ProtectedRoute>} />
+            <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
         </main>

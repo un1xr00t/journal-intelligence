@@ -1664,6 +1664,153 @@ function AttachmentsTab({ plan }) {
   )
 }
 
+// ── Share tab ──────────────────────────────────────────────────────────────
+function ShareTab() {
+  const DURATIONS = [
+    { value: '1h',  label: '1 hour' },
+    { value: '24h', label: '24 hours' },
+    { value: '1w',  label: '1 week' },
+    { value: '30d', label: '30 days' },
+    { value: '90d', label: '90 days' },
+  ]
+  const [tokens,    setTokens]    = useState([])
+  const [loading,   setLoading]   = useState(true)
+  const [creating,  setCreating]  = useState(false)
+  const [label,     setLabel]     = useState('')
+  const [expiresIn, setExpiresIn] = useState('90d')
+  const [newUrl,    setNewUrl]    = useState(null)
+  const [urlCopied, setUrlCopied] = useState(false)
+  const [error,     setError]     = useState(null)
+  const [revoking,  setRevoking]  = useState(null)
+
+  const loadTokens = () => {
+    setLoading(true)
+    api.get('/api/exit-plan/share')
+      .then(r => { setTokens(r.data.tokens || []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+
+  useEffect(() => { loadTokens() }, [])
+
+  const create = async () => {
+    setCreating(true); setError(null); setNewUrl(null); setUrlCopied(false)
+    try {
+      const res = await api.post('/api/exit-plan/share', { label: label.trim() || null, expires_in: expiresIn })
+      const url = `${window.location.origin}/share/plan/${res.data.token}`
+      setNewUrl(url)
+      setLabel('')
+      loadTokens()
+      try { await navigator.clipboard.writeText(url); setUrlCopied(true) } catch {}
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Failed to create link')
+    }
+    setCreating(false)
+  }
+
+  const copyUrl = async () => {
+    try { await navigator.clipboard.writeText(newUrl); setUrlCopied(true) } catch {}
+  }
+
+  const revoke = async (id) => {
+    setRevoking(id)
+    try { await api.delete(`/api/exit-plan/share/${id}`) } catch {}
+    setRevoking(null)
+    loadTokens()
+  }
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>🔗 Share Plan</div>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
+        Generate a private link for an advocate, attorney, or therapist to view your plan progress.
+        No journal entries or personal notes are included — phases, tasks, and completion status only.
+      </div>
+      <div style={{ background: 'var(--bg-secondary)', border: '1px solid #f59e0b33', borderRadius: 8, padding: '10px 14px', marginBottom: 18, fontSize: 12, color: '#92400e' }}>
+        ⚠ Task titles are visible to anyone with the link. Avoid including sensitive names or locations in task titles.
+      </div>
+
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px', marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>New share link</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input
+            value={label}
+            onChange={e => setLabel(e.target.value)}
+            placeholder={'Label (optional) — e.g. "Attorney Smith"'}
+            onKeyDown={e => e.key === 'Enter' && create()}
+            style={{ flex: 1, padding: '8px 12px', fontSize: 13, background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', outline: 'none' }}
+          />
+          <select value={expiresIn} onChange={e => setExpiresIn(e.target.value)}
+            style={{ padding: '8px 10px', fontSize: 13, background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', cursor: 'pointer' }}>
+            {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
+          <button onClick={create} disabled={creating}
+            style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.6 : 1 }}>
+            {creating ? '…' : 'Generate'}
+          </button>
+        </div>
+        {error && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 8 }}>{error}</div>}
+      </div>
+
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+      ) : tokens.length === 0 ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>No active share links.</div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Active links ({tokens.length})
+          </div>
+          {tokens.map(t => (
+            <div key={t.id} style={{ background: 'var(--bg-card)', border: `1px solid ${t.expired ? '#fca5a5' : 'var(--border)'}`, borderRadius: 8, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 2 }}>
+                  {t.label || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Unlabeled</span>}
+                  {t.expired && <span style={{ marginLeft: 8, fontSize: 11, color: '#ef4444', fontWeight: 400 }}>Expired</span>}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  Created {new Date(t.created_at).toLocaleDateString()}
+                  {t.last_accessed_at && <span> · Last viewed {new Date(t.last_accessed_at).toLocaleDateString()}</span>}
+                  <span> · Expires {new Date(t.expires_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+              {!t.expired && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', flexShrink: 0 }}>URL shown once at creation</div>
+              )}
+              <button onClick={() => revoke(t.id)} disabled={revoking === t.id}
+                style={{ padding: '5px 10px', fontSize: 12, background: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: 6, cursor: revoking === t.id ? 'not-allowed' : 'pointer', opacity: revoking === t.id ? 0.5 : 1, flexShrink: 0 }}>
+                Revoke
+              </button>
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+            Revoking a link immediately invalidates it — anyone with the URL will see a link unavailable page.
+          </div>
+        </div>
+      )}
+      {newUrl && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 28px 24px', maxWidth: 520, width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ fontSize: 22, marginBottom: 8 }}>🔗</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Your share link is ready</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.6 }}>Copy this link now — it won't be shown again. Anyone with it can view your plan in read-only mode.</div>
+            <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginBottom: 14, wordBreak: 'break-all', fontSize: 12, fontFamily: 'monospace', color: 'var(--text-primary)', userSelect: 'all' }}>
+              {newUrl}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={copyUrl} style={{ flex: 1, padding: '10px 0', fontSize: 14, fontWeight: 700, background: urlCopied ? '#16a34a' : 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                {urlCopied ? '✓ Copied to clipboard' : 'Copy link'}
+              </button>
+              <button onClick={() => { setNewUrl(null); setUrlCopied(false) }} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ExportTab() {
   const [exporting,     setExporting]     = useState(false)
   const [includeNotes,  setIncludeNotes]  = useState(true)
@@ -1980,6 +2127,7 @@ export default function ExitPlanFull() {
     { id: 'notes',   label: 'Notes' },
     { id: 'network', label: '👥 Support Network' },
     { id: 'attachments', label: '📎 Attachments' },
+    { id: 'share',   label: '🔗 Share' },
     { id: 'export',  label: '↓ Export' },
   ]
 
@@ -2118,17 +2266,17 @@ export default function ExitPlanFull() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Tab bar */}
           <div style={{
-            display: 'flex', gap: 0, padding: '0 24px',
+            display: 'flex', gap: 0, padding: '0 12px',
             borderBottom: '1px solid var(--border)',
             background: 'rgba(0,0,0,0.1)',
-            flexShrink: 0,
+            flexShrink: 0, overflowX: 'auto',
           }}>
             {TABS.map(t => (
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
                 style={{
-                  padding:      '10px 20px',
+                  padding:      '10px 14px',
                   background:   'transparent',
                   border:       'none',
                   cursor:       'pointer',
@@ -2188,6 +2336,9 @@ export default function ExitPlanFull() {
             )}
             {activeTab === 'attachments' && (
               <AttachmentsTab plan={plan} />
+            )}
+            {activeTab === 'share' && (
+              <ShareTab />
             )}
             {activeTab === 'export' && (
               <ExportTab />

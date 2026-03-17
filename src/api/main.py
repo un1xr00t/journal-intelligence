@@ -450,6 +450,7 @@ async def delete_user(
             "(SELECT id FROM exit_plans WHERE user_id = ?)", (user_id,)
         )
         cursor.execute("DELETE FROM exit_plan_contacts WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM exit_plan_share_tokens WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM exit_plans WHERE user_id = ?", (user_id,))
         # Misc user-scoped tables (IF they exist — safe to ignore if not)
         cursor.execute("DELETE FROM exports WHERE created_by = ?", (user_id,))
@@ -1960,6 +1961,12 @@ register_resources_routes(app, require_any_user)
 
 from src.api.exit_plan_routes import register_exit_plan_routes
 register_exit_plan_routes(app, require_any_user)
+
+from src.api.exit_plan_share_routes import register_exit_plan_share_routes
+register_exit_plan_share_routes(app, require_any_user, require_owner)
+
+from src.api.exit_plan_share_routes import register_exit_plan_share_routes
+register_exit_plan_share_routes(app, require_any_user, require_owner)
 
 from src.api.auth_routes import register_auth_routes
 register_auth_routes(app, require_any_user)
