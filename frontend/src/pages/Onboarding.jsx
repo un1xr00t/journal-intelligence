@@ -279,7 +279,7 @@ function People({ d, set, next, back }) {
         />        <button onClick={add} style={{ padding:'9px 14px', background:'rgba(99,102,241,0.12)', border:'1px solid rgba(99,102,241,0.3)', borderRadius:8, color:'var(--accent,#6366f1)', fontSize:18, lineHeight:1, cursor:'pointer' }}>+</button>
       </div>
       <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (optional) — e.g. 'main person in dispute'"
-        style={{ width:'100%', padding:'7px 12px', marginBottom:14, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:8, color:'rgba(255,255,255,0.22)', fontSize:11, outline:'none', fontFamily:"'DM Sans',sans-serif", boxSizing:'border-box' }}
+        style={{ width:'100%', padding:'7px 12px', marginBottom:14, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:8, color:'rgba(255,255,255,0.88)', fontSize:11, outline:'none', fontFamily:"'DM Sans',sans-serif", boxSizing:'border-box' }}
       />
       <div style={{ maxHeight:170, overflowY:'auto', marginBottom:4 }}>
         {(d.people||[]).length===0 ? (
