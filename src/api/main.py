@@ -612,7 +612,7 @@ async def list_entries(
     where_clause = " AND ".join(conditions)
 
     cursor.execute(f"""
-        SELECT e.id, e.entry_date, e.word_count, e.ingested_at,
+        SELECT e.id, e.entry_date, e.word_count, e.ingested_at, e.normalized_text,
                ds.summary_text, ds.mood_label, ds.mood_score, ds.severity,
                ds.tags, ds.key_events, ds.entities, ds.notable_quotes
         FROM entries e

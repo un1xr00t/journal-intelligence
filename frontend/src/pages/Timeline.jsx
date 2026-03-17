@@ -45,7 +45,7 @@ function SeverityBar({ value }) {
   );
 }
 
-function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
+function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }) {
   const [entry,      setEntry]      = useState(initialEntry);
   const [expanded,   setExpanded]   = useState(false);
   const [hovered,    setHovered]    = useState(false);
@@ -251,6 +251,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
           }}>›</span>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
+          {(hasApiKey || entry.mood_label || tags.length > 0) && (
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 8 }}>
             {entry.mood_label && (
               <span style={{
@@ -272,6 +273,7 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
               </span>
             ))}
           </div>
+          )}
           {editMode ? (
             <div onClick={e => e.stopPropagation()} style={{ marginTop: 4 }}>
               <p style={{ fontSize: 10, color: "#6366f1", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px" }}>
@@ -328,19 +330,30 @@ function EntryCard({ entry: initialEntry, onUpdate , onDelete }) {
               </div>
             </div>
           ) : (
-            <p style={{
-              fontSize: 13, color: "#cbd5e1", lineHeight: 1.65, margin: 0,
-              overflow: "hidden",
-              display: "-webkit-box",
-              WebkitLineClamp: expanded ? "unset" : 2,
-              WebkitBoxOrient: "vertical",
-            }}>
-              {entry.summary_text || entry.normalized_text || "No entry text yet."}
-            </p>
+            <div>
+              {!hasApiKey && (
+                <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "#475569", margin: "0 0 4px" }}>
+                  Raw entry
+                </p>
+              )}
+              <p style={{
+                fontSize: 13, color: "#cbd5e1", lineHeight: 1.65, margin: 0,
+                overflow: "hidden",
+                display: "-webkit-box",
+                WebkitLineClamp: expanded ? "unset" : 3,
+                WebkitBoxOrient: "vertical",
+              }}>
+                {hasApiKey
+                  ? (entry.summary_text || entry.normalized_text || "No summary yet.")
+                  : (entry.normalized_text || "No entry text.")}
+              </p>
+            </div>
           )}
+          {(hasApiKey || entry.severity) && (
           <div style={{ marginTop: 10 }}>
             <SeverityBar value={entry.severity} />
           </div>
+          )}
         </div>
       </div>
 
@@ -1072,6 +1085,7 @@ export default function Timeline({ filters }) {
   const [sparkData, setSparkData]   = useState([]);
   const [masterSummary, setMasterSummary] = useState(null);
   const [exitOffer, setExitOffer]   = useState(null);
+  const [hasApiKey, setHasApiKey]   = useState(true);
   const PAGE_SIZE = 20;
 
   const load = useCallback(async () => {
@@ -1112,6 +1126,12 @@ export default function Timeline({ filters }) {
   useEffect(() => {
     api.get("/api/exit-plan/detect")
       .then(r => setExitOffer(r.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    api.get("/api/settings/ai-provider")
+      .then(r => setHasApiKey(!!r.data.has_key))
       .catch(() => {});
   }, []);
 
@@ -1158,6 +1178,40 @@ export default function Timeline({ filters }) {
           </div>
         ))}
       </div>
+      {/* ── No API Key Banner ────────────────────────────── */}
+      {!hasApiKey && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 12,
+          background: "rgba(251,191,36,0.06)",
+          border: "1px solid rgba(251,191,36,0.18)",
+          borderRadius: 10,
+          padding: "10px 16px",
+          marginBottom: 12,
+          flexWrap: "wrap",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 14, color: "#fbbf24" }}>⚠</span>
+            <span style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>
+              No AI key set — entries are shown as raw text.{" "}
+              <span style={{ color: "#cbd5e1" }}>AI analysis, mood scoring, and summaries are disabled.</span>
+            </span>
+          </div>
+          <a
+            href="/settings"
+            style={{
+              fontSize: 12, padding: "5px 14px", borderRadius: 7,
+              background: "rgba(251,191,36,0.1)",
+              border: "1px solid rgba(251,191,36,0.25)",
+              color: "#fbbf24", textDecoration: "none",
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}
+          >
+            Add key in Settings →
+          </a>
+        </div>
+      )}
+
       {/* ── Write CTA Banner ─────────────────────────────── */}
       <WriteBanner navigate={navigate} />
 
@@ -1203,10 +1257,11 @@ export default function Timeline({ filters }) {
           <EntryCard
             key={e.id}
             entry={e}
+            hasApiKey={hasApiKey}
             onUpdate={updated =>
               setEntries(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))
             }
-          onDelete={id => setEntries(prev => prev.filter(x => x.id !== id))}
+            onDelete={id => setEntries(prev => prev.filter(x => x.id !== id))}
           />
         ))
       )}
