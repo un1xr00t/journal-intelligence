@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Sidebar from './components/Sidebar'
 import Login from './pages/Login'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Onboarding from './pages/Onboarding'
 import Timeline from './pages/Timeline'
 import Patterns from './pages/Patterns'
@@ -190,6 +192,8 @@ function Shell() {
         }}>
           <Routes>
             <Route path="/login"           element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/onboarding"      element={<Onboarding />} />
             <Route path="/"                element={<ProtectedRoute><Timeline filters={filters} /></ProtectedRoute>} />
             <Route path="/patterns"        element={<ProtectedRoute><Patterns /></ProtectedRoute>} />

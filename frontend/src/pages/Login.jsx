@@ -88,6 +88,18 @@ export default function Login() {
               />
             </div>
 
+            {/* Forgot password link */}
+            <div style={{ textAlign: 'right', marginTop: -16, marginBottom: 20 }}>
+              <span
+                onClick={() => navigate('/forgot-password')}
+                style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono', cursor: 'pointer', letterSpacing: '0.02em' }}
+                onMouseEnter={e => e.target.style.color = 'var(--accent)'}
+                onMouseLeave={e => e.target.style.color = 'var(--text-muted)'}
+              >
+                Forgot password?
+              </span>
+            </div>
+
             {error && (
               <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 12, marginBottom: 16 }}>
                 {error}
