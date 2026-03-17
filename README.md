@@ -5,7 +5,7 @@
 
 > *I built this for myself - while going through it. Maybe it helps you too.*
 
-![Dashboard](Screenshots/dashboard.PNG)
+<img alt="Dashboard" src="Screenshots/dashboard.PNG" width="600"/>
 
 ---
 
@@ -58,14 +58,16 @@ These are the features that make this different from a notes app with an API key
 ## Features
 
 ### 📖 Timeline
-![Journal Entry](Screenshots/journal%20entry.PNG)
+<img alt="Timeline" src="Screenshots/timeline.png" width="600"/>
 
 Your entries, beautifully laid out. Mood scores visualized as a sparkline. Severity tracked over time. A **Living Master Summary** that sits at the top and evolves with every new entry - a constantly updated portrait of where you are and what you've been going through.
 
 ---
 
 ### ✎ Write & Import — Direct from the Browser
-![Upload Journal Entry](Screenshots/upload%20journal%20entry.PNG)
+<img alt="Upload Journal Entry" src="Screenshots/upload%20journal%20entry.PNG" width="600"/>
+
+<img alt="Journal Entry" src="Screenshots/journal%20entry.PNG" width="600"/>
 
 No iPhone required. The dashboard includes a full in-browser journal workspace accessible from the sidebar or the Write banner on the Timeline.
 
@@ -78,7 +80,7 @@ Both modes are JWT-authenticated and user-scoped. Everything lands on your Timel
 ---
 
 ### 🧠 Multi-Tone Reflections
-![Reflections](Screenshots/reflections%20section.PNG)
+<img alt="Reflections" src="Screenshots/reflections%20section.PNG" width="600"/>
 
 This one is special. The system can reflect your last 14 days back at you in **six completely different voices**:
 
@@ -94,9 +96,9 @@ Each tone is cached. Switch between them instantly. It's like having a whole sup
 ---
 
 ### 💬 Ask My Journal
-![Ask My Journal](Screenshots/ask%20my%20journal.png)
+<img alt="Ask My Journal" src="Screenshots/ask%20my%20journal.png" width="600"/>
 
-![Ask My Journal 2](Screenshots/ask%20my%20journal%202.png)
+<img alt="Ask My Journal 2" src="Screenshots/ask%20my%20journal%202.png" width="600"/>
 
 Ask natural language questions about your own history and get AI-synthesized answers grounded in your actual entries. "When did I last feel okay?" "What usually makes things worse?" "Who keeps coming up in my worst weeks?" Powered by local embeddings and cosine similarity — your data never leaves your infrastructure for the retrieval step.
 
@@ -108,14 +110,14 @@ Every day, the system generates one specific, personalized writing prompt based 
 ---
 
 ### 〜 Nervous System Tracker
-![Nervous System](Screenshots/nervous%20system.PNG)
+<img alt="Nervous System" src="Screenshots/nervous%20system.PNG" width="600"/>
 
 Mood and severity charts over time. Volatility scores. Stability metrics. A visual record of your emotional nervous system - what's dysregulating you, what's helping you stabilize, where the spikes are coming from.
 
 ---
 
 ### ⬡ Pattern Detection
-![Patterns](Screenshots/patterns.PNG)
+<img alt="Patterns" src="Screenshots/patterns.PNG" width="600"/>
 
 The system watches for things you might not notice yourself - mood spikes, severity streaks, behavioral loops, emotional cycles. Both rule-based alerts and AI deep-analysis on demand. It doesn't just tell you something is wrong. It tells you *what the pattern looks like* and where it started.
 
@@ -137,16 +139,16 @@ If someone in your life says one thing and does another - or if they've said two
 ---
 
 ### ✦ Personalized Resources
-![Resources](Screenshots/resources.PNG)
+<img alt="Resources" src="Screenshots/resources.PNG" width="600"/>
 
 This one I'm proud of. The system reads your onboarding profile, your active pattern alerts, and your 30-day emotional averages - and generates a **personalized resource hub** just for you. Not a generic list of hotlines. Actual ranked support categories with context blurbs explaining *why this applies to your specific situation*. Crisis resources surface automatically when severity warrants it, but quietly - never alarmist, always human.
 
 ---
 
 ### 🗺 Exit Plan - Your Own Private Workspace
-![Exit Plan Setup](Screenshots/exit%20plan%20setup.PNG)
+<img alt="Exit Plan Setup" src="Screenshots/exit%20plan%20setup.PNG" width="600"/>
 
-![Exit Plan Full Workspace](Screenshots/exit%20plan%20FULL%20workspace.PNG)
+<img alt="Exit Plan Full Workspace" src="Screenshots/exit%20plan%20FULL%20workspace.PNG" width="600"/>
 
 If your journal signals that you might be navigating a major life transition - leaving a relationship, financial instability, housing uncertainty, safety concerns - the system offers to build you something most apps would never touch.
 
@@ -166,11 +168,11 @@ Generate PDF export packets in multiple formats - timeline summaries, evidence p
 ---
 
 ### ⚙ Settings & Memory Profile
-![AI Memory Onboarding](Screenshots/AI%20memory%20onboarding.PNG)
+<img alt="AI Memory Onboarding" src="Screenshots/AI%20memory%20onboarding.PNG" width="600"/>
 
-![Onboarding Complete](Screenshots/onboarding%20complete.PNG)
+<img alt="Onboarding Complete" src="Screenshots/onboarding%20complete.PNG" width="600"/>
 
-![AI Settings Page](Screenshots/AI%20Settings%20page.png)
+<img alt="AI Settings Page" src="Screenshots/AI%20Settings%20page.png" width="600"/>
 
 A full onboarding flow that builds a memory profile - your situation, relationship context, what you're navigating, your preferred AI tone. All of this gets injected into every AI call so every reflection, every plan, every resource recommendation is actually personalized to *you*.
 
