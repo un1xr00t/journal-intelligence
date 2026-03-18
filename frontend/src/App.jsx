@@ -10,6 +10,7 @@ import Onboarding from './pages/Onboarding'
 import Timeline from './pages/Timeline'
 import Patterns from './pages/Patterns'
 import PeopleTopics from './pages/PeopleTopics'
+import PeopleIntelligence from './pages/PeopleIntelligence'
 import NervousSystem from './pages/NervousSystem'
 import Evidence from './pages/Evidence'
 import Contradictions from './pages/Contradictions'
@@ -198,6 +199,7 @@ function Shell() {
             <Route path="/"                element={<ProtectedRoute><Timeline filters={filters} /></ProtectedRoute>} />
             <Route path="/patterns"        element={<ProtectedRoute><Patterns /></ProtectedRoute>} />
             <Route path="/people"          element={<ProtectedRoute><PeopleTopics /></ProtectedRoute>} />
+            <Route path="/people-intel"   element={<ProtectedRoute><PeopleIntelligence /></ProtectedRoute>} />
             <Route path="/nervous"         element={<ProtectedRoute><NervousSystem /></ProtectedRoute>} />
             <Route path="/evidence"        element={<ProtectedRoute><Evidence /></ProtectedRoute>} />
             <Route path="/contradictions"  element={<ProtectedRoute><Contradictions /></ProtectedRoute>} />

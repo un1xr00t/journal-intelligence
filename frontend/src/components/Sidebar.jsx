@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { to: '/ask',           icon: '⌖', label: 'Ask My Journal' },
   { to: '/patterns',      icon: '⬡', label: 'Patterns'       },
   { to: '/people',        icon: '◎', label: 'People & Topics'},
+  { to: '/people-intel',   icon: '◉', label: 'People Map'      },
   { to: '/nervous',       icon: '〜', label: 'Nervous System' },
   { to: '/evidence',      icon: '◷', label: 'Evidence Vault' },
   { to: '/contradictions', icon:'⊕', label: 'Contradictions' },
