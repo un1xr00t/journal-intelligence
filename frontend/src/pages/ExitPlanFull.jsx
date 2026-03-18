@@ -1684,6 +1684,9 @@ function ShareTab() {
   const [passphraseCopied,setPassphraseCopied] = useState(false)
   const [error,     setError]     = useState(null)
   const [revoking,  setRevoking]  = useState(null)
+  const [regenId,        setRegenId]        = useState(null)
+  const [regenPassphrase,setRegenPassphrase] = useState(null)
+  const [regenCopied,    setRegenCopied]     = useState(false)
 
   const loadTokens = () => {
     setLoading(true)
@@ -1723,6 +1726,22 @@ function ShareTab() {
     try { await api.delete(`/api/exit-plan/share/${id}`) } catch {}
     setRevoking(null)
     loadTokens()
+  }
+
+  const regeneratePassphrase = async (id) => {
+    setRegenId(id)
+    try {
+      const res = await api.post(`/api/exit-plan/share/${id}/regenerate-passphrase`)
+      setRegenPassphrase(res.data.passphrase)
+      setRegenCopied(false)
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Failed to regenerate passphrase')
+    }
+    setRegenId(null)
+  }
+
+  const copyRegenPassphrase = async () => {
+    try { await navigator.clipboard.writeText(regenPassphrase); setRegenCopied(true) } catch {}
   }
 
   return (
@@ -1783,6 +1802,10 @@ function ShareTab() {
               {!t.expired && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', flexShrink: 0 }}>URL shown once at creation</div>
               )}
+              <button onClick={() => regeneratePassphrase(t.id)} disabled={regenId === t.id}
+                style={{ padding: '5px 10px', fontSize: 12, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, cursor: regenId === t.id ? 'not-allowed' : 'pointer', opacity: regenId === t.id ? 0.5 : 1, flexShrink: 0 }}>
+                {regenId === t.id ? 'Regenerating…' : 'Regenerate passphrase'}
+              </button>
               <button onClick={() => revoke(t.id)} disabled={revoking === t.id}
                 style={{ padding: '5px 10px', fontSize: 12, background: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: 6, cursor: revoking === t.id ? 'not-allowed' : 'pointer', opacity: revoking === t.id ? 0.5 : 1, flexShrink: 0 }}>
                 Revoke
@@ -1791,6 +1814,28 @@ function ShareTab() {
           ))}
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
             Revoking a link immediately invalidates it — anyone with the URL will see a link unavailable page.
+          </div>
+        </div>
+      )}
+      {regenPassphrase && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px 28px 24px', maxWidth: 480, width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ fontSize: 22, marginBottom: 8 }}>🔑</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>New passphrase generated</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.6 }}>Copy this passphrase now — it will not be shown again. Send it to the recipient separately from the share link.</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>New passphrase</div>
+            <div style={{ background: 'var(--bg-base)', border: '1px solid #fbbf24', borderRadius: 8, padding: '10px 12px', marginBottom: 8, fontSize: 15, fontFamily: 'monospace', color: 'var(--text-primary)', letterSpacing: '0.06em', userSelect: 'all' }}>
+              {regenPassphrase}
+            </div>
+            <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginBottom: 10, lineHeight: 1.5 }}>
+              ⚠ The old passphrase is now invalid. Anyone with the previous passphrase must use this new one.
+            </div>
+            <button onClick={copyRegenPassphrase} style={{ width: '100%', padding: '9px 0', fontSize: 13, fontWeight: 700, background: regenCopied ? '#16a34a' : 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', marginBottom: 12 }}>
+              {regenCopied ? '✓ Copied' : 'Copy passphrase'}
+            </button>
+            <button onClick={() => { setRegenPassphrase(null); setRegenCopied(false) }} style={{ width: '100%', padding: '9px 0', fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' }}>
+              Done
+            </button>
           </div>
         </div>
       )}

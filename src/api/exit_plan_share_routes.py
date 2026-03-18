@@ -447,6 +447,39 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
         logger.info(f"[share] token {token_id} revoked by user {user_id}")
         return {"revoked": True}
 
+    # ── Regenerate passphrase ───────────────────────────────────────────────
+
+    @app.post("/api/exit-plan/share/{token_id}/regenerate-passphrase")
+    def regenerate_share_passphrase(
+        token_id: int,
+        current_user: dict = Depends(require_owner),
+    ):
+        user_id = current_user["id"]
+        conn    = _db()
+
+        row = conn.execute(
+            "SELECT id FROM exit_plan_share_tokens WHERE id = ? AND user_id = ?",
+            (token_id, user_id)
+        ).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Token not found.")
+
+        passphrase      = _generate_passphrase()
+        passphrase_hash = _hash_passphrase(passphrase)
+
+        conn.execute(
+            "UPDATE exit_plan_share_tokens SET passphrase_hash = ? WHERE id = ?",
+            (passphrase_hash, token_id)
+        )
+        conn.commit()
+        conn.close()
+
+        logger.info(f"[share] passphrase regenerated for token id={token_id} user={user_id}")
+
+        # New passphrase returned ONCE — never stored in plaintext.
+        return {"passphrase": passphrase}
+
     # ── Verify passphrase (public) ────────────────────────────────────────────
 
     @app.post("/api/share/verify/{token}")
