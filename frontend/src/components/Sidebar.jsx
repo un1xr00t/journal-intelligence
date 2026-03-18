@@ -106,7 +106,7 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>{user?.username}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{user?.role}</div>
+              {user?.role === 'owner' && <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Admin</div>}
             </div>
             <span style={{ fontSize: 9, color: 'var(--text-muted)', opacity: 0.5 }}>⚙</span>
           </div>
