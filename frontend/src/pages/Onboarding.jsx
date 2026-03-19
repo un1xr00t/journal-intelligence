@@ -3,7 +3,7 @@
  * 9-step signup + AI memory building flow.
  * Matches site theme: dark bg, Syne headings, IBM Plex Mono labels, indigo accent.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -20,6 +20,7 @@ const STEPS = [
   { id: 'security',  icon: '◉', label: 'Recovery'  },
   { id: 'ai_key',    icon: '⊙', label: 'AI Setup'  },
   { id: 'memory',    icon: '◷', label: 'Memory'    },
+  { id: 'dayone',   icon: '⬆', label: 'Import'    },
   { id: 'done',      icon: '〇', label: 'All Set'   },
 ]
 const SITUATION_OPTS = [
@@ -823,6 +824,164 @@ function AIProviderStep({ next, back }) {
   )
 }
 
+function DayOneStep({ next, back }) {
+  const [phase, setPhase] = useState('intro')   // intro | uploading | processing | done | error
+  const [jobId, setJobId] = useState(null)
+  const [job, setJob]     = useState({ processed: 0, total: 0, inserted: 0, skipped: 0, status: 'queued' })
+  const [errMsg, setErrMsg] = useState('')
+  const fileRef = useRef()
+
+  const handleFile = async (file) => {
+    setErrMsg('')
+    setPhase('uploading')
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const r = await api.post('/api/import/dayone', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+      })
+      setJobId(r.data.job_id)
+      setJob(j => ({ ...j, total: r.data.total }))
+      setPhase('processing')
+    } catch (err) {
+      setErrMsg(err.response?.data?.detail || 'Upload failed — check the file is a valid Day One export.')
+      setPhase('error')
+    }
+  }
+
+  useEffect(() => {
+    if (phase !== 'processing' || !jobId) return
+    const poll = setInterval(async () => {
+      try {
+        const r = await api.get(`/api/import/dayone/status/${jobId}`)
+        setJob(r.data)
+        if (r.data.status === 'done' || r.data.status === 'error') {
+          clearInterval(poll)
+          setPhase(r.data.status === 'done' ? 'done' : 'error')
+        }
+      } catch { clearInterval(poll) }
+    }, 1200)
+    return () => clearInterval(poll)
+  }, [phase, jobId])
+
+  const pct = job.total > 0 ? Math.round((job.processed / job.total) * 100) : 0
+
+  const steps = [
+    { n: '1', title: 'Open Day One', desc: 'Open the Day One app on your iPhone, iPad, or Mac.' },
+    { n: '2', title: 'Go to Settings', desc: 'Tap the menu icon and open Settings.' },
+    { n: '3', title: 'Tap Journals', desc: 'Select the journal you want to export.' },
+    { n: '4', title: 'Choose "Export Journal"', desc: 'Tap Export Journal and follow the on-screen steps. Choose JSON format when prompted.' },
+    { n: '5', title: 'Save the file', desc: 'Day One will generate a .json or .zip file. Save it somewhere easy to find.' },
+  ]
+
+  // ── Intro ──
+  if (phase === 'intro') return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <span style={{ fontSize: 22 }}>⬆</span>
+        <h2 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: 22, color: 'rgba(255,255,255,0.88)', margin: 0 }}>Have a Day One account?</h2>
+      </div>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 18, lineHeight: 1.6 }}>
+        Import your Day One history and instantly unlock years of patterns, contradictions, and people intelligence.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 18 }}>
+        {steps.map((s, i) => (
+          <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '10px 0', borderBottom: i < steps.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+            <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'IBM Plex Mono',monospace", color: 'var(--accent,#6366f1)', marginTop: 1 }}>{s.n}</div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.88)', marginBottom: 2 }}>{s.title}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>{s.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: '9px 13px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, marginBottom: 18, fontSize: 11, color: 'rgba(255,255,255,0.3)', lineHeight: 1.55, fontFamily: "'IBM Plex Mono',monospace" }}>
+        ⓘ Text entries are fully imported. Photo-only entries are skipped.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <PrimaryBtn onClick={() => fileRef.current?.click()} full style={{ padding: '12px 0' }}>
+          Upload .json or .zip →
+        </PrimaryBtn>
+        <input ref={fileRef} type="file" accept=".zip,.json" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+        <GhostBtn onClick={next}>Skip — I'll import later in Settings</GhostBtn>
+        <button onClick={back} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.18)', padding: '4px 0' }}>← Back</button>
+      </div>
+    </div>
+  )
+
+  // ── Uploading ──
+  if (phase === 'uploading') return (
+    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+      <div style={{ fontSize: 36, marginBottom: 16 }}>📤</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'rgba(255,255,255,0.88)', marginBottom: 6 }}>Uploading...</div>
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>Hang tight</div>
+    </div>
+  )
+
+  // ── Processing ──
+  if (phase === 'processing') return (
+    <div style={{ padding: '8px 0' }}>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.88)', marginBottom: 4 }}>Importing your journal...</div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Don't close this tab. This may take a few minutes.</div>
+      </div>
+      <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden', marginBottom: 10 }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--accent,#6366f1), #8b5cf6)', borderRadius: 2, transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'IBM Plex Mono',monospace" }}>
+          {job.processed < job.total ? 'Processing entries...' : 'Running analysis...'}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--accent,#6366f1)', fontFamily: "'IBM Plex Mono',monospace" }}>{job.processed} / {job.total}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+        {[
+          { label: 'Imported', value: job.inserted, color: '#10b981' },
+          { label: 'Skipped',  value: job.skipped,  color: 'rgba(255,255,255,0.35)' },
+          { label: 'Errors',   value: job.errors || 0, color: job.errors > 0 ? '#ef4444' : 'rgba(255,255,255,0.35)' },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{ textAlign: 'center', padding: '12px 0', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color, fontFamily: "'IBM Plex Mono',monospace" }}>{value}</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  // ── Done ──
+  if (phase === 'done') return (
+    <div style={{ textAlign: 'center', padding: '8px 0' }}>
+      <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>✓</div>
+      <h3 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: 20, color: 'rgba(255,255,255,0.88)', margin: '0 0 8px' }}>Import complete</h3>
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 6, lineHeight: 1.6 }}>
+        {job.inserted} {job.inserted === 1 ? 'entry' : 'entries'} imported. Patterns, people intelligence, and mood analysis are ready on your dashboard.
+      </p>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', fontFamily: "'IBM Plex Mono',monospace", marginBottom: 24 }}>
+        {job.skipped > 0 && `${job.skipped} duplicate${job.skipped !== 1 ? 's' : ''} skipped · `}{job.errors > 0 && `${job.errors} error${job.errors !== 1 ? 's' : ''} · `}all done
+      </div>
+      <PrimaryBtn onClick={next} full style={{ padding: '12px 0' }}>Continue Setup →</PrimaryBtn>
+    </div>
+  )
+
+  // ── Error ──
+  if (phase === 'error') return (
+    <div style={{ textAlign: 'center', padding: '8px 0' }}>
+      <div style={{ fontSize: 36, marginBottom: 16 }}>⚠️</div>
+      <h3 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: 18, color: 'rgba(255,255,255,0.88)', margin: '0 0 8px' }}>Import failed</h3>
+      <p style={{ fontSize: 12, color: 'rgba(239,68,68,0.8)', marginBottom: 20, lineHeight: 1.6 }}>{errMsg || 'Something went wrong processing your export.'}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <PrimaryBtn onClick={() => setPhase('intro')} full style={{ padding: '12px 0' }}>Try Again</PrimaryBtn>
+        <GhostBtn onClick={next}>Skip — import later in Settings</GhostBtn>
+      </div>
+    </div>
+  )
+
+  return null
+}
+
+
 function MRow({ icon, label, v }) {
   return (
     <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
@@ -898,6 +1057,7 @@ export default function Onboarding() {
     <SecurityQuestions next={next} back={back} />,
     <AIProviderStep next={next} back={back} />,
     <Memory  formData={form} next={next} back={back} />,
+    <DayOneStep next={next} back={back} />,
     <Done    formData={form} onDone={handleDone} />,
   ]
 

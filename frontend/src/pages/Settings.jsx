@@ -4,6 +4,7 @@
  * Account tab now includes API Key management (reveal / copy / regenerate).
  */
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import api from '../services/api'
@@ -1562,6 +1563,24 @@ function SessionsSection() {
   )
 }
 
+function DayOneImportButton() {
+  const navigate = useNavigate()
+  return (
+    <button
+      onClick={() => navigate('/import/dayone')}
+      style={{
+        flexShrink: 0, padding: '9px 18px', borderRadius: 8,
+        background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))',
+        border: 'none', color: '#fff', fontSize: 12, fontWeight: 700,
+        fontFamily: 'Syne, sans-serif', cursor: 'pointer', whiteSpace: 'nowrap',
+        letterSpacing: '0.03em',
+      }}
+    >
+      Import →
+    </button>
+  )
+}
+
 // ─── Data Section ─────────────────────────────────────────────────────────────
 function DataSection() {
   const [stats, setStats] = useState(null)
@@ -1602,6 +1621,25 @@ function DataSection() {
               <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>{row.val}</span>
             </div>
           ))}
+        </div>
+      </Card>
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 13, color: 'var(--accent)' }}>⬆</span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Syne, sans-serif', color: 'rgba(255,255,255,0.88)' }}>Day One Migration</span>
+            </div>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', lineHeight: 1.6, margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>
+              Import your Day One journal history. Entries are fully analyzed — patterns, people, contradictions, and mood intelligence unlock instantly.
+            </p>
+            <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {['ZIP export', 'JSON export', 'Full pipeline'].map(tag => (
+                <span key={tag} style={{ fontSize: 9, padding: '2px 8px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 4, color: 'rgba(99,102,241,0.7)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em' }}>{tag}</span>
+              ))}
+            </div>
+          </div>
+          <DayOneImportButton />
         </div>
       </Card>
     </>

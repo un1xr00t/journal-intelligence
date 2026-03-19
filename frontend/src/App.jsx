@@ -25,6 +25,7 @@ import ExitPlanShareView from './pages/ExitPlanShareView'
 import JournalWrite from './pages/JournalWrite'
 import AskMyJournal from './pages/AskMyJournal'
 import EarlyWarning from './pages/EarlyWarning'
+import DayOneImport from './pages/DayOneImport'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
 import api from './services/api'
@@ -217,6 +218,7 @@ function Shell() {
             <Route path="/write" element={<ProtectedRoute><JournalWrite /></ProtectedRoute>} />
             <Route path="/ask" element={<ProtectedRoute><AskMyJournal /></ProtectedRoute>} />
             <Route path="/early-warning" element={<ProtectedRoute><EarlyWarning /></ProtectedRoute>} />
+            <Route path="/import/dayone" element={<ProtectedRoute><DayOneImport /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
