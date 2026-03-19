@@ -2136,3 +2136,6 @@ register_early_warning_routes(app, require_any_user)
 
 from src.api.totp_routes import register_totp_routes
 register_totp_routes(app, require_any_user)
+from src.api.passkey_routes import register_passkey_routes
+register_passkey_routes(app, require_any_user)
+

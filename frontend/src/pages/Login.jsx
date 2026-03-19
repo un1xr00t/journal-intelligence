@@ -22,6 +22,81 @@ export default function Login() {
   const { fetchTheme } = useTheme()
   const navigate = useNavigate()
 
+  // ── WebAuthn helpers ────────────────────────────────────────────────────────
+  function b64url(buffer) {
+    const bytes = new Uint8Array(buffer)
+    let str = ''
+    bytes.forEach(b => str += String.fromCharCode(b))
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+  }
+
+  function fromB64url(str) {
+    const base64 = str.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64 + '=='.slice(0, (4 - base64.length % 4) % 4)
+    const binary = atob(padded)
+    const buf = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i)
+    return buf.buffer
+  }
+
+  // ── Passkey sign-in ──────────────────────────────────────────────────────────
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
+
+  const handlePasskeyLogin = async () => {
+    if (!window.PublicKeyCredential) {
+      setError('This browser does not support passkeys.')
+      return
+    }
+    setPasskeyLoading(true)
+    setError('')
+    try {
+      const beginRes = await api.post('/auth/passkey/authenticate-begin', {})
+      const opts = beginRes.data
+      const challengeId = opts.challenge_id
+
+      const pkOpts = {
+        ...opts,
+        challenge: fromB64url(opts.challenge),
+        allowCredentials: (opts.allowCredentials || []).map(c => ({
+          ...c, id: fromB64url(c.id),
+        })),
+      }
+
+      let credential
+      try {
+        credential = await navigator.credentials.get({ publicKey: pkOpts })
+      } catch (e) {
+        if (e.name === 'NotAllowedError') { setError('Passkey sign-in was cancelled.'); return }
+        throw e
+      }
+
+      const serialised = {
+        id: credential.id,
+        rawId: b64url(credential.rawId),
+        type: credential.type,
+        authenticatorAttachment: credential.authenticatorAttachment,
+        response: {
+          clientDataJSON:    b64url(credential.response.clientDataJSON),
+          authenticatorData: b64url(credential.response.authenticatorData),
+          signature:         b64url(credential.response.signature),
+          userHandle: credential.response.userHandle ? b64url(credential.response.userHandle) : null,
+        },
+      }
+
+      const { data } = await api.post('/auth/passkey/authenticate-complete', {
+        challenge_id: challengeId,
+        credential: serialised,
+      })
+      setAccessToken(data.access_token)
+      localStorage.setItem('refresh_token', data.refresh_token)
+      completeLogin(data)
+      await fetchTheme()
+      navigate('/')
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Passkey sign-in failed. Try again.')
+    } finally { setPasskeyLoading(false) }
+  }
+
   // ── Step 1: username + password ──────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -176,6 +251,30 @@ export default function Login() {
             </form>
           )}
 
+
+          {/* ── Passkey sign-in ── */}
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <button
+              onClick={handlePasskeyLogin}
+              disabled={passkeyLoading}
+              style={{
+                width: '100%', padding: '10px 0',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8, color: 'rgba(255,255,255,0.5)',
+                fontSize: 12, fontWeight: 600,
+                fontFamily: 'Syne', letterSpacing: '0.04em',
+                cursor: passkeyLoading ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                transition: 'all 0.2s',
+                opacity: passkeyLoading ? 0.5 : 1,
+              }}
+              onMouseEnter={e => { if (!passkeyLoading) { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.75)' }}}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)' }}
+            >
+              {passkeyLoading ? 'Waiting for passkey…' : '◈ Sign in with passkey'}
+            </button>
+          </div>
           {/* ── 2FA step ── */}
           {totpRequired && (
             <div>

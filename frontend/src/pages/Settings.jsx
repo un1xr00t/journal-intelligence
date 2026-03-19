@@ -1211,6 +1211,222 @@ function TwoFactorCard() {
   )
 }
 
+
+// ─── PasskeyCard ─────────────────────────────────────────────────────────────
+function PasskeyCard() {
+  const [passkeys, setPasskeys]     = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [registering, setReg]       = useState(false)
+  const [deleting, setDeleting]     = useState(null)
+  const [deviceName, setDeviceName] = useState('')
+  const [status, setStatus]         = useState(null)
+
+  const load = async () => {
+    try {
+      const r = await api.get('/auth/passkey/list')
+      setPasskeys(r.data.passkeys || [])
+    } catch { setPasskeys([]) }
+    finally { setLoading(false) }
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [])
+
+  // ── WebAuthn helpers ──────────────────────────────────────────────────────
+  function b64url(buffer) {
+    const bytes = new Uint8Array(buffer)
+    let str = ''
+    bytes.forEach(b => str += String.fromCharCode(b))
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+  }
+
+  function fromB64url(str) {
+    const base64 = str.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64 + '=='.slice(0, (4 - base64.length % 4) % 4)
+    const binary = atob(padded)
+    const buf = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i)
+    return buf.buffer
+  }
+
+  function prepareRegOptions(opts) {
+    return {
+      ...opts,
+      challenge: fromB64url(opts.challenge),
+      user: { ...opts.user, id: fromB64url(opts.user.id) },
+      excludeCredentials: (opts.excludeCredentials || []).map(c => ({
+        ...c, id: fromB64url(c.id),
+      })),
+    }
+  }
+
+  function serializeRegCred(cred) {
+    return {
+      id: cred.id,
+      rawId: b64url(cred.rawId),
+      type: cred.type,
+      authenticatorAttachment: cred.authenticatorAttachment,
+      response: {
+        clientDataJSON:   b64url(cred.response.clientDataJSON),
+        attestationObject: b64url(cred.response.attestationObject),
+        transports: cred.response.getTransports ? cred.response.getTransports() : [],
+      },
+    }
+  }
+
+  // ── Register flow ─────────────────────────────────────────────────────────
+  const handleAddPasskey = async () => {
+    if (!window.PublicKeyCredential) {
+      setStatus({ type: 'error', msg: 'This browser does not support passkeys.' })
+      return
+    }
+    setReg(true)
+    setStatus(null)
+    try {
+      const beginRes = await api.post('/auth/passkey/register-begin')
+      const opts = prepareRegOptions(beginRes.data)
+      const challengeId = beginRes.data.challenge_id
+
+      let credential
+      try {
+        credential = await navigator.credentials.create({ publicKey: opts })
+      } catch (e) {
+        if (e.name === 'NotAllowedError') {
+          setStatus({ type: 'info', msg: 'Passkey setup was cancelled.' })
+          return
+        }
+        throw e
+      }
+
+      const serialised = serializeRegCred(credential)
+      await api.post('/auth/passkey/register-complete', {
+        challenge_id: challengeId,
+        credential: serialised,
+        device_name: deviceName.trim() || undefined,
+      })
+
+      setStatus({ type: 'success', msg: 'Passkey registered! You can now sign in with biometrics.' })
+      setDeviceName('')
+      await load()
+    } catch (e) {
+      const msg = e.response?.data?.detail || e.message || 'Registration failed. Try again.'
+      setStatus({ type: 'error', msg })
+    } finally { setReg(false) }
+  }
+
+  // ── Delete flow ───────────────────────────────────────────────────────────
+  const handleDelete = async (credId) => {
+    setDeleting(credId)
+    setStatus(null)
+    try {
+      await api.post('/auth/passkey/delete', { credential_id: credId })
+      setPasskeys(ps => ps.filter(p => p.credential_id !== credId))
+      setStatus({ type: 'success', msg: 'Passkey removed.' })
+    } catch (e) {
+      setStatus({ type: 'error', msg: e.response?.data?.detail || 'Could not remove passkey.' })
+    } finally { setDeleting(null) }
+  }
+
+  const fmt = (dt) => dt ? new Date(dt + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <Label>Passkeys / Biometric Login</Label>
+        {!loading && (
+          <span style={{
+            fontSize: 9, fontFamily: "'IBM Plex Mono', monospace", textTransform: 'uppercase',
+            letterSpacing: '0.08em', padding: '2px 7px', borderRadius: 4,
+            background: passkeys.length ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+            border: passkeys.length ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(255,255,255,0.1)',
+            color: passkeys.length ? '#4ade80' : 'rgba(255,255,255,0.3)',
+          }}>
+            {passkeys.length ? `◉ ${passkeys.length} enrolled` : '◎ None enrolled'}
+          </span>
+        )}
+      </div>
+
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1.6, marginBottom: 16 }}>
+        Sign in with Face ID, Touch ID, or a hardware security key — no password needed.
+        Works on iPhone, Mac, Android, and Windows Hello.
+      </p>
+
+      {/* Enrolled passkeys list */}
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(255,255,255,0.22)', fontSize: 12 }}><Spin s={11} />Loading…</div>
+      ) : passkeys.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          {passkeys.map(pk => (
+            <div key={pk.credential_id} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 12px', background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8,
+            }}>
+              <span style={{ fontSize: 14, opacity: 0.6 }}>◈</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)', fontFamily: 'Syne, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {pk.device_name}
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 1 }}>
+                  Added {fmt(pk.created_at)}
+                  {pk.last_used_at ? ` · Last used ${fmt(pk.last_used_at)}` : ''}
+                </div>
+              </div>
+              <button
+                onClick={() => handleDelete(pk.credential_id)}
+                disabled={deleting === pk.credential_id}
+                style={{
+                  padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                  fontFamily: 'Syne, sans-serif', cursor: deleting === pk.credential_id ? 'not-allowed' : 'pointer',
+                  background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)',
+                  color: 'rgba(248,113,113,0.7)', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                {deleting === pk.credential_id ? <><Spin s={9} /></> : '✕ Remove'}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Add passkey */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          value={deviceName}
+          onChange={e => setDeviceName(e.target.value)}
+          placeholder="Nickname (e.g. MacBook Pro, iPhone 15)"
+          style={{
+            flex: 1, padding: '8px 11px', boxSizing: 'border-box',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 7, color: 'rgba(255,255,255,0.88)',
+            fontSize: 12, outline: 'none', fontFamily: "'DM Sans', sans-serif",
+          }}
+          onFocus={e => e.target.style.borderColor = 'var(--accent,#6366f1)'}
+          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
+        />
+        <button
+          onClick={handleAddPasskey}
+          disabled={registering}
+          style={{
+            padding: '8px 16px', borderRadius: 7, fontSize: 11, fontWeight: 700,
+            fontFamily: 'Syne, sans-serif', cursor: registering ? 'not-allowed' : 'pointer',
+            background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)',
+            color: 'rgba(255,255,255,0.55)', flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: 6,
+            opacity: registering ? 0.6 : 1,
+          }}
+        >
+          {registering ? <><Spin s={10} />Registering…</> : '◈ Add passkey'}
+        </button>
+      </div>
+
+      {status && <div style={{ marginTop: 10 }}><StatusBadge type={status.type} msg={status.msg} /></div>}
+    </Card>
+  )
+}
+
 // ─── Account Section ──────────────────────────────────────────────────────────
 function AccountSection({ user }) {
   const [currentPw, setCurrentPw] = useState('')
@@ -1242,6 +1458,9 @@ function AccountSection({ user }) {
 
       {/* 2FA */}
       <TwoFactorCard />
+
+      {/* Passkeys */}
+      <PasskeyCard />
 
       {/* Password change card */}
       <Card>
