@@ -24,6 +24,8 @@ import ExitPlanFull from './pages/ExitPlanFull'
 import ExitPlanShareView from './pages/ExitPlanShareView'
 import JournalWrite from './pages/JournalWrite'
 import AskMyJournal from './pages/AskMyJournal'
+import EarlyWarning from './pages/EarlyWarning'
+import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
 import api from './services/api'
 
@@ -85,6 +87,7 @@ function Shell() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', overflow: 'hidden' }}>
       {user && <CrisisBanner />}
+      {user && <EarlyWarningBanner />}
       {/* Mobile top bar */}
       {isMobile && !hideSidebar && user && (
         <div style={{
@@ -213,6 +216,7 @@ function Shell() {
             <Route path="/exitplan-full"   element={<ProtectedRoute><ExitPlanFull /></ProtectedRoute>} />
             <Route path="/write" element={<ProtectedRoute><JournalWrite /></ProtectedRoute>} />
             <Route path="/ask" element={<ProtectedRoute><AskMyJournal /></ProtectedRoute>} />
+            <Route path="/early-warning" element={<ProtectedRoute><EarlyWarning /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>

@@ -2111,3 +2111,6 @@ async def get_theme(current_user: dict = Depends(require_any_user)):
 
 from src.api.crisis_routes import register_crisis_routes
 register_crisis_routes(app, require_any_user)
+
+from src.api.early_warning_routes import register_early_warning_routes
+register_early_warning_routes(app, require_any_user)
