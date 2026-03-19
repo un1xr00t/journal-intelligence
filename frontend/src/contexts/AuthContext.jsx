@@ -42,6 +42,8 @@ export function AuthProvider({ children }) {
     // spinner on the login/account form handles loading UI instead.
     try {
       const data = await doLogin(username, password)
+      // 2FA pending — return raw data, Login.jsx handles the TOTP step
+      if (data?.requires_2fa) return data
       dispatch({ type: 'SET_USER', user: data.user })
       return data
     } catch (err) {
@@ -51,13 +53,18 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // Called by Login.jsx after TOTP / backup-code verification succeeds
+  const completeLogin = (data) => {
+    dispatch({ type: 'SET_USER', user: data.user })
+  }
+
   const logout = async () => {
     await doLogout()
     dispatch({ type: 'LOGOUT' })
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, login, logout, completeLogin }}>
       {children}
     </AuthContext.Provider>
   )

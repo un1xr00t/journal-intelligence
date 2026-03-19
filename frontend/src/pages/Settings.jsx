@@ -1020,6 +1020,197 @@ function SecurityQuestionsCard() {
   )
 }
 
+// \u2500\u2500\u2500 TwoFactorCard \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function TwoFactorCard() {
+  const [phase, setPhase]               = useState('loading')
+  const [enabled, setEnabled]           = useState(false)
+  const [backupRemaining, setRemaining] = useState(0)
+  const [qrBase64, setQr]              = useState('')
+  const [secret, setSecret]            = useState('')
+  const [backupCodes, setBackupCodes]  = useState([])
+  const [totpCode, setTotpCode]        = useState('')
+  const [disableCode, setDisableCode]  = useState('')
+  const [status, setStatus]            = useState(null)
+  const [saving, setSaving]            = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.get('/auth/2fa/status')
+      setEnabled(r.data.enabled)
+      setRemaining(r.data.backup_codes_remaining)
+      setPhase('idle')
+    } catch { setPhase('idle') }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSetup = async () => {
+    setSaving(true); setStatus(null)
+    try {
+      const r = await api.post('/auth/2fa/setup')
+      setQr(r.data.qr_base64)
+      setSecret(r.data.secret)
+      setBackupCodes(r.data.backup_codes)
+      setPhase('setup')
+    } catch (e) {
+      setStatus({ type: 'error', msg: e.response?.data?.detail || 'Setup failed' })
+    } finally { setSaving(false) }
+  }
+
+  const handleEnable = async () => {
+    const code = totpCode.replace(/\s/g, '')
+    if (code.length !== 6) { setStatus({ type: 'error', msg: 'Enter the 6-digit code from your authenticator' }); return }
+    setSaving(true); setStatus(null)
+    try {
+      await api.post('/auth/2fa/enable', { totp_code: code })
+      await load()
+      setPhase('idle')
+      setTotpCode('')
+      setStatus({ type: 'success', msg: '2FA enabled. Store your backup codes somewhere safe.' })
+    } catch (e) {
+      setStatus({ type: 'error', msg: e.response?.data?.detail || 'Invalid code' })
+    } finally { setSaving(false) }
+  }
+
+  const handleDisable = async () => {
+    if (!disableCode.trim()) { setStatus({ type: 'error', msg: 'Enter your current authenticator code' }); return }
+    setSaving(true); setStatus(null)
+    try {
+      await api.post('/auth/2fa/disable', { totp_code: disableCode.trim() })
+      setEnabled(false)
+      setPhase('idle')
+      setDisableCode('')
+      setStatus({ type: 'success', msg: '2FA has been disabled.' })
+    } catch (e) {
+      setStatus({ type: 'error', msg: e.response?.data?.detail || 'Invalid code' })
+    } finally { setSaving(false) }
+  }
+
+  if (phase === 'loading') return null
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <Label>Two-Factor Authentication</Label>
+        {phase === 'idle' && (
+          <span style={{
+            fontSize: 9, fontFamily: "'IBM Plex Mono', monospace", textTransform: 'uppercase',
+            letterSpacing: '0.08em', padding: '2px 7px', borderRadius: 4,
+            background: enabled ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+            border: enabled ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(255,255,255,0.1)',
+            color: enabled ? '#4ade80' : 'rgba(255,255,255,0.3)',
+          }}>
+            {enabled ? '◉ Enabled' : '◎ Disabled'}
+          </span>
+        )}
+      </div>
+
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1.6, marginBottom: 14 }}>
+        {enabled
+          ? `TOTP authenticator active. ${backupRemaining} backup code${backupRemaining !== 1 ? 's' : ''} remaining.`
+          : 'Add a second layer of protection. Use Google Authenticator, Authy, or any TOTP app.'}
+      </p>
+
+      {phase === 'idle' && !enabled && (
+        <button
+          onClick={handleSetup} disabled={saving}
+          style={{ padding: '8px 18px', borderRadius: 7, fontSize: 11, fontWeight: 700, fontFamily: 'Syne, sans-serif', cursor: saving ? 'not-allowed' : 'pointer', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          {saving ? <><Spin s={10} /> Setting up…</> : '◉ Enable 2FA'}
+        </button>
+      )}
+
+      {phase === 'idle' && enabled && (
+        <button
+          onClick={() => { setPhase('disable_confirm'); setStatus(null); setDisableCode('') }}
+          style={{ padding: '8px 18px', borderRadius: 7, fontSize: 11, fontWeight: 700, fontFamily: 'Syne, sans-serif', cursor: 'pointer', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', color: 'rgba(248,113,113,0.7)' }}
+        >
+          ✕ Disable 2FA
+        </button>
+      )}
+
+      {phase === 'setup' && (
+        <>
+          <div style={{ display: 'flex', gap: 20, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontFamily: "'IBM Plex Mono', monospace", marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Scan with your authenticator app</div>
+              {qrBase64 && (
+                <img
+                  src={`data:image/png;base64,${qrBase64}`}
+                  alt="TOTP QR code"
+                  style={{ width: 160, height: 160, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: '#fff', padding: 4, display: 'block' }}
+                />
+              )}
+              <div style={{ marginTop: 8, fontSize: 10, color: 'rgba(255,255,255,0.22)', fontFamily: "'IBM Plex Mono', monospace", wordBreak: 'break-all' }}>
+                Manual: <span style={{ color: 'rgba(255,255,255,0.45)', letterSpacing: '0.06em' }}>{secret}</span>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontFamily: "'IBM Plex Mono', monospace", marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Backup codes — save these now</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                {backupCodes.map((c, i) => (
+                  <div key={i} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(255,255,255,0.65)', padding: '4px 8px', background: 'rgba(255,255,255,0.04)', borderRadius: 5, letterSpacing: '0.05em' }}>{c}</div>
+                ))}
+              </div>
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 8, lineHeight: 1.5 }}>Each code is single-use. Store in a password manager.</p>
+            </div>
+          </div>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 14 }} />
+          <Label>Enter the 6-digit code from your app to confirm</Label>
+          <TInput
+            val={totpCode}
+            set={v => setTotpCode(v.replace(/\D/g, '').slice(0, 6))}
+            placeholder="000000"
+          />
+          {status && <div style={{ marginTop: 8 }}><StatusBadge type={status.type} msg={status.msg} /></div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button
+              onClick={() => { setPhase('idle'); setStatus(null); setTotpCode('') }}
+              style={{ padding: '8px 16px', borderRadius: 7, fontSize: 11, fontWeight: 600, fontFamily: 'Syne, sans-serif', cursor: 'pointer', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }}
+            >
+              Cancel
+            </button>
+            <SaveBtn saving={saving} saved={false} onClick={handleEnable} label="Activate 2FA" />
+          </div>
+        </>
+      )}
+
+      {phase === 'disable_confirm' && (
+        <>
+          <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: 8, marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: '#f87171', fontFamily: "'IBM Plex Mono', monospace" }}>Enter your current 2FA code to confirm.</div>
+          </div>
+          <Label>Authenticator Code</Label>
+          <TInput
+            val={disableCode}
+            set={v => setDisableCode(v.replace(/\D/g, '').slice(0, 6))}
+            placeholder="000000"
+          />
+          {status && <div style={{ marginTop: 8 }}><StatusBadge type={status.type} msg={status.msg} /></div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button
+              onClick={() => { setPhase('idle'); setStatus(null); setDisableCode('') }}
+              style={{ padding: '8px 16px', borderRadius: 7, fontSize: 11, fontWeight: 600, fontFamily: 'Syne, sans-serif', cursor: 'pointer', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDisable} disabled={saving}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 11, fontWeight: 700, fontFamily: 'Syne, sans-serif', cursor: saving ? 'not-allowed' : 'pointer', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              {saving ? <><Spin s={11} /> Disabling…</> : 'Confirm Disable'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === 'idle' && status && (
+        <div style={{ marginTop: 12 }}><StatusBadge type={status.type} msg={status.msg} /></div>
+      )}
+    </Card>
+  )
+}
+
 // ─── Account Section ──────────────────────────────────────────────────────────
 function AccountSection({ user }) {
   const [currentPw, setCurrentPw] = useState('')
@@ -1048,6 +1239,9 @@ function AccountSection({ user }) {
 
       {/* Recovery questions */}
       <SecurityQuestionsCard />
+
+      {/* 2FA */}
+      <TwoFactorCard />
 
       {/* Password change card */}
       <Card>

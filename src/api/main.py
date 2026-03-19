@@ -150,7 +150,7 @@ async def health_check():
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
 
-@app.post("/auth/login", response_model=TokenResponse)
+@app.post("/auth/login")
 async def login(request: Request, body: LoginRequest):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
@@ -182,6 +182,25 @@ async def login(request: Request, body: LoginRequest):
                        details={"reason": "account_deactivated"})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Account is deactivated")
+
+    # ── 2FA check ──────────────────────────────────────────────────────────
+    from src.auth.auth_db import get_db as _get_2fa_db
+    _2fa_conn = _get_2fa_db()
+    try:
+        _totp_row = _2fa_conn.execute(
+            "SELECT enabled FROM totp_secrets WHERE user_id = ? AND enabled = 1",
+            (user["id"],)
+        ).fetchone()
+    finally:
+        _2fa_conn.close()
+
+    if _totp_row:
+        from src.api.totp_routes import create_partial_token
+        return {
+            "requires_2fa": True,
+            "partial_token": create_partial_token(user["id"]),
+        }
+    # ──────────────────────────────────────────────────────────────────────
 
     tokens = create_token_pair(user["id"], user["username"], user["role"])
 
@@ -2114,3 +2133,6 @@ register_crisis_routes(app, require_any_user)
 
 from src.api.early_warning_routes import register_early_warning_routes
 register_early_warning_routes(app, require_any_user)
+
+from src.api.totp_routes import register_totp_routes
+register_totp_routes(app, require_any_user)
