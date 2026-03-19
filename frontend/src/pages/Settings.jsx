@@ -814,6 +814,212 @@ function ApiKeyCard() {
   )
 }
 
+
+// ─── Security Questions Card ──────────────────────────────────────────────────
+const SQ_BANK = [
+  "What was the name of your first pet?",
+  "What city were you born in?",
+  "What is your mother's maiden name?",
+  "What was the name of your first school?",
+  "What was the make and model of your first car?",
+  "What is the middle name of your oldest sibling?",
+  "What street did you grow up on?",
+  "What was the name of your childhood best friend?",
+  "What is the name of the town where your nearest relative lives?",
+  "What was your childhood nickname?",
+  "What is the name of the hospital where you were born?",
+  "What was the first concert you attended?",
+]
+
+function SecurityQuestionsCard() {
+  const [phase, setPhase]       = useState('loading') // loading|idle|gate|form|saved
+  const [hasQs, setHasQs]       = useState(false)
+  const [password, setPassword] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [q1, setQ1] = useState(SQ_BANK[0])
+  const [q2, setQ2] = useState(SQ_BANK[1])
+  const [q3, setQ3] = useState(SQ_BANK[2])
+  const [a1, setA1] = useState('')
+  const [a2, setA2] = useState('')
+  const [a3, setA3] = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [status, setStatus]     = useState(null)
+
+  useEffect(() => {
+    api.get('/auth/security-questions/has-questions')
+      .then(r => { setHasQs(r.data.has_questions); setPhase('idle') })
+      .catch(() => setPhase('idle'))
+  }, [])
+
+  const usedQs = [q1, q2, q3]
+  const opts = (self) => SQ_BANK.filter(q => q === self || !usedQs.includes(q))
+
+  const handleVerifyPassword = async () => {
+    if (!password.trim()) return
+    setVerifying(true); setStatus(null)
+    try {
+      await api.post('/auth/verify-password', { password })
+      setPhase('form')
+      setPassword('')
+    } catch (e) {
+      setStatus({ type: 'error', msg: e.response?.data?.detail || 'Incorrect password.' })
+    } finally { setVerifying(false) }
+  }
+
+  const handleSave = async () => {
+    if (!a1.trim() || !a2.trim() || !a3.trim()) {
+      setStatus({ type: 'error', msg: 'Please answer all three questions.' }); return
+    }
+    if (new Set([q1, q2, q3]).size < 3) {
+      setStatus({ type: 'error', msg: 'Please choose three different questions.' }); return
+    }
+    setSaving(true); setStatus(null)
+    try {
+      await api.post('/auth/security-questions/setup', {
+        question_1: q1, answer_1: a1,
+        question_2: q2, answer_2: a2,
+        question_3: q3, answer_3: a3,
+      })
+      setHasQs(true)
+      setPhase('saved')
+      setA1(''); setA2(''); setA3('')
+      setTimeout(() => setPhase('idle'), 3000)
+    } catch (e) {
+      setStatus({ type: 'error', msg: e.response?.data?.detail || 'Failed to save.' })
+    } finally { setSaving(false) }
+  }
+
+  const selectStyle = {
+    width: '100%', padding: '9px 28px 9px 12px', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 7, color: 'rgba(255,255,255,0.88)', fontSize: 12, outline: 'none',
+    fontFamily: "'DM Sans', sans-serif", marginBottom: 6, appearance: 'none',
+    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,0.28)'/%3E%3C/svg%3E\")",
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center',
+  }
+
+  if (phase === 'loading') return null
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <Label>Recovery Questions</Label>
+        {phase === 'idle' && (
+          <span style={{
+            fontSize: 9, fontFamily: "'IBM Plex Mono', monospace", textTransform: 'uppercase',
+            letterSpacing: '0.08em', padding: '2px 7px', borderRadius: 4,
+            background: hasQs ? 'rgba(34,197,94,0.1)' : 'rgba(234,179,8,0.08)',
+            border: hasQs ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(234,179,8,0.2)',
+            color: hasQs ? '#4ade80' : '#fbbf24',
+          }}>
+            {hasQs ? '◉ Configured' : '⚠ Not set up'}
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1.6, marginBottom: 14 }}>
+        {hasQs
+          ? 'Offline recovery is active. You can update your questions below.'
+          : 'Set up security questions so you can recover your account without email access.'}
+      </p>
+
+      {/* ── idle: show open button ── */}
+      {phase === 'idle' && (
+        <button
+          onClick={() => { setStatus(null); setPhase('gate') }}
+          style={{
+            padding: '8px 18px', borderRadius: 7, fontSize: 11, fontWeight: 700,
+            fontFamily: 'Syne, sans-serif', cursor: 'pointer',
+            background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)',
+            color: 'rgba(255,255,255,0.55)',
+          }}
+        >
+          {hasQs ? '↻ Update questions' : '◉ Set up recovery questions'}
+        </button>
+      )}
+
+      {/* ── gate: password confirm ── */}
+      {phase === 'gate' && (
+        <>
+          <div style={{ padding: '12px 14px', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.18)', borderRadius: 8, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: '#fbbf24', fontFamily: "'IBM Plex Mono', monospace", lineHeight: 1.6 }}>
+              Enter your current password to continue.
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <Label>Current Password</Label>
+            <TInput
+              val={password} set={setPassword} type="password"
+              placeholder="Your current password"
+            />
+          </div>
+          {status && <StatusBadge type={status.type} msg={status.msg} />}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button
+              onClick={() => { setPhase('idle'); setPassword(''); setStatus(null) }}
+              style={{ padding: '8px 16px', borderRadius: 7, fontSize: 11, fontWeight: 600, fontFamily: 'Syne, sans-serif', cursor: 'pointer', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleVerifyPassword}
+              disabled={verifying || !password.trim()}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 11, fontWeight: 700,
+                fontFamily: 'Syne, sans-serif',
+                cursor: verifying || !password.trim() ? 'not-allowed' : 'pointer',
+                background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))',
+                border: 'none', color: '#fff',
+                opacity: verifying || !password.trim() ? 0.5 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              {verifying ? <><Spin s={11} />Verifying…</> : 'Confirm →'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── form: question setup ── */}
+      {phase === 'form' && (
+        <>
+          {[
+            { label: 'Question 1', q: q1, setQ: setQ1, a: a1, setA: setA1 },
+            { label: 'Question 2', q: q2, setQ: setQ2, a: a2, setA: setA2 },
+            { label: 'Question 3', q: q3, setQ: setQ3, a: a3, setA: setA3 },
+          ].map((item, i) => (
+            <div key={i} style={{ marginBottom: 16 }}>
+              <Label>{item.label}</Label>
+              <select value={item.q} onChange={e => item.setQ(e.target.value)} style={selectStyle}>
+                {opts(item.q).map(qo => (
+                  <option key={qo} value={qo} style={{ background: '#0d0d1e', color: 'rgba(255,255,255,0.88)' }}>{qo}</option>
+                ))}
+              </select>
+              <TInput val={item.a} set={item.setA} placeholder="Your answer (not case-sensitive)" />
+            </div>
+          ))}
+          {status && <StatusBadge type={status.type} msg={status.msg} />}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button
+              onClick={() => { setPhase('idle'); setStatus(null) }}
+              style={{ padding: '8px 16px', borderRadius: 7, fontSize: 11, fontWeight: 600, fontFamily: 'Syne, sans-serif', cursor: 'pointer', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' }}
+            >
+              Cancel
+            </button>
+            <SaveBtn saving={saving} saved={false} onClick={handleSave} label="Save Questions" />
+          </div>
+        </>
+      )}
+
+      {/* ── saved: success flash ── */}
+      {phase === 'saved' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#4ade80', fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span>✓</span> Recovery questions saved successfully.
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // ─── Account Section ──────────────────────────────────────────────────────────
 function AccountSection({ user }) {
   const [currentPw, setCurrentPw] = useState('')
@@ -839,6 +1045,9 @@ function AccountSection({ user }) {
     <>
       {/* API Key card — shown to all users */}
       <ApiKeyCard />
+
+      {/* Recovery questions */}
+      <SecurityQuestionsCard />
 
       {/* Password change card */}
       <Card>

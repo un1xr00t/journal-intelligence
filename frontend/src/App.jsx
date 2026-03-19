@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar'
 import Login from './pages/Login'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import RecoverViaQuestions from './pages/RecoverViaQuestions'
 import Onboarding from './pages/Onboarding'
 import Timeline from './pages/Timeline'
 import Patterns from './pages/Patterns'
@@ -55,7 +56,7 @@ function Shell() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
 
   // Pages with no sidebar and no padding — either public or full-screen tool pages
-  const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding' || location.pathname.startsWith('/share/') || location.pathname.startsWith('/share/')
+  const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname === '/recover-via-questions' || location.pathname.startsWith('/share/') || location.pathname.startsWith('/share/')
   const isFullscreenPage = location.pathname === '/exitplan-full'
   const isWritePage      = location.pathname === '/write'
   const hideSidebar      = isPublicPage || isFullscreenPage || isWritePage
@@ -195,6 +196,7 @@ function Shell() {
             <Route path="/login"           element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/recover-via-questions" element={<RecoverViaQuestions />} />
             <Route path="/onboarding"      element={<Onboarding />} />
             <Route path="/"                element={<ProtectedRoute><Timeline filters={filters} /></ProtectedRoute>} />
             <Route path="/patterns"        element={<ProtectedRoute><Patterns /></ProtectedRoute>} />

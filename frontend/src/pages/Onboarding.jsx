@@ -17,6 +17,7 @@ const STEPS = [
   { id: 'topics',    icon: '⬡', label: 'Topics'    },
   { id: 'goals',     icon: '⊕', label: 'Goals'     },
   { id: 'account',   icon: '⊞', label: 'Account'   },
+  { id: 'security',  icon: '◉', label: 'Recovery'  },
   { id: 'ai_key',    icon: '⊙', label: 'AI Setup'  },
   { id: 'memory',    icon: '◷', label: 'Memory'    },
   { id: 'done',      icon: '〇', label: 'All Set'   },
@@ -579,6 +580,122 @@ function Memory({ formData, next, back }) {
   )
 }
 
+
+const SECURITY_QUESTIONS_BANK = [
+  "What was the name of your first pet?",
+  "What city were you born in?",
+  "What is your mother's maiden name?",
+  "What was the name of your first school?",
+  "What was the make and model of your first car?",
+  "What is the middle name of your oldest sibling?",
+  "What street did you grow up on?",
+  "What was the name of your childhood best friend?",
+  "What is the name of the town where your nearest relative lives?",
+  "What was your childhood nickname?",
+  "What is the name of the hospital where you were born?",
+  "What was the first concert you attended?",
+]
+
+function SecurityQuestions({ next, back }) {
+  const [q1, setQ1] = useState(SECURITY_QUESTIONS_BANK[0])
+  const [q2, setQ2] = useState(SECURITY_QUESTIONS_BANK[1])
+  const [q3, setQ3] = useState(SECURITY_QUESTIONS_BANK[2])
+  const [a1, setA1] = useState('')
+  const [a2, setA2] = useState('')
+  const [a3, setA3] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const qStyle = {
+    width: '100%', padding: '8px 11px', marginBottom: 8, boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 8, color: 'rgba(255,255,255,0.88)', fontSize: 12, outline: 'none',
+    fontFamily: "'DM Sans',sans-serif", appearance: 'none',
+  }
+
+  const usedQs = [q1, q2, q3]
+  const opts = (self) => SECURITY_QUESTIONS_BANK.filter(q => q === self || !usedQs.includes(q))
+
+  const handleSave = async () => {
+    if (!a1.trim() || !a2.trim() || !a3.trim()) {
+      setErr('Please answer all three questions.')
+      return
+    }
+    if (new Set([q1, q2, q3]).size < 3) {
+      setErr('Please choose three different questions.')
+      return
+    }
+    setSaving(true); setErr('')
+    try {
+      await api.post('/auth/security-questions/setup', {
+        question_1: q1, answer_1: a1,
+        question_2: q2, answer_2: a2,
+        question_3: q3, answer_3: a3,
+      })
+      next()
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Failed to save. You can set this up later in Settings.')
+    } finally { setSaving(false) }
+  }
+
+  const selectStyle = {
+    ...qStyle,
+    marginBottom: 6,
+    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,0.28)'/%3E%3C/svg%3E\")",
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 10px center',
+    paddingRight: 28,
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontFamily:'Syne,sans-serif', fontWeight:800, fontSize:22, color:'rgba(255,255,255,0.88)', marginBottom:4 }}>Recovery questions</h2>
+      <p style={{ fontSize:12, color:'rgba(255,255,255,0.28)', lineHeight:1.6, marginBottom:20 }}>
+        If you ever lose email access, these let you reset your password offline.
+        Answers are hashed — we never store them in plain text.
+      </p>
+
+      {[
+        { label:'Question 1', q:q1, setQ:setQ1, a:a1, setA:setA1 },
+        { label:'Question 2', q:q2, setQ:setQ2, a:a2, setA:setA2 },
+        { label:'Question 3', q:q3, setQ:setQ3, a:a3, setA:setA3 },
+      ].map((item, i) => (
+        <div key={i} style={{ marginBottom:16 }}>
+          <Label c={item.label} />
+          <select value={item.q} onChange={e => item.setQ(e.target.value)} style={selectStyle}>
+            {opts(item.q).map(qo => <option key={qo} value={qo} style={{ background:'#0d0d1e', color:'rgba(255,255,255,0.88)' }}>{qo}</option>)}
+          </select>
+          <TInput
+            val={item.a} set={item.setA}
+            placeholder="Your answer (not case-sensitive)"
+          />
+        </div>
+      ))}
+
+      {err && <Err m={err} />}
+
+      <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:18 }}>
+        <PrimaryBtn onClick={handleSave} disabled={saving} full>
+          {saving ? <Spin s={13} /> : '◉ Save & Continue →'}
+        </PrimaryBtn>
+        <button onClick={() => next()} style={{
+          background:'rgba(255,255,255,0.04)',
+          border:'1px solid rgba(255,255,255,0.14)',
+          borderRadius:8, cursor:'pointer', fontSize:12,
+          fontFamily:"'IBM Plex Mono',monospace", color:'rgba(255,255,255,0.5)',
+          padding:'9px 0', width:'100%', letterSpacing:'0.02em',
+        }}>
+          Skip for now — add recovery questions later in Settings
+        </button>
+        <button onClick={back} style={{
+          background:'none', border:'none', cursor:'pointer',
+          fontSize:11, color:'rgba(255,255,255,0.18)', padding:'4px 0',
+        }}>← Back</button>
+      </div>
+    </div>
+  )
+}
+
 const AI_PROVIDERS = [
   { id: 'anthropic',     icon: '✦', label: 'Anthropic Claude',  desc: 'Claude Sonnet / Haiku / Opus', needsUrl: false },
   { id: 'openai',        icon: '⊕', label: 'OpenAI',            desc: 'GPT-4o, GPT-4o-mini…',        needsUrl: false },
@@ -778,6 +895,7 @@ export default function Onboarding() {
     <Topics  d={form} set={upd} next={next} back={back} />,
     <Goals   d={form} set={upd} next={next} back={back} />,
     <Account d={form} set={upd} next={next} back={back} onReg={handleReg} />,
+    <SecurityQuestions next={next} back={back} />,
     <AIProviderStep next={next} back={back} />,
     <Memory  formData={form} next={next} back={back} />,
     <Done    formData={form} onDone={handleDone} />,

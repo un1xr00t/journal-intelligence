@@ -2064,6 +2064,8 @@ register_exit_plan_share_routes(app, require_any_user, require_owner)
 
 from src.api.auth_routes import register_auth_routes
 register_auth_routes(app, require_any_user)
+from src.api.security_questions_routes import register_security_questions_routes
+register_security_questions_routes(app, require_any_user)
 from src.api.password_reset_routes import register_password_reset_routes
 register_password_reset_routes(app)
 

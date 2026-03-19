@@ -128,7 +128,15 @@ export default function ForgotPassword() {
         </div>
 
         {!sent && (
-          <div style={{ textAlign: 'center', marginTop: 20 }}>
+          <div style={{ textAlign: 'center', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span
+              onClick={() => navigate('/recover-via-questions')}
+              style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'DM Sans', cursor: 'pointer' }}
+              onMouseEnter={e => e.target.style.color = 'var(--accent)'}
+              onMouseLeave={e => e.target.style.color = 'var(--text-muted)'}
+            >
+              ◉ Use security questions instead
+            </span>
             <span
               onClick={() => navigate('/login')}
               style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'DM Sans', cursor: 'pointer' }}
