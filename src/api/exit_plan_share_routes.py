@@ -339,7 +339,7 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
     @app.post("/api/exit-plan/share")
     def create_share_token(
         body: CreateShareTokenRequest,
-        current_user: dict = Depends(require_owner),
+        current_user: dict = Depends(require_any_user),
     ):
         user_id = current_user["id"]
         conn    = _db()
@@ -403,7 +403,7 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
     # ── List ──────────────────────────────────────────────────────────────────
 
     @app.get("/api/exit-plan/share")
-    def list_share_tokens(current_user: dict = Depends(require_owner)):
+    def list_share_tokens(current_user: dict = Depends(require_any_user)):
         user_id = current_user["id"]
         conn    = _db()
 
@@ -427,7 +427,7 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
     @app.delete("/api/exit-plan/share/{token_id}")
     def revoke_share_token(
         token_id: int,
-        current_user: dict = Depends(require_owner),
+        current_user: dict = Depends(require_any_user),
     ):
         user_id = current_user["id"]
         conn    = _db()
@@ -452,7 +452,7 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
     @app.post("/api/exit-plan/share/{token_id}/regenerate-passphrase")
     def regenerate_share_passphrase(
         token_id: int,
-        current_user: dict = Depends(require_owner),
+        current_user: dict = Depends(require_any_user),
     ):
         user_id = current_user["id"]
         conn    = _db()

@@ -151,7 +151,7 @@ async def health_check():
 # ── Auth routes ───────────────────────────────────────────────────────────────
 
 @app.post("/auth/login")
-async def login(request: Request, body: LoginRequest, response: Response):
+async def login(request: Request, body: LoginRequest):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
 
@@ -216,17 +216,6 @@ async def login(request: Request, body: LoginRequest, response: Response):
     reset_rate_limit(ip, "login")
     log_auth_event("login", user_id=user["id"], ip_address=ip, user_agent=ua)
 
-    response = Response()
-    response.set_cookie(
-        key="refresh_token",
-        value=tokens["refresh_token"],
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        max_age=30 * 24 * 3600,
-        path="/",
-    )
-    import json
     from fastapi.responses import JSONResponse
     resp_data = {
         "access_token": tokens["access_token"],
