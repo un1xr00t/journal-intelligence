@@ -41,11 +41,15 @@ These are the features that make this different from a notes app with an API key
 
 **🗺 AI-generated exit plan** — If your journal signals you're navigating something serious — leaving a relationship, financial instability, safety concerns — the system builds you a personalized, phased exit plan based entirely on your journal context. Five phases, tasks tailored to your situation, resource links per task, private scratchpad the AI never reads. As you keep writing, it offers incremental updates. You approve everything.
 
+**◬ Early Warning System** — Before a crisis hits, the system starts watching. It learns what your bad weeks looked like — the topics, people, keywords, and mood dips that showed up in the 3 days before your worst entries — then scores your current week against those patterns. Amber banner fires before the spike, not after. Zero AI spend. Pure signal detection.
+
 **⬡ Pattern detection that explains itself** — Not just "something is wrong." The system identifies mood spikes, severity streaks, behavioral loops, and emotional cycles — then tells you what the pattern looks like, when it started, and what the data shows. AI deep-analysis on demand for high-priority alerts.
 
 **◷ Evidence Vault** — Auto-populated from every entry. Statements, events, admissions, contradictions, observations. If you ever need documentation — for therapy, for legal purposes, for your own memory — it's organized, searchable, and exportable.
 
 **⊕ Contradiction detection** — The system finds it when someone says one thing and does another, or contradicts themselves across entries weeks apart. Entity-based detection with AI analysis of what the pattern suggests.
+
+**◉ People Intelligence** — Every person in your journal, ranked by emotional impact. 52-week activity heatmap, severity trend over time, distress-vs-support ratio, first and last mention. A visual map of who's in your life and what that's actually costing you.
 
 **✦ Memory-injected AI** — Every AI call is personalized. Your onboarding profile, situation context, and relationship details get injected into reflections, exit plan generation, resource ranking, and pattern analysis. The AI actually knows your story.
 
@@ -62,6 +66,8 @@ These are the features that make this different from a notes app with an API key
 
 Your entries, beautifully laid out. Mood scores visualized as a sparkline. Severity tracked over time. A **Living Master Summary** that sits at the top and evolves with every new entry - a constantly updated portrait of where you are and what you've been going through.
 
+If you haven't configured an AI key yet, the Timeline degrades gracefully — raw entry text still displays, empty AI sections are hidden, and a banner guides you to Settings.
+
 ---
 
 ### ✎ Write & Import — Direct from the Browser
@@ -76,6 +82,14 @@ No iPhone required. The dashboard includes a full in-browser journal workspace a
 **Import mode** — Drag and drop `.txt` or `.html` files (Day One exports, Apple Journal exports, anything plain text) directly into the browser. Drop multiple files at once. Each one processes through the full pipeline sequentially. Status tracks per-file in real time — Queued, Processing, Saved, Duplicate, or Failed.
 
 Both modes are JWT-authenticated and user-scoped. Everything lands on your Timeline with full AI extraction, just like Shortcut uploads.
+
+---
+
+### 📦 Day One Migration Wizard
+
+Already have years of entries in Day One? Export your archive as a `.zip` from the Day One app, drop it in the wizard, and watch your entire history import — with full AI extraction, master summary, pattern detection, and semantic indexing running on every entry. Live progress bar, per-entry counts, and a reveal screen showing your top people, mood, date range, and pattern count when it's done.
+
+Available at `/import/dayone`, as a step in the Onboarding wizard, and as a card in **Settings → Data**.
 
 ---
 
@@ -123,6 +137,26 @@ The system watches for things you might not notice yourself - mood spikes, sever
 
 ---
 
+### ◬ Early Warning System
+
+Before a bad week arrives, the system tries to tell you it's coming.
+
+It learns from your history — specifically the 3-day windows before your worst severity spikes. Topics, people, stress keywords, mood trajectory. Then it scores your current 3-day window against every stored spike pattern. When two or more patterns score above threshold, an amber banner appears on your Timeline.
+
+Click through to the Early Warning page to see which signals are active, which historical spikes they match, the match percentage, and a breakdown of contributing factors. You can dismiss it ("this time is different") or let it run. Rebuilds on demand. Runs entirely in Python — zero AI spend.
+
+---
+
+### ◉ People Intelligence
+
+Every person your journal mentions, analyzed for emotional impact.
+
+Impact score (weighted from mention frequency, average co-occurring severity, and distress ratio), 52-week GitHub-style activity heatmap colored by severity tier, severity trend AreaChart over time, distress vs. support entry breakdown, and ranked "most distressing" / "most supportive" panels.
+
+The system doesn't editorialize. It just shows you the data. What you do with it is up to you.
+
+---
+
 ### ◎ People & Topics
 Every person and topic that shows up in your entries, tracked over time. See who or what is correlated with your worst days. See what actually makes things better. Frequency charts, timelines, relationship dynamics.
 
@@ -135,6 +169,14 @@ Auto-populated from everything the AI extracts - statements, events, admissions,
 
 ### ⊕ Contradiction Detection
 If someone in your life says one thing and does another - or if they've said two completely different things at different times - the system finds it. Automatically surfaces contradictions across your entries with AI analysis of what the pattern suggests.
+
+---
+
+### 🚨 Crisis Escalation
+
+When the system detects high severity (≥ 8.5) across three or more consecutive days, a persistent full-width banner activates at the top of the app. It shows the streak length, average severity, and links directly to Resources. Polls every 10 minutes. Dismissable per session, re-surfaces after 12 hours if the pattern persists.
+
+It doesn't panic. It just makes sure you know.
 
 ---
 
@@ -158,6 +200,12 @@ It generates a step-by-step plan based entirely on your journal context - five p
 
 As you journal more, the plan offers incremental updates - new signals, reprioritized tasks, updated resources. You control every change. Nothing gets applied without your say.
 
+**Attachments** — Upload supporting documents directly to plan tasks. PDFs, images, text files. Magic-byte validated, 10 MB per file, stored in per-user isolated directories on your server.
+
+**PDF export** — Export the full plan as a formatted PDF or HTML document — phases, tasks, notes, support contacts, and optional AI narrative. Available from the Export tab in the full workspace.
+
+**Read-only share link** — Generate a passphrase-protected, expiry-configurable read-only URL for an advocate, attorney, or trusted person. Passphrase is a 3-word + 4-digit PIN combo generated at creation. You can regenerate it anytime. The link never exposes your raw journal — only the plan.
+
 It's the thing I wish had existed when I needed it.
 
 ---
@@ -178,12 +226,32 @@ A full onboarding flow that builds a memory profile - your situation, relationsh
 
 Per-user AI provider settings. Bring your own Anthropic key, use OpenAI, or run it completely locally with Ollama or LM Studio - zero data leaving your machine.
 
-Change your password and manage active sessions directly from Settings.
+Change your password, manage active sessions, configure 2FA, and manage passkeys directly from Settings.
 
 ---
 
 ### 📱 PWA — Install on Your Home Screen
 The dashboard is a Progressive Web App. On iPhone, tap the share button in Safari and choose "Add to Home Screen" — it installs like a native app, runs full-screen, and works gracefully offline.
+
+---
+
+## Security & Authentication
+
+This app was built for people in situations where account security isn't optional. Here's what's in place.
+
+**TOTP two-factor authentication** — Full authenticator app support (Google Authenticator, Authy, 1Password, anything TOTP-compatible). Generates 8 single-use backup codes shown once at setup. Login intercepts with a 5-minute partial token when 2FA is active. Configure in **Settings → Account**.
+
+**Passkey / biometric login** — WebAuthn (FIDO2) passkey support. Register your Face ID, Touch ID, or hardware security key from Settings. "Sign in with passkey" button on the login screen. Passkey login bypasses TOTP — it's a stronger factor. Clone detection via sign count verification on every auth.
+
+**Forgot password — two recovery paths:**
+- *Email reset* — one-time link sent via Resend, 1-hour expiry, invalidates all active sessions on use.
+- *Security questions* — configure 3 questions from Settings for offline recovery when you don't have email access. Rate-limited to 5 attempts per 15 minutes. Constant-time comparison.
+
+**HttpOnly refresh tokens** — The refresh token never touches JavaScript. It's stored as an HttpOnly, Secure, SameSite=Strict cookie — invisible to browser extensions, XSS, and DevTools.
+
+**Rate limiting everywhere** — Login, password reset, 2FA, security questions, AI endpoints, share link passphrase attempts. All rate-limited at the application layer.
+
+**IP-allowlisted exit plan shares** — Share links use nginx `auth_request` to validate IPs dynamically. Non-allowlisted visitors see a passphrase gate; correct passphrase grants temporary access tied to that IP via a session token.
 
 ---
 
@@ -244,8 +312,10 @@ The service is enabled on boot and auto-restarts on crash.
 | Frontend | React + Vite + Tailwind CSS |
 | Database | SQLite (WAL mode) |
 | AI | Anthropic / OpenAI / Ollama / LM Studio - per-user configurable |
-| Auth | JWT + bcrypt + per-user API keys |
+| Embeddings | `all-MiniLM-L6-v2` (local, sentence-transformers — never leaves your server) |
+| Auth | JWT (HttpOnly cookie refresh) + bcrypt + TOTP + WebAuthn + per-user API keys |
 | PDF | WeasyPrint |
+| Email | Resend |
 | Proxy | nginx (VPS) or localhost (local) |
 
 ---
@@ -272,7 +342,7 @@ Your `config.yaml` is gitignored and never committed. The install scripts auto-g
   </tr>
 </table>
 
-There are two ways to add journal entries. Both run the exact same AI pipeline — mood extraction, severity scoring, key events, master summary update, pattern detection.
+There are three ways to add journal entries. All three run the exact same AI pipeline — mood extraction, severity scoring, key events, master summary update, pattern detection, semantic indexing.
 
 ### Option 1 — Write or Import Directly in the Browser
 
@@ -293,7 +363,13 @@ Click **Write** in the sidebar or the banner on the Timeline page.
 
 ---
 
-### Option 2 — iPhone Shortcut
+### Option 2 — Day One Migration
+
+Export your Day One archive as a `.zip` from the Day One app. Drop it in the migration wizard at `/import/dayone`. The system parses every entry, runs the full AI pipeline on each one, and indexes everything for semantic search. Live progress, post-import reveal screen.
+
+---
+
+### Option 3 — iPhone Shortcut
 
 <img src="https://github.com/user-attachments/assets/c8d9344a-29ff-4086-9c3d-286f545f1c4d" width="350" alt="iPhone Shortcut setup" />
 
@@ -432,10 +508,10 @@ journal-intelligence/
 │   └── theme.yaml             ← UI theme config
 ├── src/
 │   ├── api/                   ← FastAPI routes
-│   ├── auth/                  ← JWT, bcrypt, API keys
+│   ├── auth/                  ← JWT, bcrypt, TOTP, WebAuthn, API keys
 │   ├── ingest/                ← file ingestion pipeline
 │   ├── nlp/                   ← AI extraction, master summary
-│   └── patterns/              ← behavioral pattern detection
+│   └── patterns/              ← behavioral pattern detection, early warning
 ├── frontend/src/              ← React source
 ├── install_vps.sh
 ├── install_local.sh
@@ -450,9 +526,11 @@ This is early. But the roadmap is ambitious - and I'm not slowing down.
 
 - **Native iOS & Android app** - a dedicated mobile experience built for this, not a browser wrapper. Write, review, upload, and get reflections from your phone natively. Push notifications and crisis alerts that actually reach you.
 - **Attorney-ready export** - Evidence Vault + Timeline formatted as a legal-ready chronological document. For the user who needs to walk into a courtroom or a custody hearing with documentation.
-- **Crisis escalation** - when the nervous system detects sustained high severity, something actually happens. Banners, alerts, emergency contact notifications.
 - **Therapist viewer mode** - let your therapist see patterns, timeline, and leave timestamped notes — without ever reading your raw entries.
-- **Exit plan share links** - token-based read-only URL for an advocate or attorney to view your plan state without logging in.
+- **Weekly intelligence briefing** - every week, a personal briefing: what improved, what got worse, which topics disappeared, which people showed up more. "Your average distress is up 18% over the last 7 days." Closes the loop between daily writing and actual self-awareness.
+- **Life Cases / Threads** - persistent storylines that auto-aggregate related entries into a named case. "Relationship Conflict." "Custody Stress." "Burnout at Work." Each case gathers related entries, people, contradictions, attachments, key quotes, and a chronological event timeline.
+- **Moments extraction** - auto-pull the most emotionally significant lines from your entries. "I can't do this anymore." "Today was the first calm day in weeks." Organized into a curated feed — turning points, first appearances, most repeated promises.
+- **Safe evidence locker upgrade** - structured tagging, chain-of-context links to timeline entries, evidence bundles exportable as ZIP or PDF, OCR on uploaded images and documents.
 - **Deeper pattern intelligence** - longer lookback windows, cross-pattern correlations, predictive mood modeling
 - **Community resources** - user-contributed topic configs, prompt packs, theme presets
 
