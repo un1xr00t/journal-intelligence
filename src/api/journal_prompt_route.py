@@ -11,7 +11,9 @@ import json
 import logging
 from datetime import datetime, timezone, date
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
+from src.auth.auth_db import check_rate_limit
+from src.auth.middleware import get_client_ip
 from src.auth.auth_db import get_db
 
 logger = logging.getLogger("journal")
@@ -20,7 +22,11 @@ logger = logging.getLogger("journal")
 def register_journal_prompt_routes(app, require_any_user):
 
     @app.get("/api/journal/prompt")
-    async def get_journal_prompt(current_user: dict = Depends(require_any_user)):
+    async def get_journal_prompt(request: Request, current_user: dict = Depends(require_any_user)):
+        ip = get_client_ip(request)
+        if not check_rate_limit(ip, "ai_prompt", max_attempts=10, window_minutes=1):
+            raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+
         user_id = current_user["id"]
         today = date.today().isoformat()
 

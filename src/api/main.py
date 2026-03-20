@@ -1764,8 +1764,13 @@ async def get_therapist_insight_status(
 @app.post("/api/therapist/insight")
 async def get_therapist_insight(
     body: TherapistInsightRequest,
+    request: Request,
     current_user: dict = Depends(require_any_user),
 ):
+    ip = get_client_ip(request)
+    if not check_rate_limit(ip, "ai_insight", max_attempts=10, window_minutes=1):
+        raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+
     tone = body.tone.lower().strip()
     if tone not in _VALID_TONES:
         raise HTTPException(
