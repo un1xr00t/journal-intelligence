@@ -88,7 +88,6 @@ export default function Login() {
         credential: serialised,
       })
       setAccessToken(data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
       completeLogin(data)
       await fetchTheme()
       navigate('/')
@@ -131,7 +130,6 @@ export default function Login() {
         totp_code: code,
       })
       setAccessToken(data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
       completeLogin(data)
       await fetchTheme()
       navigate('/')
@@ -154,7 +152,6 @@ export default function Login() {
         backup_code: backupCode.trim(),
       })
       setAccessToken(data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
       completeLogin(data)
       await fetchTheme()
       navigate('/')

@@ -336,9 +336,9 @@ def register_totp_routes(app, require_any_user):
                 details={"method": "totp"},
             )
 
-            return {
+            from fastapi.responses import JSONResponse
+            _resp = JSONResponse(content={
                 "access_token": tokens["access_token"],
-                "refresh_token": tokens["refresh_token"],
                 "token_type": "bearer",
                 "expires_in": tokens["expires_in"],
                 "user": {
@@ -347,7 +347,11 @@ def register_totp_routes(app, require_any_user):
                     "email": user["email"],
                     "role": user["role"],
                 },
-            }
+            })
+            _resp.set_cookie(key="refresh_token", value=tokens["refresh_token"],
+                httponly=True, secure=True, samesite="strict",
+                max_age=30*24*3600, path="/")
+            return _resp
         finally:
             conn.close()
 
@@ -431,9 +435,9 @@ def register_totp_routes(app, require_any_user):
                 (user_id,),
             ).fetchone()[0]
 
-            return {
+            from fastapi.responses import JSONResponse
+            _resp2 = JSONResponse(content={
                 "access_token": tokens["access_token"],
-                "refresh_token": tokens["refresh_token"],
                 "token_type": "bearer",
                 "expires_in": tokens["expires_in"],
                 "backup_codes_remaining": remaining,
@@ -443,6 +447,10 @@ def register_totp_routes(app, require_any_user):
                     "email": user["email"],
                     "role": user["role"],
                 },
-            }
+            })
+            _resp2.set_cookie(key="refresh_token", value=tokens["refresh_token"],
+                httponly=True, secure=True, samesite="strict",
+                max_age=30*24*3600, path="/")
+            return _resp2
         finally:
             conn.close()

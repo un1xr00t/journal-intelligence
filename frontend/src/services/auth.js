@@ -3,27 +3,20 @@ import api, { setAccessToken, clearAccessToken } from './api'
 export async function login(username, password) {
   const { data } = await api.post('/auth/login', { username, password })
   setAccessToken(data.access_token)
-  if (data.refresh_token) {
-    localStorage.setItem('refresh_token', data.refresh_token)
-  }
   return data
 }
 
 export async function silentRefresh() {
-  const refreshToken = localStorage.getItem('refresh_token')
-  if (!refreshToken) throw new Error('No refresh token stored')
-  const { data } = await api.post('/auth/refresh', { refresh_token: refreshToken })
+  // Refresh token is in HttpOnly cookie — sent automatically by browser
+  const { data } = await api.post('/auth/refresh')
   setAccessToken(data.access_token)
   return data
 }
 
 export async function logout() {
   try {
-    const refreshToken = localStorage.getItem('refresh_token')
-    if (refreshToken) {
-      await api.post('/auth/logout', { refresh_token: refreshToken })
-    }
+    // Cookie sent automatically; server revokes token + clears cookie
+    await api.post('/auth/logout')
   } catch { /* best effort */ }
   clearAccessToken()
-  localStorage.removeItem('refresh_token')
 }

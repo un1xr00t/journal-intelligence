@@ -98,7 +98,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
+    refresh_token: str = ""
     token_type: str = "bearer"
     expires_in: int
     user: dict
@@ -151,7 +151,7 @@ async def health_check():
 # ── Auth routes ───────────────────────────────────────────────────────────────
 
 @app.post("/auth/login")
-async def login(request: Request, body: LoginRequest):
+async def login(request: Request, body: LoginRequest, response: Response):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
 
@@ -216,9 +216,20 @@ async def login(request: Request, body: LoginRequest):
     reset_rate_limit(ip, "login")
     log_auth_event("login", user_id=user["id"], ip_address=ip, user_agent=ua)
 
-    return {
+    response = Response()
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=30 * 24 * 3600,
+        path="/",
+    )
+    import json
+    from fastapi.responses import JSONResponse
+    resp_data = {
         "access_token": tokens["access_token"],
-        "refresh_token": tokens["refresh_token"],
         "token_type": "bearer",
         "expires_in": tokens["expires_in"],
         "user": {
@@ -228,10 +239,21 @@ async def login(request: Request, body: LoginRequest):
             "role": user["role"],
         },
     }
+    json_response = JSONResponse(content=resp_data)
+    json_response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=30 * 24 * 3600,
+        path="/",
+    )
+    return json_response
 
 
 @app.post("/auth/refresh", response_model=TokenResponse)
-async def refresh_token(request: Request, body: RefreshRequest):
+async def refresh_token(request: Request):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
 
@@ -239,7 +261,12 @@ async def refresh_token(request: Request, body: RefreshRequest):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                             detail="Too many refresh attempts. Please try again later.")
 
-    token_hash = hash_refresh_token(body.refresh_token)
+    raw_refresh = request.cookies.get("refresh_token")
+    if not raw_refresh:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="No refresh token")
+
+    token_hash = hash_refresh_token(raw_refresh)
     token_record = get_refresh_token(token_hash)
 
     if not token_record:
@@ -274,9 +301,9 @@ async def refresh_token(request: Request, body: RefreshRequest):
     )
     log_auth_event("refresh", user_id=token_record["user_id"], ip_address=ip, user_agent=ua)
 
-    return {
+    from fastapi.responses import JSONResponse
+    resp_data = {
         "access_token": tokens["access_token"],
-        "refresh_token": body.refresh_token,
         "token_type": "bearer",
         "expires_in": tokens["expires_in"],
         "user": {
@@ -286,21 +313,37 @@ async def refresh_token(request: Request, body: RefreshRequest):
             "role": token_record["role"],
         },
     }
+    json_resp = JSONResponse(content=resp_data)
+    json_resp.set_cookie(
+        key="refresh_token",
+        value=raw_refresh,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=30 * 24 * 3600,
+        path="/",
+    )
+    return json_resp
 
 
 @app.post("/auth/logout", response_model=MessageResponse)
 async def logout(
     request: Request,
-    body: RefreshRequest,
     current_user: dict = Depends(get_current_user),
 ):
     ip = get_client_ip(request)
     ua = get_user_agent(request)
-    token_hash = hash_refresh_token(body.refresh_token)
-    revoked = revoke_refresh_token(token_hash)
+    raw_refresh = request.cookies.get("refresh_token")
+    revoked = False
+    if raw_refresh:
+        token_hash = hash_refresh_token(raw_refresh)
+        revoked = revoke_refresh_token(token_hash)
     log_auth_event("logout", user_id=current_user["id"], ip_address=ip, user_agent=ua,
                    details={"revoked": revoked})
-    return {"message": "Logged out successfully"}
+    from fastapi.responses import JSONResponse
+    resp = JSONResponse(content={"message": "Logged out successfully"})
+    resp.delete_cookie(key="refresh_token", path="/", httponly=True, secure=True, samesite="strict")
+    return resp
 
 
 @app.get("/auth/me", response_model=UserResponse)

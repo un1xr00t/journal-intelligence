@@ -428,15 +428,19 @@ def register_passkey_routes(app, require_any_user):
         )
 
         logger.info(f"Passkey login success user_id={user['id']}")
-        return {
-            "access_token":  tokens["access_token"],
-            "refresh_token": tokens["refresh_token"],
-            "token_type":    "bearer",
-            "expires_in":    tokens["expires_in"],
+        from fastapi.responses import JSONResponse
+        _resp = JSONResponse(content={
+            "access_token": tokens["access_token"],
+            "token_type":   "bearer",
+            "expires_in":   tokens["expires_in"],
             "user": {
                 "id":       user["id"],
                 "username": user["username"],
                 "email":    user["email"],
                 "role":     user["role"],
             },
-        }
+        })
+        _resp.set_cookie(key="refresh_token", value=tokens["refresh_token"],
+            httponly=True, secure=True, samesite="strict",
+            max_age=30*24*3600, path="/")
+        return _resp

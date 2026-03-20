@@ -6,7 +6,7 @@ const api = axios.create({
   withCredentials: true,
 })
 
-// Token stored in memory only — never localStorage
+// Access token stored in memory only — never localStorage
 let _accessToken = null
 let _refreshPromise = null
 
@@ -14,7 +14,7 @@ export function setAccessToken(token) { _accessToken = token }
 export function clearAccessToken() { _accessToken = null }
 export function getAccessToken() { return _accessToken }
 
-// Request interceptor — attach token
+// Request interceptor — attach access token
 api.interceptors.request.use((config) => {
   if (_accessToken) {
     config.headers.Authorization = `Bearer ${_accessToken}`
@@ -42,9 +42,8 @@ api.interceptors.response.use(
       original._retry = true
       try {
         if (!_refreshPromise) {
-          const refreshToken = localStorage.getItem('refresh_token')
-          if (!refreshToken) throw new Error('No refresh token')
-          _refreshPromise = axios.post('/auth/refresh', { refresh_token: refreshToken })
+          // Refresh token is HttpOnly cookie — no body needed, browser sends it automatically
+          _refreshPromise = axios.post('/auth/refresh', {}, { withCredentials: true })
             .finally(() => { _refreshPromise = null })
         }
         const { data } = await _refreshPromise
@@ -55,7 +54,6 @@ api.interceptors.response.use(
         // Only logout if it's a real auth failure (401/403), not a rate limit
         if (refreshErr.response?.status !== 429) {
           clearAccessToken()
-          localStorage.removeItem('refresh_token')
           window.dispatchEvent(new CustomEvent('auth:logout'))
         }
         return Promise.reject(err)
