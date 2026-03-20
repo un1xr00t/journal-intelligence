@@ -2,22 +2,47 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 
-const NAV_LINKS = [
-  { to: '/',              icon: '◈', label: 'Timeline'       },
-  { to: '/write',         icon: '✎', label: 'Write'         },
-  { to: '/ask',           icon: '⌖', label: 'Ask My Journal' },
-  { to: '/patterns',      icon: '⬡', label: 'Patterns'       },
-  { to: '/people',        icon: '◎', label: 'People & Topics'},
-  { to: '/people-intel',   icon: '◉', label: 'People Map'      },
-  { to: '/nervous',       icon: '〜', label: 'Nervous System' },
-  { to: '/evidence',      icon: '◷', label: 'Evidence Vault' },
-  { to: '/contradictions', icon:'⊕', label: 'Contradictions' },
-  { to: '/exports',       icon: '⊞', label: 'Exports' },
-  { to: '/admin',         icon: '⊙', label: 'Admin',    ownerOnly: true },
-  { to: '/settings',      icon: '⚙', label: 'Settings'  },
-  { to: '/resources',     icon: '✦', label: 'Resources'  },
-  { to: '/exit-plan',     icon: '🗺', label: 'Exit Plan'  },
-  { to: '/early-warning', icon: '◬', label: 'Early Warning' },
+const NAV_GROUPS = [
+  {
+    links: [
+      { to: '/',     icon: '◈', label: 'Timeline'       },
+      { to: '/write', icon: '✎', label: 'Write'          },
+      { to: '/ask',   icon: '⌖', label: 'Ask My Journal' },
+      { to: '/decide', icon: '⊘', label: 'Help Me Choose'  },
+    ]
+  },
+  {
+    label: 'Insights',
+    links: [
+      { to: '/patterns',      icon: '⬡', label: 'Patterns'       },
+      { to: '/early-warning', icon: '◬', label: 'Early Warning'  },
+      { to: '/nervous',       icon: '〜', label: 'Nervous System' },
+    ]
+  },
+  {
+    label: 'People',
+    links: [
+      { to: '/people',       icon: '◎', label: 'People & Topics' },
+      { to: '/people-intel', icon: '◉', label: 'People Map'      },
+    ]
+  },
+  {
+    label: 'Case Building',
+    links: [
+      { to: '/evidence',       icon: '◷', label: 'Evidence Vault' },
+      { to: '/contradictions', icon: '⊕', label: 'Contradictions' },
+      { to: '/exit-plan',      icon: '🗺', label: 'Exit Plan'      },
+      { to: '/exports',        icon: '⊞', label: 'Exports'        },
+    ]
+  },
+  {
+    label: 'System',
+    links: [
+      { to: '/resources', icon: '✦', label: 'Resources' },
+      { to: '/settings',  icon: '⚙', label: 'Settings'  },
+      { to: '/admin',     icon: '⊙', label: 'Admin', ownerOnly: true },
+    ]
+  },
 ]
 
 export default function Sidebar({ filters, onFilterChange, alerts = [], onRefresh, isMobile = false, isOpen = false, onClose }) {
@@ -116,17 +141,38 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
 
         {/* Nav */}
         <nav style={{ padding: '0 12px' }}>
-          {NAV_LINKS.filter(l => !l.ownerOnly || user?.role === 'owner').map(link => (
-            <NavLink key={link.to} to={link.to} end={link.to === '/'} style={({ isActive }) => ({
-              display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '10px 10px' : '7px 10px', borderRadius: 6,
-              marginBottom: 2, textDecoration: 'none', fontSize: 13, fontWeight: 500,
-              color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-              background: isActive ? 'rgba(99,102,241,0.12)' : 'transparent',
-              transition: 'all 0.15s',
-            })}>
-              <span style={{ fontSize: 11, color: 'var(--accent)', opacity: 0.9, fontFamily: 'monospace' }}>{link.icon}</span>
-              {link.label}
-            </NavLink>
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi}>
+              {gi > 0 && (
+                <div style={{
+                  margin: '6px 4px',
+                  borderTop: '1px solid rgba(255,255,255,0.05)',
+                  paddingTop: 6,
+                }}>
+                  {group.label && (
+                    <div style={{
+                      fontSize: 9, fontFamily: 'IBM Plex Mono', letterSpacing: '0.12em',
+                      color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase',
+                      paddingLeft: 6, marginBottom: 4,
+                    }}>
+                      {group.label}
+                    </div>
+                  )}
+                </div>
+              )}
+              {group.links.filter(l => !l.ownerOnly || user?.role === 'owner').map(link => (
+                <NavLink key={link.to} to={link.to} end={link.to === '/'} style={({ isActive }) => ({
+                  display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '10px 10px' : '7px 10px', borderRadius: 6,
+                  marginBottom: 2, textDecoration: 'none', fontSize: 13, fontWeight: 500,
+                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  background: isActive ? 'rgba(99,102,241,0.12)' : 'transparent',
+                  transition: 'all 0.15s',
+                })}>
+                  <span style={{ fontSize: 11, color: 'var(--accent)', opacity: 0.9, fontFamily: 'monospace' }}>{link.icon}</span>
+                  {link.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 

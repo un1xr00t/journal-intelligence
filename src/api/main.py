@@ -2179,3 +2179,6 @@ register_totp_routes(app, require_any_user)
 from src.api.passkey_routes import register_passkey_routes
 register_passkey_routes(app, require_any_user)
 
+from src.api.decision_routes import register_decision_routes
+register_decision_routes(app, require_any_user)
+

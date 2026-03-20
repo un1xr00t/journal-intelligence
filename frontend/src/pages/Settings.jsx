@@ -89,20 +89,61 @@ const SaveBtn = ({ saving, saved, onClick, label = 'Save Changes' }) => (
 
 function TInput({ val, set, placeholder, type = 'text', disabled }) {
   const [f, setF] = useState(false)
+  const [showPw, setShowPw] = useState(false)
+  const isPassword = type === 'password'
+  const inputStyle = {
+    width: '100%', padding: isPassword ? '9px 40px 9px 12px' : '9px 12px', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)',
+    border: `1px solid ${f && !disabled ? 'var(--accent,#6366f1)' : 'rgba(255,255,255,0.08)'}`,
+    borderRadius: 7, color: 'rgba(255,255,255,0.88)', fontSize: 13, outline: 'none',
+    fontFamily: "'DM Sans', sans-serif", transition: 'border-color 0.2s',
+    opacity: disabled ? 0.45 : 1,
+  }
+  if (!isPassword) {
+    return (
+      <input
+        type={type} value={val || ''} onChange={e => set && set(e.target.value)}
+        placeholder={placeholder} disabled={disabled}
+        onFocus={() => setF(true)} onBlur={() => setF(false)}
+        style={inputStyle}
+      />
+    )
+  }
   return (
-    <input
-      type={type} value={val || ''} onChange={e => set && set(e.target.value)}
-      placeholder={placeholder} disabled={disabled}
-      onFocus={() => setF(true)} onBlur={() => setF(false)}
-      style={{
-        width: '100%', padding: '9px 12px', boxSizing: 'border-box',
-        background: 'rgba(255,255,255,0.04)',
-        border: `1px solid ${f && !disabled ? 'var(--accent,#6366f1)' : 'rgba(255,255,255,0.08)'}`,
-        borderRadius: 7, color: 'rgba(255,255,255,0.88)', fontSize: 13, outline: 'none',
-        fontFamily: "'DM Sans', sans-serif", transition: 'border-color 0.2s',
-        opacity: disabled ? 0.45 : 1,
-      }}
-    />
+    <div style={{ position: 'relative' }}>
+      <input
+        type={showPw ? 'text' : 'password'} value={val || ''} onChange={e => set && set(e.target.value)}
+        placeholder={placeholder} disabled={disabled}
+        onFocus={() => setF(true)} onBlur={() => setF(false)}
+        style={inputStyle}
+      />
+      <button
+        type="button"
+        onClick={() => setShowPw(v => !v)}
+        style={{
+          position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+          background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+          color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+        aria-label={showPw ? 'Hide password' : 'Show password'}
+      >
+        {showPw ? (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+        ) : (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        )}
+      </button>
+    </div>
   )
 }
 
