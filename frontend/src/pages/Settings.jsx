@@ -1628,7 +1628,7 @@ function DataSection() {
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <span style={{ fontSize: 13, color: 'var(--accent)' }}>⬆</span>
-              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Syne, sans-serif', color: 'rgba(255,255,255,0.88)' }}>Day One Migration</span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Syne, sans-serif', color: 'rgba(255,255,255,0.88)' }}>Import from Day One</span>
             </div>
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', lineHeight: 1.6, margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>
               Import your Day One journal history. Entries are fully analyzed — patterns, people, contradictions, and mood intelligence unlock instantly.
@@ -1638,6 +1638,9 @@ function DataSection() {
                 <span key={tag} style={{ fontSize: 9, padding: '2px 8px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 4, color: 'rgba(99,102,241,0.7)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em' }}>{tag}</span>
               ))}
             </div>
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)', margin: '10px 0 0', lineHeight: 1.5, fontFamily: "'IBM Plex Mono', monospace" }}>
+              Day One is a trademark of its respective owner. This app is not affiliated with or endorsed by Day One.
+            </p>
           </div>
           <DayOneImportButton />
         </div>

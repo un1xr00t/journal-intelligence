@@ -82,7 +82,7 @@ function StepUpload({ onFile }) {
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <div style={{ marginBottom: 32, textAlign: 'center' }}>
         <div style={{ fontSize: 13, fontFamily: 'IBM Plex Mono, monospace', color: 'var(--accent)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 12 }}>
-          Day One Migration
+          Import from Day One
         </div>
         <h1 style={{ fontSize: 28, fontWeight: 800, fontFamily: 'Syne, sans-serif', color: 'var(--text-primary)', margin: '0 0 12px', lineHeight: 1.2 }}>
           Here's what your old journal<br />never told you.
@@ -92,6 +92,11 @@ function StepUpload({ onFile }) {
           people intelligence, and emotional analysis on years of entries.
         </p>
       </div>
+
+      {/* Disclaimer */}
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', textAlign: 'center', marginTop: 20, marginBottom: 0, lineHeight: 1.5 }}>
+        Day One is a trademark of its respective owner. This app is not affiliated with or endorsed by Day One.
+      </p>
 
       {/* Drop zone */}
       <div
