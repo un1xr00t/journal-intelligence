@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+import DetectiveBanner from "../components/DetectiveBanner";
 
 // ── Palette helpers ───────────────────────────────────────────────────────────
 
@@ -1344,6 +1345,9 @@ export default function Timeline({ filters }) {
 
       {/* ── Therapist Insight ────────────────────────────── */}
       <TherapistInsight />
+
+      {/* ── Detective Banner ──────────────────────────────── */}
+      <DetectiveBanner />
 
       {/* ── Exit Plan Offer Banner ───────────────────────── */}
       <ExitPlanOfferBanner offer={exitOffer} onDismiss={() => setExitOffer(null)} />

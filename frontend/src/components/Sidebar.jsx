@@ -1,3 +1,5 @@
+import React from 'react'
+import api from '../services/api'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
@@ -36,6 +38,12 @@ const NAV_GROUPS = [
     ]
   },
   {
+    label: 'Premium Options',
+    links: [
+      { to: '/detective', icon: '🕵', label: 'Detective Mode', detectiveOnly: true },
+    ]
+  },
+  {
     label: 'System',
     links: [
       { to: '/resources', icon: '✦', label: 'Resources' },
@@ -49,6 +57,13 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
   const { user, logout } = useAuth()
   const { theme, sidebarPhoto } = useTheme()
   const navigate = useNavigate()
+  const [detectiveAccess, setDetectiveAccess] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!user) return
+    if (user.role === 'owner') { setDetectiveAccess(true); return }
+    api.get('/api/detective/access').then(r => setDetectiveAccess(r.data.has_access)).catch(() => {})
+  }, [user])
 
   const handleLogout = async () => {
     await logout()
@@ -160,7 +175,7 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
                   )}
                 </div>
               )}
-              {group.links.filter(l => !l.ownerOnly || user?.role === 'owner').map(link => (
+              {group.links.filter(l => (!l.ownerOnly || user?.role === 'owner') && (!l.detectiveOnly || detectiveAccess)).map(link => (
                 <NavLink key={link.to} to={link.to} end={link.to === '/'} style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '10px 10px' : '7px 10px', borderRadius: 6,
                   marginBottom: 2, textDecoration: 'none', fontSize: 13, fontWeight: 500,

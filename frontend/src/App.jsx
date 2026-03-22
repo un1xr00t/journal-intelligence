@@ -27,6 +27,8 @@ import AskMyJournal from './pages/AskMyJournal'
 import EarlyWarning from './pages/EarlyWarning'
 import DayOneImport from './pages/DayOneImport'
 import DecisionAssistant from './pages/DecisionAssistant'
+import Detective from './pages/Detective'
+import DetectiveFull from './pages/DetectiveFull'
 import InviteAccess from './pages/InviteAccess'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
@@ -62,7 +64,7 @@ function Shell() {
 
   // Pages with no sidebar and no padding — either public or full-screen tool pages
   const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname === '/recover-via-questions' || location.pathname.startsWith('/share/') || location.pathname.startsWith('/invite/')
-  const isFullscreenPage = location.pathname === '/exitplan-full'
+  const isFullscreenPage = location.pathname === '/exitplan-full' || location.pathname === '/detective/full'
   const isWritePage      = location.pathname === '/write'
   const hideSidebar      = isPublicPage || isFullscreenPage || isWritePage
 
@@ -222,6 +224,8 @@ function Shell() {
             <Route path="/early-warning" element={<ProtectedRoute><EarlyWarning /></ProtectedRoute>} />
             <Route path="/import/dayone" element={<ProtectedRoute><DayOneImport /></ProtectedRoute>} />
             <Route path="/decide" element={<ProtectedRoute><DecisionAssistant /></ProtectedRoute>} />
+            <Route path="/detective" element={<ProtectedRoute><Detective /></ProtectedRoute>} />
+            <Route path="/detective/full" element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="/invite/:token" element={<InviteAccess />} />
             <Route path="*"               element={<Navigate to="/" replace />} />
