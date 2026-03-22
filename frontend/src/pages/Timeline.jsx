@@ -45,6 +45,23 @@ function SeverityBar({ value }) {
   );
 }
 
+function ImageThumb({ attachmentId }) {
+  const [src, setSrc] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    api.get(`/api/entry-attachments/${attachmentId}/file`, { responseType: 'blob' })
+      .then(r => { if (!cancelled) setSrc(URL.createObjectURL(r.data)) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [attachmentId])
+  if (!src) return (
+    <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.15)', fontSize: 18 }}>
+      🖼
+    </div>
+  )
+  return <img src={src} alt="" style={{ width: 72, height: 72, objectFit: 'cover', display: 'block' }} />
+}
+
 function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }) {
   const [entry,      setEntry]      = useState(initialEntry);
   const [expanded,   setExpanded]   = useState(false);
@@ -56,11 +73,74 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
   const [saveError,       setSaveError]       = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting,        setDeleting]        = useState(false);
+  const [attachments,    setAttachments]    = useState(null);
+  const [lightbox,       setLightbox]       = useState(null);
+  const [deletingImg,    setDeletingImg]    = useState(false);
+  const [uploadingImg,   setUploadingImg]   = useState(false);
+  const [thumbUrl,       setThumbUrl]       = useState(null);  // null=loading, false=none, string=blobURL
+  const editImgRef = useRef(null);
 
   const tags     = safeJson(entry.tags);
   const events   = safeJson(entry.key_events);
   const quotes   = safeJson(entry.notable_quotes);
   const entities = safeJson(entry.entities);
+
+  useEffect(() => {
+    let cancelled = false
+    api.get(`/api/entries/${entry.id}/attachments`)
+      .then(r => {
+        const list = r.data.attachments || []
+        if (cancelled || list.length === 0) { if (!cancelled) setThumbUrl(false); return }
+        return api.get(`/api/entry-attachments/${list[0].id}/file`, { responseType: 'blob' })
+          .then(r2 => { if (!cancelled) setThumbUrl(URL.createObjectURL(r2.data)) })
+      })
+      .catch(() => { if (!cancelled) setThumbUrl(false) })
+    return () => { cancelled = true }
+  }, [entry.id])
+
+  async function loadAttachments() {
+    if (attachments !== null) return
+    try {
+      const res = await api.get(`/api/entries/${entry.id}/attachments`)
+      setAttachments(res.data.attachments || [])
+    } catch {
+      setAttachments([])
+    }
+  }
+
+  async function handleDeleteImage(attachmentId) {
+    setDeletingImg(true)
+    try {
+      await api.delete(`/api/entry-attachments/${attachmentId}`)
+      setAttachments(prev => (prev || []).filter(a => a.id !== attachmentId))
+      setLightbox(null)
+    } catch {
+      alert('Delete failed')
+    } finally {
+      setDeletingImg(false)
+    }
+  }
+
+  async function handleUploadImages(files) {
+    if (!files || files.length === 0) return
+    setUploadingImg(true)
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData()
+        fd.append('file', file, file.name)
+        await api.post(`/api/entries/${entry.id}/attachments`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      }
+      // Reload attachment list
+      const res = await api.get(`/api/entries/${entry.id}/attachments`)
+      setAttachments(res.data.attachments || [])
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Upload failed')
+    } finally {
+      setUploadingImg(false)
+    }
+  }
 
   async function handleEditClick(e) {
     e.stopPropagation();
@@ -123,8 +203,51 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
   }
 
   return (
+    <>
+    {lightbox && (
+      <div
+        onClick={() => { URL.revokeObjectURL(lightbox.url); setLightbox(null); }}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 2000,
+          background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          padding: 24,
+        }}
+      >
+        <div onClick={e => e.stopPropagation()} style={{ position: 'relative', maxWidth: '90vw', maxHeight: '82vh' }}>
+          <img
+            src={lightbox.url}
+            alt={lightbox.filename}
+            style={{ maxWidth: '90vw', maxHeight: '78vh', borderRadius: 10, display: 'block', objectFit: 'contain' }}
+          />
+          <div style={{ position: 'absolute', bottom: -40, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'rgba(255,255,255,0.4)' }}>{lightbox.filename}</span>
+            <button
+              onClick={() => handleDeleteImage(lightbox.id)}
+              disabled={deletingImg}
+              style={{
+                fontSize: 11, padding: '4px 12px', borderRadius: 6,
+                background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+                color: '#f87171', cursor: deletingImg ? 'not-allowed' : 'pointer', opacity: deletingImg ? 0.6 : 1,
+              }}
+            >{deletingImg ? 'Deleting…' : '✕ Delete'}</button>
+          </div>
+        </div>
+        <button
+          onClick={() => { URL.revokeObjectURL(lightbox.url); setLightbox(null); }}
+          style={{ marginTop: 56, background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 20px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 12 }}
+        >Close</button>
+      </div>
+    )}
     <div
-      onClick={() => !editMode && setExpanded(v => !v)}
+      onClick={() => {
+        if (!editMode) {
+          setExpanded(v => {
+            if (!v) loadAttachments()
+            return !v
+          })
+        }
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -235,7 +358,7 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 16, padding: "14px 16px" }}>
+      <div style={{ display: "flex", gap: 16, padding: "14px 16px", alignItems: "flex-start" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 52, paddingTop: 2 }}>
           <span style={{ fontSize: 11, fontFamily: "monospace", color: "#64748b" }}>
             {entry.entry_date ? entry.entry_date.slice(5) : ""}
@@ -302,7 +425,15 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
               {saveError && (
                 <p style={{ fontSize: 11, color: "#f87171", margin: "4px 0 0" }}>{saveError}</p>
               )}
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <input
+                ref={editImgRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => { handleUploadImages(e.target.files); e.target.value = ''; }}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   onClick={handleSave}
                   disabled={saving}
@@ -327,6 +458,19 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
                 >
                   Cancel
                 </button>
+                <button
+                  onClick={() => editImgRef.current && editImgRef.current.click()}
+                  disabled={uploadingImg}
+                  title="Attach images to this entry (JPEG, PNG, WEBP, max 8 MB)"
+                  style={{
+                    fontSize: 12, padding: "5px 10px", borderRadius: 7,
+                    background: uploadingImg ? 'rgba(99,102,241,0.08)' : 'transparent',
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: uploadingImg ? '#a5b4fc' : '#64748b', cursor: uploadingImg ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {uploadingImg ? '⏳' : '📷'}
+                </button>
               </div>
             </div>
           ) : (
@@ -342,6 +486,8 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
                 display: "-webkit-box",
                 WebkitLineClamp: expanded ? "unset" : 3,
                 WebkitBoxOrient: "vertical",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
               }}>
                 {hasApiKey
                   ? (entry.summary_text || entry.normalized_text || "No summary yet.")
@@ -355,6 +501,26 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
           </div>
           )}
         </div>
+        {thumbUrl && (
+          <div
+            onClick={e => {
+              e.stopPropagation()
+              setExpanded(v => {
+                if (!v) loadAttachments()
+                return !v
+              })
+            }}
+            style={{
+              width: 96, height: 96, borderRadius: 10, overflow: 'hidden',
+              flexShrink: 0, alignSelf: 'center',
+              border: '1px solid rgba(255,255,255,0.1)',
+              background: '#0d0d1a',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+            }}
+          >
+            <img src={thumbUrl} alt="" style={{ width: 96, height: 96, objectFit: 'cover', display: 'block' }} />
+          </div>
+        )}
       </div>
 
       {expanded && (
@@ -362,6 +528,29 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
           onClick={e => e.stopPropagation()}
           style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "14px 16px 16px 84px" }}
         >
+          {attachments && attachments.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {attachments.map(a => (
+                <button
+                  key={a.id}
+                  onClick={e => {
+                    e.stopPropagation()
+                    api.get(`/api/entry-attachments/${a.id}/file`, { responseType: 'blob' })
+                      .then(r => setLightbox({ id: a.id, filename: a.filename, url: URL.createObjectURL(r.data) }))
+                      .catch(() => alert('Could not load image'))
+                  }}
+                  style={{
+                    width: 72, height: 72, padding: 0,
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 8, overflow: 'hidden', cursor: 'pointer',
+                    background: '#0d0d1a', flexShrink: 0,
+                  }}
+                >
+                  <ImageThumb attachmentId={a.id} />
+                </button>
+              ))}
+            </div>
+          )}
           {events.length > 0 && (
             <div style={{ marginBottom: 14 }}>
               <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#475569", margin: "0 0 8px" }}>
@@ -430,6 +619,7 @@ function EntryCard({ entry: initialEntry, onUpdate, onDelete, hasApiKey = true }
         </div>
       )}
     </div>
+    </>
   );
 }
 

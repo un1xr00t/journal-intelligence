@@ -2185,3 +2185,7 @@ register_decision_routes(app, require_any_user)
 from src.api.invite_routes import register_invite_routes
 register_invite_routes(app, require_any_user, require_owner)
 
+from src.api.entry_attachments_routes import register_entry_attachment_routes
+register_entry_attachment_routes(app, require_any_user)
+
+

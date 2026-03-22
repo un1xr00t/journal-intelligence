@@ -352,6 +352,33 @@ const GrainStyle = () => (
       color: rgba(200,169,110,0.15); letter-spacing: 0.4em;
     }
 
+    .jw-img-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    .jw-img-thumb {
+      position: relative; width: 80px; height: 80px;
+      border-radius: 8px; overflow: hidden;
+      border: 1px solid rgba(200,169,110,0.2);
+      background: rgba(200,169,110,0.04); flex-shrink: 0;
+    }
+    .jw-img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .jw-img-remove {
+      position: absolute; top: 4px; right: 4px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: rgba(0,0,0,0.65); border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(200,169,110,0.9); font-size: 10px; line-height: 1;
+    }
+    .jw-img-remove:hover { background: rgba(155,77,46,0.8); }
+    .jw-img-add-btn {
+      width: 80px; height: 80px; border-radius: 8px;
+      border: 1.5px dashed rgba(200,169,110,0.25);
+      background: rgba(200,169,110,0.03);
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 4px; cursor: pointer;
+      color: rgba(200,169,110,0.4); font-size: 20px; flex-shrink: 0;
+    }
+    .jw-img-add-btn:hover { border-color: rgba(200,169,110,0.5); color: rgba(200,169,110,0.75); }
+    .jw-img-add-label { font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
+
     @media (max-width: 640px) {
       .jw-editor-inner { padding: 24px 20px 16px; }
       .jw-editor-footer { padding: 12px 20px 16px; }
@@ -388,6 +415,9 @@ function WriteMode({ entryDate }) {
   const [result, setResult] = useState(null)  // saved entry result
   const [journalPrompt, setJournalPrompt] = useState(null)
   const [promptDismissed, setPromptDismissed] = useState(false)
+  const [pendingImages, setPendingImages]     = useState([])
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const imgInputRef = useRef(null)
 
   const wc = wordCount(text)
   const cc = charCount(text)
@@ -412,6 +442,23 @@ function WriteMode({ entryDate }) {
       const data = res.data
       if (data.status === 'success' || data.status === 'inserted') {
         setResult(data)
+        if (pendingImages.length > 0 && data.id) {
+          setUploadingImages(true)
+          try {
+            for (const img of pendingImages) {
+              const fd = new FormData()
+              fd.append('file', img.file, img.name)
+              await api.post(`/api/entries/${data.id}/attachments`, fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              })
+            }
+          } catch (imgErr) {
+            console.warn('Image upload failed', imgErr)
+          } finally {
+            setUploadingImages(false)
+            setPendingImages([])
+          }
+        }
       } else if (data.status === 'partial') {
         setStatus({ type: 'partial', message: data.message || 'Saved — AI extraction pending.' })
         setResult(data)
@@ -518,23 +565,77 @@ function WriteMode({ entryDate }) {
           <div className="jw-stats">
             <div className="jw-stat">Words <span>{wc}</span></div>
             <div className="jw-stat">Chars <span>{cc}</span></div>
-          </div>
-          <button
-            className={`jw-save-btn ${saving ? 'saving' : ''}`}
-            onClick={handleSave}
-            disabled={!text.trim() || saving}
-          >
-            {saving ? (
-              <>
-                <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', border: '1.5px solid rgba(200,169,110,0.3)', borderTopColor: 'var(--gold)', animation: 'spin 0.8s linear infinite' }} />
-                Processing…
-              </>
-            ) : (
-              <>✦ Save Entry</>
+            {pendingImages.length > 0 && (
+              <div className="jw-stat" style={{ color: 'rgba(200,169,110,0.55)' }}>
+                📷 <span>{pendingImages.length}</span>
+              </div>
             )}
-          </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => imgInputRef.current && imgInputRef.current.click()}
+              title="Attach images (JPEG, PNG, WEBP, max 8 MB)"
+              style={{
+                background: 'none', border: '1px solid rgba(200,169,110,0.18)',
+                borderRadius: 8, padding: '6px 10px', cursor: 'pointer',
+                color: 'rgba(200,169,110,0.45)', fontSize: 14, lineHeight: 1,
+              }}
+            >📷</button>
+            <button
+              className={`jw-save-btn ${saving ? 'saving' : ''}`}
+              onClick={handleSave}
+              disabled={!text.trim() || saving}
+            >
+              {saving ? (
+                <>
+                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', border: '1.5px solid rgba(200,169,110,0.3)', borderTopColor: 'var(--gold)', animation: 'spin 0.8s linear infinite' }} />
+                  Processing…
+                </>
+              ) : (
+                <>✦ Save Entry</>
+              )}
+            </button>
+          </div>
         </div>
       </div>
+
+      {pendingImages.length > 0 && (
+        <div className="jw-img-strip">
+          {pendingImages.map((img, i) => (
+            <div className="jw-img-thumb" key={img.name + i}>
+              <img src={img.objectUrl} alt={img.name} />
+              <button
+                className="jw-img-remove"
+                onClick={() => {
+                  URL.revokeObjectURL(img.objectUrl)
+                  setPendingImages(prev => prev.filter((_, idx) => idx !== i))
+                }}
+              >×</button>
+            </div>
+          ))}
+          <button
+            className="jw-img-add-btn"
+            onClick={() => imgInputRef.current && imgInputRef.current.click()}
+          >
+            <span>+</span>
+            <span className="jw-img-add-label">Add</span>
+          </button>
+        </div>
+      )}
+      <input
+        ref={imgInputRef}
+        type="file"
+        accept=".jpg,.jpeg,.png,.webp"
+        multiple
+        style={{ display: 'none' }}
+        onChange={e => {
+          const files = Array.from(e.target.files || [])
+          const items = files.map(f => ({ file: f, name: f.name, objectUrl: URL.createObjectURL(f) }))
+          setPendingImages(prev => [...prev, ...items])
+          e.target.value = ''
+        }}
+      />
 
       {status && (
         <div className={`jw-status ${status.type}`}>
