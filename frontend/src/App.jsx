@@ -27,6 +27,7 @@ import AskMyJournal from './pages/AskMyJournal'
 import EarlyWarning from './pages/EarlyWarning'
 import DayOneImport from './pages/DayOneImport'
 import DecisionAssistant from './pages/DecisionAssistant'
+import InviteAccess from './pages/InviteAccess'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
 import api from './services/api'
@@ -60,7 +61,7 @@ function Shell() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
 
   // Pages with no sidebar and no padding — either public or full-screen tool pages
-  const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname === '/recover-via-questions' || location.pathname.startsWith('/share/') || location.pathname.startsWith('/share/')
+  const isPublicPage     = location.pathname === '/login' || location.pathname === '/onboarding' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname === '/recover-via-questions' || location.pathname.startsWith('/share/') || location.pathname.startsWith('/invite/')
   const isFullscreenPage = location.pathname === '/exitplan-full'
   const isWritePage      = location.pathname === '/write'
   const hideSidebar      = isPublicPage || isFullscreenPage || isWritePage
@@ -222,6 +223,7 @@ function Shell() {
             <Route path="/import/dayone" element={<ProtectedRoute><DayOneImport /></ProtectedRoute>} />
             <Route path="/decide" element={<ProtectedRoute><DecisionAssistant /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
+            <Route path="/invite/:token" element={<InviteAccess />} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
         </main>

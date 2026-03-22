@@ -303,6 +303,33 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
 
     @app.get("/internal/ip-check")
     def internal_ip_check(request: Request):
+        # ── Check invite access token first (IP-independent) ─────────────────
+        # Browser sends X-Invite-Token on every request after claiming an invite.
+        # This is an HMAC over (token_id:expires_at) — validated without a DB hit.
+        invite_header = request.headers.get("X-Invite-Token", "")
+        if invite_header:
+            try:
+                from src.api.invite_routes import _verify_access_token, _db as _invite_db
+                # Token format: "{token_id}:{hmac_hex}"
+                parts = invite_header.split(":", 1)
+                if len(parts) == 2:
+                    tid_str, tok = parts
+                    token_id = int(tid_str)
+                    iconn = _invite_db()
+                    inv_row = iconn.execute(
+                        "SELECT expires_at, revoked, invalidated FROM invite_tokens WHERE id = ?",
+                        (token_id,)
+                    ).fetchone()
+                    iconn.close()
+                    if inv_row and not inv_row["revoked"] and not inv_row["invalidated"]:
+                        now = datetime.now(timezone.utc).isoformat()
+                        if inv_row["expires_at"] > now:
+                            if _verify_access_token(tok, token_id, inv_row["expires_at"]):
+                                logger.debug(f"[ip-check] invite token {token_id} granted access")
+                                return Response(status_code=200)
+            except Exception as e:
+                logger.warning(f"[ip-check] invite token validation error: {e}")
+
         ip_str = request.headers.get("X-Real-IP") or get_client_ip(request)
 
         # Check static CIDR allowlist
@@ -314,7 +341,7 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
         except ValueError:
             logger.warning(f"[ip-check] could not parse IP: {ip_str!r}")
 
-        # Check temp access table
+        # Check temp access table (exit plan share)
         now  = datetime.now(timezone.utc).isoformat()
         conn = _db()
         row  = conn.execute(
@@ -322,13 +349,28 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
             (ip_str, now)
         ).fetchone()
 
-        # Lazy cleanup of expired entries
+        # Lazy cleanup of expired share_temp_access entries
         conn.execute("DELETE FROM share_temp_access WHERE expires_at <= ?", (now,))
+        conn.commit()
+
+        if row:
+            conn.close()
+            logger.debug(f"[ip-check] share temp access granted for {ip_str}")
+            return Response(status_code=200)
+
+        # Check invite_temp_access table
+        invite_row = conn.execute(
+            "SELECT id FROM invite_temp_access WHERE ip = ? AND expires_at > ? LIMIT 1",
+            (ip_str, now)
+        ).fetchone()
+
+        # Lazy cleanup of expired invite_temp_access entries
+        conn.execute("DELETE FROM invite_temp_access WHERE expires_at <= ?", (now,))
         conn.commit()
         conn.close()
 
-        if row:
-            logger.debug(f"[ip-check] temp access granted for {ip_str}")
+        if invite_row:
+            logger.debug(f"[ip-check] invite temp access granted for {ip_str}")
             return Response(status_code=200)
 
         logger.info(f"[ip-check] denied {ip_str}")

@@ -14,10 +14,15 @@ export function setAccessToken(token) { _accessToken = token }
 export function clearAccessToken() { _accessToken = null }
 export function getAccessToken() { return _accessToken }
 
-// Request interceptor — attach access token
+// Request interceptor — attach access token + invite token
 api.interceptors.request.use((config) => {
   if (_accessToken) {
     config.headers.Authorization = `Bearer ${_accessToken}`
+  }
+  // Attach invite access token if present — grants access regardless of IP
+  const inviteToken = localStorage.getItem('invite_access_token')
+  if (inviteToken) {
+    config.headers['X-Invite-Token'] = inviteToken
   }
   return config
 })

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../services/api'
 import PageHeader from '../components/PageHeader'
 
-const TAB_LABELS = { summary: 'Master Summary', users: 'Users', detection: 'Detection', spend: 'AI Spend' }
+const TAB_LABELS = { summary: 'Master Summary', users: 'Users', invites: 'Invites', detection: 'Detection', spend: 'AI Spend' }
 const mono = { fontFamily: 'IBM Plex Mono', fontSize: 11 }
 const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 20px' }
 
@@ -102,17 +102,27 @@ export default function Admin() {
   const [loading, setLoading]             = useState(true)
   const [hasUnknown, setHasUnknown]       = useState(false)
 
+  // Invites tab state
+  const [invites, setInvites]             = useState([])
+  const [inviteLabel, setInviteLabel]     = useState('')
+  const [inviteExpiry, setInviteExpiry]   = useState('30d')
+  const [inviteCreating, setInviteCreating] = useState(false)
+  const [inviteResult, setInviteResult]   = useState(null)   // { url, passphrase, expires_at }
+  const [inviteCopied, setInviteCopied]   = useState('')
+
   const load = async () => {
     setLoading(true)
     try {
-      const [summaryRes, usersRes, usageRes] = await Promise.all([
+      const [summaryRes, usersRes, usageRes, invitesRes] = await Promise.all([
         api.get('/api/summary/master'),
         api.get('/api/admin/users'),
         api.get('/api/admin/ai-usage'),
+        api.get('/api/admin/invites').catch(() => ({ data: { invites: [] } })),
       ])
       setMasterSummary(summaryRes.data)
       setUsers(usersRes.data.users || [])
       setAiUsage(usageRes.data)
+      setInvites(invitesRes.data.invites || [])
       const rows = usageRes.data?.per_user || []
       setHasUnknown(rows.some(r => !getPricing(r.models)))
     } catch (e) { console.error(e) }
@@ -141,6 +151,29 @@ export default function Admin() {
   const revokeSessions = async (id, username) => {
     if (!confirm(`Revoke all sessions for "${username}"?`)) return
     try { await api.delete(`/api/admin/sessions/${id}`); alert('Sessions revoked') } catch (e) { console.error(e) }
+  }
+
+  const createInvite = async () => {
+    setInviteCreating(true)
+    setInviteResult(null)
+    try {
+      const r = await api.post('/api/admin/invites', { label: inviteLabel || null, expires_in: inviteExpiry })
+      setInviteResult(r.data)
+      setInviteLabel('')
+      load()
+    } catch (e) { alert('Failed: ' + (e.response?.data?.detail || e.message)) }
+    setInviteCreating(false)
+  }
+
+  const revokeInvite = async (id) => {
+    if (!confirm('Revoke this invite? The person will lose site access immediately.')) return
+    try { await api.delete(`/api/admin/invites/${id}`); load() } catch (e) { console.error(e) }
+  }
+
+  const copyToClipboard = async (text, key) => {
+    await navigator.clipboard.writeText(text)
+    setInviteCopied(key)
+    setTimeout(() => setInviteCopied(''), 2000)
   }
 
   const fmtNum  = n => (n || 0).toLocaleString()
@@ -256,6 +289,101 @@ export default function Admin() {
               {adding ? 'Creating...' : 'Create User'}
             </button>
           </div>
+        </div>
+
+      ) : activeTab === 'invites' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Create invite */}
+          <div style={{ ...card, maxWidth: 540 }}>
+            <div style={{ fontSize: 12, fontFamily: 'Syne', fontWeight: 600, marginBottom: 16 }}>Create Invite Link</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 10, ...mono, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 4 }}>Label (optional)</label>
+                <input value={inviteLabel} onChange={e => setInviteLabel(e.target.value)} placeholder="e.g. Jane's invite"
+                  style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, ...mono, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 4 }}>Expires in</label>
+                <select value={inviteExpiry} onChange={e => setInviteExpiry(e.target.value)}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 8px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }}>
+                  <option value="24h">24 hours</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                  <option value="90d">90 days</option>
+                </select>
+              </div>
+            </div>
+            <button onClick={createInvite} disabled={inviteCreating} style={{ padding: '9px 20px', background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 600, fontFamily: 'Syne', cursor: inviteCreating ? 'not-allowed' : 'pointer' }}>
+              {inviteCreating ? 'Generating...' : '+ Generate Invite'}
+            </button>
+          </div>
+
+          {/* New invite result */}
+          {inviteResult && (
+            <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 10, padding: '20px 24px', maxWidth: 540 }}>
+              <div style={{ fontSize: 12, fontFamily: 'Syne', fontWeight: 600, color: '#10b981', marginBottom: 14 }}>✓ Invite created — share these with the recipient</div>
+              {[
+                ['Invite URL', `${window.location.origin}${inviteResult.url}`, 'url'],
+                ['Passphrase', inviteResult.passphrase, 'pass'],
+              ].map(([label, val, key]) => (
+                <div key={key} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, ...mono, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <code style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 12, ...mono, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{val}</code>
+                    <button onClick={() => copyToClipboard(val, key)} style={{ padding: '6px 12px', background: inviteCopied === key ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, color: inviteCopied === key ? '#10b981' : 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {inviteCopied === key ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontSize: 10, ...mono, color: 'var(--text-muted)', marginTop: 8 }}>
+                Passphrase shown once. If this link is accessed from a second IP, it is automatically invalidated for security.
+              </div>
+            </div>
+          )}
+
+          {/* Invite list */}
+          {invites.length > 0 ? (
+            <div style={card}>
+              <div style={{ fontSize: 12, fontFamily: 'Syne', fontWeight: 600, marginBottom: 14 }}>Active & Past Invites</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {invites.map(inv => {
+                  const statusColor = {
+                    active:       '#6366f1',
+                    claimed:      '#10b981',
+                    expired:      'rgba(255,255,255,0.25)',
+                    revoked:      '#ef4444',
+                    invalidated:  '#f59e0b',
+                  }[inv.status] || 'var(--text-muted)'
+                  return (
+                    <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2 }}>{inv.label || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>no label</span>}</div>
+                        <div style={{ fontSize: 10, ...mono, color: 'var(--text-muted)' }}>
+                          Created {fmtDate(inv.created_at)} · Expires {fmtDate(inv.expires_at)}
+                          {inv.claimed_ip && <> · Claimed by {inv.claimed_ip}</>}
+                        </div>
+                        {inv.invalidated_reason && (
+                          <div style={{ fontSize: 10, ...mono, color: '#f59e0b', marginTop: 2 }}>{inv.invalidated_reason}</div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 10, ...mono, padding: '2px 8px', borderRadius: 20, background: statusColor + '22', color: statusColor, border: `1px solid ${statusColor}44`, flexShrink: 0 }}>
+                        {inv.status}
+                      </span>
+                      {inv.status !== 'revoked' && inv.status !== 'invalidated' && inv.status !== 'expired' && (
+                        <button onClick={() => revokeInvite(inv.id)} style={{ padding: '4px 10px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 5, color: '#ef4444', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}>Revoke</button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={{ ...card, textAlign: 'center', color: 'var(--text-muted)', ...mono, padding: 40 }}>
+              no invites yet — generate one above
+            </div>
+          )}
         </div>
 
       ) : activeTab === 'spend' ? (

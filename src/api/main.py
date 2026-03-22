@@ -2182,3 +2182,6 @@ register_passkey_routes(app, require_any_user)
 from src.api.decision_routes import register_decision_routes
 register_decision_routes(app, require_any_user)
 
+from src.api.invite_routes import register_invite_routes
+register_invite_routes(app, require_any_user, require_owner)
+
