@@ -1315,6 +1315,70 @@ def register_detective_routes(app, require_any_user, require_owner):
         finally:
             conn.close()
 
+
+
+    # ── Case Export ───────────────────────────────────────────────────────────
+
+    @app.post("/api/detective/cases/{case_id}/export")
+    async def export_case_pdf(case_id: int, user: dict = Depends(_require_detective)):
+        """Generate and return a rich PDF case report for the given case."""
+        import io
+        from fastapi.responses import StreamingResponse
+
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+        finally:
+            conn.close()
+
+        try:
+            from src.nlp.detective_case_export import generate_case_pdf
+            result = generate_case_pdf(case_id, user["id"])
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            logger.error(f"[detective] export failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Export failed: {e}")
+
+        pdf_path = result["path"]
+        filename = result["filename"]
+
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
+            }
+        )
+
+    @app.get("/api/detective/cases/{case_id}/export/html")
+    async def export_case_html(case_id: int, user: dict = Depends(_require_detective)):
+        """Return the HTML version of the case report (for debugging / preview)."""
+        from fastapi.responses import HTMLResponse
+
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+        finally:
+            conn.close()
+
+        try:
+            from src.nlp.detective_case_export import generate_case_pdf
+            result = generate_case_pdf(case_id, user["id"])
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            logger.error(f"[detective] html export failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"HTML export failed: {e}")
+
+        return HTMLResponse(content=result["html"])
+
     @app.delete("/api/detective/admin/revoke/{target_user_id}")
     async def admin_revoke(target_user_id: int, user: dict = Depends(require_owner)):
         conn = _db()

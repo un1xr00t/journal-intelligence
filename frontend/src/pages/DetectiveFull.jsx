@@ -296,6 +296,167 @@ function WireHistory({ caseId }) {
   )
 }
 
+
+// ── Export Tab ────────────────────────────────────────────────────────────────
+
+function ExportTab({ caseId, caseName }) {
+  const [exporting, setExporting] = useState(false)
+  const [status,    setStatus]    = useState(null)  // null | 'generating' | 'done' | 'error'
+  const [errorMsg,  setErrorMsg]  = useState('')
+
+  const generate = async () => {
+    setExporting(true)
+    setStatus('generating')
+    setErrorMsg('')
+    try {
+      const res = await api.post(
+        `/api/detective/cases/${caseId}/export`,
+        {},
+        { responseType: 'blob' }
+      )
+      // Trigger browser download
+      const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      const cd   = res.headers['content-disposition'] || ''
+      const fnMatch = cd.match(/filename="([^"]+)"/)
+      link.href     = url
+      link.download = fnMatch ? fnMatch[1] : `case_report_${caseId}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      setStatus('done')
+    } catch (e) {
+      const msg = e.response?.data?.detail
+        || (e.response?.data instanceof Blob
+            ? await e.response.data.text().then(t => { try { return JSON.parse(t).detail } catch { return t } })
+            : null)
+        || 'Export failed. Check logs.'
+      setErrorMsg(msg)
+      setStatus('error')
+    }
+    setExporting(false)
+  }
+
+  return (
+    <div style={{ padding: 32, maxWidth: 700 }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: 'var(--text-primary)', marginBottom: 6 }}>
+          📄 Export Case Report
+        </div>
+        <div style={{ ...mono, fontSize: 11, color: 'var(--text-muted)' }}>
+          Generate a comprehensive PDF report of the entire case
+        </div>
+      </div>
+
+      {/* What's included card */}
+      <div style={{
+        background: 'rgba(99,102,241,0.04)',
+        border: '1px solid rgba(99,102,241,0.18)',
+        borderRadius: 12, padding: '22px 24px', marginBottom: 24,
+      }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', marginBottom: 14 }}>
+          What&apos;s included in the report
+        </div>
+        {[
+          ['🎯', 'Cover Page', 'Case title, stats summary, generated timestamp'],
+          ['🧠', 'Intelligence Brief', 'Full AI-synthesized case analysis (if generated)'],
+          ['◷',  'Investigation Log', 'Every log entry with type, severity, content & attached photo analyses'],
+          ['📡', 'Wire Briefings', 'Complete history of all wire drops, full text'],
+          ['📷', 'Photo Evidence', 'Gallery thumbnails with AI analysis text'],
+          ['🖼',  'Appendix', 'Full-resolution evidence photos embedded at the end'],
+        ].map(([icon, title, desc]) => (
+          <div key={title} style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+            <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>{desc}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Generate button */}
+      <button
+        onClick={generate}
+        disabled={exporting}
+        style={{
+          width: '100%',
+          padding: '14px 24px',
+          background: exporting
+            ? 'rgba(99,102,241,0.1)'
+            : 'linear-gradient(135deg, rgba(99,102,241,0.3), rgba(168,85,247,0.25))',
+          border: '1px solid rgba(99,102,241,0.45)',
+          borderRadius: 10,
+          color: exporting ? 'var(--text-muted)' : 'var(--text-primary)',
+          fontFamily: 'Syne',
+          fontWeight: 800,
+          fontSize: 14,
+          letterSpacing: '0.04em',
+          cursor: exporting ? 'not-allowed' : 'pointer',
+          transition: 'all 0.15s',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          marginBottom: 16,
+        }}
+      >
+        {exporting ? (
+          <>
+            <span style={{ fontSize: 16 }}>⏳</span>
+            Generating report…
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 16 }}>📄</span>
+            Generate &amp; Download PDF
+          </>
+        )}
+      </button>
+
+      {/* Status messages */}
+      {status === 'done' && (
+        <div style={{
+          padding: '12px 16px',
+          background: 'rgba(34,197,94,0.08)',
+          border: '1px solid rgba(34,197,94,0.25)',
+          borderRadius: 8,
+          display: 'flex', alignItems: 'center', gap: 10,
+          fontSize: 13, color: '#22c55e',
+        }}>
+          <span>✓</span>
+          <span>Report downloaded successfully. Check your downloads folder.</span>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div style={{
+          padding: '12px 16px',
+          background: 'rgba(239,68,68,0.08)',
+          border: '1px solid rgba(239,68,68,0.25)',
+          borderRadius: 8,
+          fontSize: 13, color: '#ef4444',
+          lineHeight: 1.6,
+        }}>
+          <strong>Export failed:</strong> {errorMsg}
+        </div>
+      )}
+
+      {/* Note about PDF backend */}
+      <div style={{ marginTop: 20, padding: '10px 14px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', borderRadius: 8 }}>
+        <div style={{ ...mono, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          PDF requires <strong>weasyprint</strong> on the server. If generation fails, run:
+          <br />
+          <span style={{ color: 'rgba(99,102,241,0.8)' }}>pip install weasyprint --break-system-packages</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Collapsed Panel Stub ──────────────────────────────────────────────────────
 
 function CollapsedCases({ cases, selected, onSelect, onOpen }) {
@@ -485,12 +646,13 @@ export default function DetectiveFull() {
     { key: 'gallery',      label: '🖼 Gallery'   },
     { key: 'intelligence', label: '🧠 Intelligence' },
     { key: 'wires',        label: '📡 Wire History' },
+    { key: 'export',       label: '📄 Export Report' },
   ]
 
   // Column widths based on open/collapsed state
   const leftW   = casesOpen   ? PANEL_W  : ICON_W
   const rightW  = partnerOpen ? PARTNER_W : ICON_W
-  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires'
+  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires' && activeTab !== 'export'
   const effectiveRightW = showPartner ? rightW : 0
 
   return (
@@ -689,6 +851,9 @@ export default function DetectiveFull() {
                 )}
                 {activeTab === 'wires' && (
                   <WireHistory caseId={selectedCase.id} />
+                )}
+                {activeTab === 'export' && (
+                  <ExportTab caseId={selectedCase.id} caseName={selectedCase.title} />
                 )}
               </>
             )}
