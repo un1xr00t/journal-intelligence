@@ -409,7 +409,12 @@ export default function DetectiveFull() {
     try {
       const r = await api.post(`/api/detective/cases/${selectedCase.id}/entries`, data)
       setEntries(e => [r.data, ...e])
+      return r.data
     } catch (e) { alert(e.response?.data?.detail || 'Failed to add entry.') }
+  }
+
+  const updateEntryAttachment = (entryId, attachData) => {
+    setEntries(es => es.map(e => e.id === entryId ? { ...e, ...attachData } : e))
   }
 
   const deleteEntry = async (id) => {
@@ -656,6 +661,7 @@ export default function DetectiveFull() {
                       entries={entries}
                       onAdd={addEntry}
                       onDelete={deleteEntry}
+                      onAttachmentUpdate={updateEntryAttachment}
                       loading={loadingEntries}
                     />
                   </div>

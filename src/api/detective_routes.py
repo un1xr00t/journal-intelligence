@@ -227,15 +227,25 @@ def register_detective_routes(app, require_any_user, require_owner):
         return summary
 
     def _case_context(case_id: int, user_id: int, conn) -> str:
+        """Full case context — every piece of logged evidence assembled."""
         case = _get_case(case_id, user_id, conn)
+
         entries = conn.execute(
-            "SELECT content, entry_type, severity, created_at FROM detective_entries "
-            "WHERE case_id = ? ORDER BY created_at DESC LIMIT 20",
+            "SELECT id, content, entry_type, severity, created_at, "
+            "attachment_filename, attachment_analysis, attachment_status "
+            "FROM detective_entries WHERE case_id = ? ORDER BY created_at DESC LIMIT 20",
             (case_id,)
         ).fetchall()
+
         uploads = conn.execute(
             "SELECT original_filename, ai_analysis, created_at FROM detective_uploads "
             "WHERE case_id = ? AND analysis_status = 'done' ORDER BY created_at DESC LIMIT 10",
+            (case_id,)
+        ).fetchall()
+
+        wires = conn.execute(
+            "SELECT briefing, created_at FROM detective_wire_history "
+            "WHERE case_id = ? ORDER BY created_at DESC LIMIT 5",
             (case_id,)
         ).fetchall()
 
@@ -246,12 +256,26 @@ def register_detective_routes(app, require_any_user, require_owner):
         if entries:
             parts.append("\n--- INVESTIGATION LOG ---")
             for e in entries:
-                parts.append(f"[{e['created_at'][:10]} | {e['entry_type'].upper()} | {e['severity'].upper()}] {e['content']}")
+                line = (
+                    f"[{e['created_at'][:10]} | {e['entry_type'].upper()} | {e['severity'].upper()}] "
+                    f"{e['content']}"
+                )
+                parts.append(line)
+                if e["attachment_status"] == "done" and e["attachment_analysis"]:
+                    parts.append(
+                        f"  ^ ATTACHED PHOTO EVIDENCE ('{e['attachment_filename']}'):\n"
+                        f"  {e['attachment_analysis']}"
+                    )
 
         if uploads:
-            parts.append("\n--- ANALYZED EVIDENCE (PHOTOS) ---")
+            parts.append("\n--- PHOTO EVIDENCE (GALLERY UPLOADS) ---")
             for u in uploads:
                 parts.append(f"Photo '{u['original_filename']}' ({u['created_at'][:10]}):\n{u['ai_analysis']}")
+
+        if wires:
+            parts.append("\n--- PRIOR WIRE BRIEFINGS ---")
+            for w in wires:
+                parts.append(f"[Wire {w['created_at'][:10]}]\n{w['briefing'][:800]}")
 
         return "\n".join(parts)
 
@@ -264,59 +288,91 @@ def register_detective_routes(app, require_any_user, require_owner):
         ).fetchone()
 
     def _efficient_case_context(case_id: int, user_id: int, conn) -> str:
-        """Token-efficient context: uses intelligence brief + last 5 entries.
+        """Token-efficient context: intelligence brief + recent activity + all current evidence.
         Falls back to full _case_context if no intelligence exists yet."""
         intel = _get_intelligence(case_id, user_id, conn)
         case = _get_case(case_id, user_id, conn)
         if intel and intel["summary"]:
+            # Recent log entries (with attachment analyses inline)
             recent = conn.execute(
-                "SELECT content, entry_type, severity, created_at FROM detective_entries "
-                "WHERE case_id = ? ORDER BY created_at DESC LIMIT 5",
+                "SELECT id, content, entry_type, severity, created_at, "
+                "attachment_filename, attachment_analysis, attachment_status "
+                "FROM detective_entries WHERE case_id = ? ORDER BY created_at DESC LIMIT 5",
                 (case_id,)
             ).fetchall()
-            recent_text = "\n".join(
-                f"[{e['created_at'][:10]}|{e['entry_type'].upper()}|{e['severity'].upper()}] {e['content']}"
-                for e in recent
-            ) or "No recent entries."
+            recent_lines = []
+            for e in recent:
+                line = (
+                    f"[{e['created_at'][:10]}|{e['entry_type'].upper()}|{e['severity'].upper()}] "
+                    f"{e['content']}"
+                )
+                recent_lines.append(line)
+                if e["attachment_status"] == "done" and e["attachment_analysis"]:
+                    recent_lines.append(
+                        f"  ^ PHOTO ATTACHED ('{e['attachment_filename']}'):\n"
+                        f"  {e['attachment_analysis']}"
+                    )
+            recent_text = "\n".join(recent_lines) or "No recent entries."
+
+            # Recent photo uploads not yet covered by attachment-on-entries
+            recent_uploads = conn.execute(
+                "SELECT original_filename, ai_analysis, created_at FROM detective_uploads "
+                "WHERE case_id = ? AND analysis_status = 'done' ORDER BY created_at DESC LIMIT 5",
+                (case_id,)
+            ).fetchall()
+            uploads_text = ""
+            if recent_uploads:
+                uploads_text = "\n\nRECENT PHOTO EVIDENCE:\n" + "\n".join(
+                    f"Photo '{u['original_filename']}' ({u['created_at'][:10]}): {u['ai_analysis'][:300]}"
+                    for u in recent_uploads
+                )
+
+            # Journal background (always included)
+            journal_summary = _journal_cache(user_id, conn)
+
             return (
                 f"=== CASE: {case['title']} ===\n\n"
                 f"PERSISTENT CASE INTELLIGENCE (last updated {intel['last_updated'][:16]}):\n"
                 f"{intel['summary']}\n\n"
-                f"RECENT ACTIVITY (last 5 entries):\n{recent_text}"
+                f"RECENT LOG ACTIVITY (last 5 entries + any attached photos):\n{recent_text}"
+                f"{uploads_text}\n\n"
+                f"--- JOURNAL BACKGROUND ---\n{journal_summary}"
             )
-        # No intelligence yet — fall back to full context
-        return _case_context(case_id, user_id, conn)
+        # No intelligence yet — fall back to full context + journal
+        journal_summary = _journal_cache(user_id, conn)
+        return _case_context(case_id, user_id, conn) + f"\n\n--- JOURNAL BACKGROUND ---\n{journal_summary}"
 
     def _update_intelligence(case_id: int, user_id: int, conn) -> None:
         """Generate and persist a compressed case intelligence brief.
+        Includes ALL evidence: log entries + attachment analyses + photo uploads +
+        wire history + journal background.
         Called automatically after every wire drop. Also callable on demand."""
         from src.api.ai_client import create_message
+        # _case_context now includes entry attachments + wire history
         full_ctx = _case_context(case_id, user_id, conn)
-        wire_rows = conn.execute(
-            "SELECT briefing, created_at FROM detective_wire_history "
-            "WHERE case_id = ? ORDER BY created_at DESC LIMIT 3",
-            (case_id,)
-        ).fetchall()
-        wire_text = ""
-        if wire_rows:
-            wire_text = "\n\nRECENT WIRE DROPS:\n" + "\n---\n".join(
-                f"[{r['created_at'][:10]}] {r['briefing'][:600]}" for r in wire_rows
-            )
+        # Journal background
+        journal_summary = _journal_cache(user_id, conn)
         entry_count = conn.execute(
             "SELECT COUNT(*) as cnt FROM detective_entries WHERE case_id = ?", (case_id,)
         ).fetchone()["cnt"]
         wire_count = conn.execute(
             "SELECT COUNT(*) as cnt FROM detective_wire_history WHERE case_id = ?", (case_id,)
         ).fetchone()["cnt"]
+        full_data = (
+            f"{full_ctx}\n\n"
+            f"--- JOURNAL BACKGROUND ---\n{journal_summary}"
+        )
         summary = create_message(
             user_id,
             system=(
                 "You are generating a persistent case intelligence brief for a detective investigation system. "
                 "This brief persists between sessions and replaces loading all raw data every time. "
+                "All evidence — log entries, attached photo analyses, gallery photo analyses, wire briefings, "
+                "and journal background — has been provided. Synthesize everything. "
                 "Be analytical and precise. Follow the format instructions exactly."
             ),
-            user_prompt=_INTELLIGENCE_UPDATE_PROMPT + f"\n\nCASE DATA:\n{full_ctx}{wire_text}",
-            max_tokens=600,
+            user_prompt=_INTELLIGENCE_UPDATE_PROMPT + f"\n\nCASE DATA + JOURNAL:\n{full_data}",
+            max_tokens=800,
             call_type="detective_intelligence",
         )
         conn.execute(
@@ -451,7 +507,8 @@ def register_detective_routes(app, require_any_user, require_owner):
         try:
             _get_case(case_id, user["id"], conn)
             rows = conn.execute(
-                "SELECT id, content, entry_type, severity, created_at "
+                "SELECT id, content, entry_type, severity, created_at, "
+                "attachment_filename, attachment_analysis, attachment_status "
                 "FROM detective_entries WHERE case_id = ? ORDER BY created_at DESC",
                 (case_id,)
             ).fetchall()
@@ -521,6 +578,169 @@ def register_detective_routes(app, require_any_user, require_owner):
             conn.close()
 
 
+    # ── Entry Attachments ─────────────────────────────────────────────────────
+
+    _ENTRY_ATTACHMENT_VISION_PROMPT = (
+        "You are analyzing an image attached to an investigation log entry. "
+        "\n\nCRITICAL CONTEXT: The person who submitted this image is the INVESTIGATOR documenting the situation "
+        "— they are the one logging observations. They are NOT a subject or participant in anything shown in this image. "
+        "Do not attribute actions, behaviors, or roles in the photo to the person who submitted it. "
+        "\n\nThe investigator's written note for this entry:\n\"{}\"\n\n"
+        "With that context in mind, analyze this image as evidence relevant to their note. "
+        "Be specific and observational: What exactly is happening in the image? Who or what appears to be the subject? "
+        "What details (text, objects, locations, timestamps, expressions, behavior patterns) are visible and significant? "
+        "How does this image relate to or support what the investigator wrote? "
+        "Note anything that stands out as potentially important for documentation purposes."
+    )
+
+    @app.post("/api/detective/cases/{case_id}/entries/{entry_id}/attachment")
+    async def upload_entry_attachment(
+        case_id: int,
+        entry_id: int,
+        file: UploadFile = File(...),
+        user: dict = Depends(_require_detective)
+    ):
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=415, detail="Only JPEG, PNG, WEBP, and GIF images are allowed.")
+        data = await file.read()
+        if len(data) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="Image must be under 10 MB.")
+
+        # Resize if needed to stay under Anthropic base64 limit
+        ANTHROPIC_LIMIT = 4 * 1024 * 1024
+        mime_out = file.content_type
+        if len(data) > ANTHROPIC_LIMIT:
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(data))
+                img = img.convert("RGB")
+                quality = 85
+                while True:
+                    buf = io.BytesIO()
+                    img.save(buf, format="JPEG", quality=quality, optimize=True)
+                    compressed = buf.getvalue()
+                    if len(compressed) <= ANTHROPIC_LIMIT or quality < 40:
+                        data = compressed
+                        mime_out = "image/jpeg"
+                        break
+                    quality -= 10
+            except Exception as _re:
+                logger.warning(f"[detective] entry attachment resize failed: {_re}")
+
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            entry = conn.execute(
+                "SELECT id, content FROM detective_entries WHERE id = ? AND case_id = ? AND user_id = ?",
+                (entry_id, case_id, user["id"])
+            ).fetchone()
+            if not entry:
+                raise HTTPException(status_code=404, detail="Entry not found.")
+
+            # Remove old attachment file if one exists
+            old = conn.execute(
+                "SELECT attachment_path FROM detective_entries WHERE id = ?", (entry_id,)
+            ).fetchone()
+            if old and old["attachment_path"] and os.path.exists(old["attachment_path"]):
+                try:
+                    os.remove(old["attachment_path"])
+                except Exception:
+                    pass
+
+            # Save new file
+            case_dir = os.path.join(DETECTIVE_STORAGE, f"user_{user['id']}", f"case_{case_id}", "entry_attachments")
+            os.makedirs(case_dir, exist_ok=True)
+            ext = os.path.splitext(file.filename or "img.jpg")[1] or ".jpg"
+            stored = f"entry_{entry_id}_{uuid.uuid4().hex[:8]}{ext}"
+            fpath = os.path.join(case_dir, stored)
+            with open(fpath, "wb") as fh:
+                fh.write(data)
+
+            # Set status to analyzing
+            conn.execute(
+                "UPDATE detective_entries SET attachment_path=?, attachment_filename=?, attachment_mime=?, "
+                "attachment_status='analyzing', attachment_analysis=NULL WHERE id=?",
+                (fpath, file.filename, mime_out, entry_id)
+            )
+            conn.commit()
+
+            # Run context-aware vision analysis
+            entry_content = entry["content"] or ""
+            vision_prompt = _ENTRY_ATTACHMENT_VISION_PROMPT.format(
+                entry_content.replace('"', '\"')[:600]
+            )
+            try:
+                b64 = base64.standard_b64encode(data).decode()
+                analysis = _call_vision(user["id"], b64, mime_out, vision_prompt)
+                conn.execute(
+                    "UPDATE detective_entries SET attachment_analysis=?, attachment_status='done' WHERE id=?",
+                    (analysis, entry_id)
+                )
+                conn.commit()
+                status_out = "done"
+            except Exception as ex:
+                logger.error(f"[detective] entry attachment vision failed: {ex}")
+                analysis = f"Analysis unavailable: {str(ex)[:400]}"
+                conn.execute(
+                    "UPDATE detective_entries SET attachment_analysis=?, attachment_status='failed' WHERE id=?",
+                    (analysis, entry_id)
+                )
+                conn.commit()
+                status_out = "failed"
+
+            return {
+                "attachment_filename": file.filename,
+                "attachment_analysis": analysis,
+                "attachment_status": status_out,
+            }
+        finally:
+            conn.close()
+
+    @app.get("/api/detective/cases/{case_id}/entries/{entry_id}/attachment/image")
+    async def get_entry_attachment(case_id: int, entry_id: int, user: dict = Depends(_require_detective)):
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            row = conn.execute(
+                "SELECT attachment_path, attachment_mime FROM detective_entries "
+                "WHERE id = ? AND case_id = ? AND user_id = ?",
+                (entry_id, case_id, user["id"])
+            ).fetchone()
+            if not row or not row["attachment_path"] or not os.path.exists(row["attachment_path"]):
+                raise HTTPException(status_code=404, detail="Attachment not found.")
+            return FileResponse(row["attachment_path"], media_type=row["attachment_mime"] or "image/jpeg")
+        finally:
+            conn.close()
+
+    @app.delete("/api/detective/cases/{case_id}/entries/{entry_id}/attachment")
+    async def delete_entry_attachment(case_id: int, entry_id: int, user: dict = Depends(_require_detective)):
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            row = conn.execute(
+                "SELECT attachment_path FROM detective_entries WHERE id = ? AND case_id = ? AND user_id = ?",
+                (entry_id, case_id, user["id"])
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Entry not found.")
+            if row["attachment_path"] and os.path.exists(row["attachment_path"]):
+                try:
+                    os.remove(row["attachment_path"])
+                except Exception:
+                    pass
+            conn.execute(
+                "UPDATE detective_entries SET attachment_path=NULL, attachment_filename=NULL, "
+                "attachment_mime=NULL, attachment_analysis=NULL, attachment_status='none' WHERE id=?",
+                (entry_id,)
+            )
+            conn.commit()
+            return {"ok": True}
+        finally:
+            conn.close()
+
+
+
     # ── Photo Uploads + Vision Analysis ───────────────────────────────────────
 
     @app.get("/api/detective/cases/{case_id}/uploads")
@@ -533,7 +753,36 @@ def register_detective_routes(app, require_any_user, require_owner):
                 "FROM detective_uploads WHERE case_id = ? ORDER BY created_at DESC",
                 (case_id,)
             ).fetchall()
-            return [dict(r) for r in rows]
+            result = []
+            for r in rows:
+                d = dict(r)
+                d['image_url'] = f"/api/detective/cases/{case_id}/uploads/{r['id']}/image"
+                d['source'] = 'upload'
+                d['source_note'] = None
+                result.append(d)
+            # Include entry attachments
+            entry_rows = conn.execute(
+                "SELECT id, content, attachment_filename, attachment_analysis, attachment_status, created_at "
+                "FROM detective_entries "
+                "WHERE case_id = ? AND attachment_status IS NOT NULL AND attachment_status != 'none' "
+                "AND attachment_filename IS NOT NULL ORDER BY created_at DESC",
+                (case_id,)
+            ).fetchall()
+            for r in entry_rows:
+                result.append({
+                    'id': f"entry_{r['id']}",
+                    'original_filename': r['attachment_filename'],
+                    'file_size': None,
+                    'mime_type': None,
+                    'ai_analysis': r['attachment_analysis'],
+                    'analysis_status': r['attachment_status'],
+                    'created_at': r['created_at'],
+                    'image_url': f"/api/detective/cases/{case_id}/entries/{r['id']}/attachment/image",
+                    'source': 'entry',
+                    'source_note': (r['content'] or '')[:100],
+                })
+            result.sort(key=lambda x: x['created_at'] or '', reverse=True)
+            return result
         finally:
             conn.close()
 
@@ -659,14 +908,9 @@ def register_detective_routes(app, require_any_user, require_owner):
     async def case_chat(case_id: int, body: ChatRequest, user: dict = Depends(_require_detective)):
         conn = _db()
         try:
-            # Use intelligence brief if available (60-70% token savings), fall back to full context
-            intel = _get_intelligence(case_id, user["id"], conn)
-            if intel and intel["summary"]:
-                context_block = _efficient_case_context(case_id, user["id"], conn)
-            else:
-                journal_summary = _journal_cache(user["id"], conn)
-                case_ctx = _case_context(case_id, user["id"], conn)
-                context_block = f"{case_ctx}\n\n--- JOURNAL BACKGROUND ---\n{journal_summary}"
+            # _efficient_case_context always includes: intel brief (if exists), recent entries
+            # + attachment analyses, gallery photo analyses, wire history, journal background.
+            context_block = _efficient_case_context(case_id, user["id"], conn)
             system = _PARTNER_SYSTEM + f"\n\nHere's everything you know:\n\n{context_block}"
 
             # Format conversation history into the prompt (ai_client is single-turn)
@@ -712,10 +956,12 @@ def register_detective_routes(app, require_any_user, require_owner):
     async def drop_wire(case_id: int, user: dict = Depends(_require_detective)):
         conn = _db()
         try:
+            # Full context: log entries + attachment analyses + gallery photos +
+            # prior wire briefings + journal background — everything.
             journal_summary = _journal_cache(user["id"], conn)
             case_ctx = _case_context(case_id, user["id"], conn)
             context_block = f"{case_ctx}\n\n--- JOURNAL BACKGROUND ---\n{journal_summary}"
-            system = _PARTNER_SYSTEM + f"\n\nHere's the complete case file:\n\n{context_block}"
+            system = _PARTNER_SYSTEM + f"\n\nHere's the complete case file — every piece of evidence:\n\n{context_block}"
 
             from src.api.ai_client import create_message
             briefing = create_message(
@@ -797,14 +1043,88 @@ def register_detective_routes(app, require_any_user, require_owner):
         finally:
             conn.close()
 
+    def _bg_digest_and_purge(case_id: int, user_id: int, session_ids: list):
+        """Background: digest chat history into intelligence brief, then purge old sessions."""
+        try:
+            bg_conn = _db()
+            try:
+                all_msgs = bg_conn.execute(
+                    """SELECT role, content, created_at FROM detective_chat_messages
+                       WHERE case_id = ? AND user_id = ?
+                       AND role IN ('user', 'assistant')
+                       ORDER BY created_at ASC""",
+                    (case_id, user_id)
+                ).fetchall()
+
+                if len(all_msgs) >= 4:
+                    from src.api.ai_client import create_message
+                    chat_text = "\n".join(
+                        f"{'User' if m['role'] == 'user' else 'Case Partner'}: {m['content'][:300]}"
+                        for m in all_msgs[-40:]
+                    )
+                    # Use _case_context (full evidence: entries + attachments + photos + wires)
+                    full_ctx = _case_context(case_id, user_id, bg_conn)
+                    journal_summary = _journal_cache(user_id, bg_conn)
+                    combined = (
+                        f"{full_ctx}\n\n"
+                        f"--- JOURNAL BACKGROUND ---\n{journal_summary}\n\n"
+                        f"--- CONVERSATION HISTORY (being archived) ---\n{chat_text}"
+                    )
+                    summary = create_message(
+                        user_id,
+                        system=(
+                            "You are updating a persistent case intelligence brief. "
+                            "The conversation history shown is being archived — extract anything important "
+                            "from it and incorporate it into the brief along with all case evidence. "
+                            "Follow the format instructions exactly."
+                        ),
+                        user_prompt=_INTELLIGENCE_UPDATE_PROMPT + f"\n\nFULL CASE DATA + ARCHIVED CHATS:\n{combined}",
+                        max_tokens=800,
+                        call_type="detective_intelligence",
+                    )
+                    entry_count = bg_conn.execute(
+                        "SELECT COUNT(*) as cnt FROM detective_entries WHERE case_id = ?", (case_id,)
+                    ).fetchone()["cnt"]
+                    wire_count = bg_conn.execute(
+                        "SELECT COUNT(*) as cnt FROM detective_wire_history WHERE case_id = ?", (case_id,)
+                    ).fetchone()["cnt"]
+                    bg_conn.execute(
+                        """INSERT INTO case_intelligence (case_id, user_id, summary, entry_count, wire_count, last_updated)
+                           VALUES (?, ?, ?, ?, ?, datetime('now'))
+                           ON CONFLICT(case_id) DO UPDATE SET
+                             summary = excluded.summary,
+                             entry_count = excluded.entry_count,
+                             wire_count = excluded.wire_count,
+                             last_updated = excluded.last_updated""",
+                        (case_id, user_id, summary, entry_count, wire_count)
+                    )
+                    bg_conn.commit()
+                    logger.info(f"[detective] bg digest complete for case {case_id}")
+
+                # Purge old sessions (keep 2 most recent)
+                if len(session_ids) >= 2:
+                    keep_ids = set(session_ids[:2])
+                    purge_ids = [s for s in session_ids if s not in keep_ids]
+                    for sid in purge_ids:
+                        bg_conn.execute(
+                            "DELETE FROM detective_chat_messages WHERE case_id = ? AND user_id = ? AND session_id = ?",
+                            (case_id, user_id, sid)
+                        )
+                    bg_conn.commit()
+                    if purge_ids:
+                        logger.info(f"[detective] purged {len(purge_ids)} old session(s) for case {case_id}")
+            finally:
+                bg_conn.close()
+        except Exception as be:
+            logger.warning(f"[detective] bg digest/purge failed: {be}")
+
     @app.post("/api/detective/cases/{case_id}/chat/session")
-    async def new_chat_session(case_id: int, user: dict = Depends(_require_detective)):
+    async def new_chat_session(case_id: int, background_tasks: BackgroundTasks, user: dict = Depends(_require_detective)):
         import uuid as _uuid
         conn = _db()
         try:
             _get_case(case_id, user["id"], conn)
 
-            # Get all existing sessions ordered newest first
             sessions = conn.execute(
                 """SELECT session_id, MIN(created_at) as started_at
                    FROM detective_chat_messages
@@ -814,102 +1134,13 @@ def register_detective_routes(app, require_any_user, require_owner):
                 (case_id, user["id"])
             ).fetchall()
 
-            if sessions:
-                # Digest all old session messages into case intelligence before purging
-                try:
-                    all_msgs = conn.execute(
-                        """SELECT role, content, created_at FROM detective_chat_messages
-                           WHERE case_id = ? AND user_id =?
-                           AND role IN ('user', 'assistant')
-                           ORDER BY created_at ASC""",
-                        (case_id, user["id"])
-                    ).fetchall()
-
-                    if len(all_msgs) >= 4:
-                        # Build chat history text to include in intelligence update
-                        chat_text = "\n".join(
-                            f"{'User' if m['role'] == 'user' else 'Case Partner'}: {m['content'][:300]}"
-                            for m in all_msgs[-40:]  # last 40 messages max
-                        )
-                        # Temporarily enrich the case context with chat history
-                        # by monkey-patching a one-shot intelligence update
-                        from src.api.ai_client import create_message
-                        case = conn.execute(
-                            "SELECT id, title, description, status FROM detective_cases WHERE id = ? AND user_id = ?",
-                            (case_id, user["id"])
-                        ).fetchone()
-                        entries = conn.execute(
-                            "SELECT content, entry_type, severity, created_at FROM detective_entries "
-                            "WHERE case_id = ? ORDER BY created_at DESC LIMIT 20",
-                            (case_id,)
-                        ).fetchall()
-                        uploads = conn.execute(
-                            "SELECT original_filename, ai_analysis, created_at FROM detective_uploads "
-                            "WHERE case_id = ? AND analysis_status = 'done' ORDER BY created_at DESC LIMIT 10",
-                            (case_id,)
-                        ).fetchall()
-
-                        parts = [f"=== CASE FILE: {case['title']} ==="]
-                        if case["description"]:
-                            parts.append(f"Case overview: {case['description']}")
-                        if entries:
-                            parts.append("\n--- INVESTIGATION LOG ---")
-                            for e in entries:
-                                parts.append(f"[{e['created_at'][:10]}|{e['entry_type'].upper()}|{e['severity'].upper()}] {e['content']}")
-                        if uploads:
-                            parts.append("\n--- ANALYZED EVIDENCE ---")
-                            for u in uploads:
-                                parts.append(f"Photo '{u['original_filename']}': {u['ai_analysis']}")
-                        parts.append(f"\n--- CONVERSATION HISTORY (being archived) ---\n{chat_text}")
-                        full_ctx = "\n".join(parts)
-
-                        summary = create_message(
-                            user["id"],
-                            system=(
-                                "You are updating a persistent case intelligence brief. "
-                                "The conversation history shown is being archived — extract anything important "
-                                "from it and incorporate it into the brief along with the case file data. "
-                                "Follow the format instructions exactly."
-                            ),
-                            user_prompt=_INTELLIGENCE_UPDATE_PROMPT + f"\n\nCASE DATA + ARCHIVED CHATS:\n{full_ctx}",
-                            max_tokens=600,
-                            call_type="detective_intelligence",
-                        )
-                        entry_count = conn.execute(
-                            "SELECT COUNT(*) as cnt FROM detective_entries WHERE case_id = ?", (case_id,)
-                        ).fetchone()["cnt"]
-                        wire_count = conn.execute(
-                            "SELECT COUNT(*) as cnt FROM detective_wire_history WHERE case_id = ?", (case_id,)
-                        ).fetchone()["cnt"]
-                        conn.execute(
-                            """INSERT INTO case_intelligence (case_id, user_id, summary, entry_count, wire_count, last_updated)
-                               VALUES (?, ?, ?, ?, ?, datetime('now'))
-                               ON CONFLICT(case_id) DO UPDATE SET
-                                 summary = excluded.summary,
-                                 entry_count = excluded.entry_count,
-                                 wire_count = excluded.wire_count,
-                                 last_updated = excluded.last_updated""",
-                            (case_id, user["id"], summary, entry_count, wire_count)
-                        )
-                        conn.commit()
-                        logger.info(f"[detective] chat history digested into intelligence for case {case_id}")
-                except Exception as ie:
-                    logger.warning(f"[detective] intelligence digest failed (non-critical): {ie}")
-
-                # Purge sessions beyond the 2 most recent
-                if len(sessions) >= 2:
-                    keep_ids = {s["session_id"] for s in sessions[:2]}
-                    purge_ids = [s["session_id"] for s in sessions if s["session_id"] not in keep_ids]
-                    for sid in purge_ids:
-                        conn.execute(
-                            "DELETE FROM detective_chat_messages WHERE case_id = ? AND user_id = ? AND session_id = ?",
-                            (case_id, user["id"], sid)
-                        )
-                    conn.commit()
-                    if purge_ids:
-                        logger.info(f"[detective] purged {len(purge_ids)} old session(s) for case {case_id}")
-
             session_id = str(_uuid.uuid4())
+
+            # Fire digest + purge in background — don't block the response
+            if sessions:
+                session_ids = [s["session_id"] for s in sessions]
+                background_tasks.add_task(_bg_digest_and_purge, case_id, user["id"], session_ids)
+
             return {"session_id": session_id}
         finally:
             conn.close()
