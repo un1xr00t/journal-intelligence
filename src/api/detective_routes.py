@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import base64
 import logging
+import sys
+import sys
 import os
 import shutil
 import uuid
@@ -41,6 +43,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger("journal")
+if not logging.root.handlers:
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger.setLevel(logging.INFO)
 
 
 # ── Request models (module-level required for FastAPI schema resolution) ───────
@@ -490,6 +496,7 @@ def register_detective_routes(app, require_any_user, require_owner):
                 except Exception as de:
                     logger.warning(f"[detective] debounce check failed: {de}")
 
+            logger.info(f"[detective] should_refresh={should_refresh} for case {case_id}")
             if should_refresh:
                 background_tasks.add_task(_bg_intelligence_refresh, case_id, user["id"])
                 logger.info(f"[detective] queued intelligence refresh for case {case_id}")
