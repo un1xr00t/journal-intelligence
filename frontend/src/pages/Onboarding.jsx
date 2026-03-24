@@ -11,6 +11,7 @@ import api from '../services/api'
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STEPS = [
   { id: 'welcome',   icon: '✦', label: 'Welcome'   },
+  { id: 'features', icon: '◈', label: 'Features'  },
   { id: 'about',     icon: '◎', label: 'About You' },
   { id: 'situation', icon: '〜', label: 'Situation' },
   { id: 'people',    icon: '◈', label: 'People'    },
@@ -144,6 +145,180 @@ function Dots({ cur }) {
 }
 
 // ─── Individual slides ────────────────────────────────────────────────────────
+// ─── Feature Tour ─────────────────────────────────────────────────────────────────────────────
+const FEATURE_SLIDES = [
+  {
+    icon: '⬡', accent: '#6366f1', title: 'Pattern Detection',
+    tagline: 'AI that reads between the lines',
+    desc: 'Journal Intelligence automatically scans every entry and surfaces behavioral, emotional, and situational patterns you might miss yourself — escalation cycles, trigger windows, recurring themes.',
+    bullets: ['Detects escalation before it peaks', 'Weekly pattern summaries', 'Early Warning System alerts'],
+    tones: null,
+  },
+  {
+    icon: '⊕', accent: '#8b5cf6', title: 'Evidence Vault',
+    tagline: 'Built for legal and medical use',
+    desc: 'Every entry is timestamped and indexed. Export a court-ready PDF case file at any time — with incident summaries, attached files, and a full chronological record.',
+    bullets: ['Legal-ready PDF exports', 'Attach photos, documents, audio', 'Chain-of-context evidence bundles'],
+    tones: null,
+  },
+  {
+    icon: '⚡', accent: '#f59e0b', title: 'Exit Plan Engine',
+    tagline: 'A structured roadmap when you need one',
+    desc: 'Answer a few questions and the AI generates a personalized, step-by-step exit plan — covering safety, finances, housing, support, and legal steps — all from inside your private journal.',
+    bullets: ['Personalized to your situation', 'Tracks progress across sessions', 'Shareable via secure passphrase link'],
+    tones: null,
+  },
+  {
+    icon: '〜', accent: '#10b981', title: 'Nervous System Tracker',
+    tagline: 'Your emotional weather over time',
+    desc: 'Every entry is scored for severity and mood. The Nervous System page visualizes your emotional baseline, spikes, and recovery windows — so you can see the bigger picture.',
+    bullets: ['Severity & mood trend charts', 'Stability scoring', 'Identifies recovery patterns'],
+    tones: null,
+  },
+  {
+    icon: '◈', accent: '#ec4899', title: 'People Intelligence',
+    tagline: 'Understand who impacts you most',
+    desc: 'The AI tracks every person you mention across all entries. See impact scores, sentiment trends, and a GitHub-style heatmap showing exactly when and how each person affects your wellbeing.',
+    bullets: ['Per-person impact scoring', '52-week activity heatmap', 'Severity trend by person'],
+    tones: null,
+  },
+  {
+    icon: '◗', accent: '#06b6d4', title: 'Ask My Journal',
+    tagline: 'Search your past with natural language',
+    desc: 'Ask questions like "when did I last feel safe?" or "what happened with J in March?" — and the AI searches your entire journal using semantic understanding, not just keywords.',
+    bullets: ['Semantic search across all entries', 'AI-synthesized answers', 'References specific past entries'],
+    tones: null,
+  },
+  {
+    icon: '✦', accent: '#a78bfa', title: 'AI Reflections',
+    tagline: 'Six lenses on every entry',
+    desc: 'After each entry, the AI generates a personalized reflection in one of six tones — each designed to surface something different about what you wrote.',
+    bullets: [],
+    tones: [
+      { emoji: '🧠', label: 'Therapist',    color: '#a78bfa', desc: 'Warm, clinical insight — patterns, emotional themes, your current state', nsfw: false },
+      { emoji: '💬', label: 'Best Friend',  color: '#38bdf8', desc: 'Real talk, no filter — what a sharp, caring friend would actually say', nsfw: false },
+      { emoji: '⚡',     label: 'Coach',        color: '#34d399', desc: 'Forward-looking and action-oriented — what to do next and why', nsfw: false },
+      { emoji: '🌿', label: 'Mentor',       color: '#fbbf24', desc: 'Big-picture wisdom — the arc of your story and what it means', nsfw: false },
+      { emoji: '🔍', label: 'Inner Critic', color: '#f87171', desc: 'Unflinching honesty — what you might be avoiding or not fully owning', nsfw: false },
+      { emoji: '🌀', label: 'Chaos Agent',  color: '#f472b6', desc: 'Unhinged, darkly funny, profane — says the thing no one else will say', nsfw: true },
+    ],
+  },
+  {
+    icon: '◬', accent: '#22c55e', title: 'Detective Mode',
+    tagline: 'For when you need to build a real case',
+    desc: 'Detective Mode is a full investigation workspace for people dealing with legal disputes, custody battles, workplace situations, or anything that requires serious, private documentation. The more you log, the smarter it gets.',
+    bullets: [
+      'Investigation log with severity tags: Critical, High, Medium, Low',
+      'Photo & document upload with AI vision analysis on every file',
+      'Case Partner AI reads your full journal and entire case file in best-friend mode',
+      'Drop a Wire: full intelligence briefing covering patterns, contradictions, strongest evidence, and your next move',
+      'Persistent Case Intelligence Brief that auto-updates after every wire drop',
+      'Wire History: full chronological record of every briefing session',
+      'Gallery view with lightbox and per-photo AI analysis panel',
+      'Exportable case report for attorneys, courts, or medical providers',
+    ],
+    who: [
+      { icon: '⚖️', label: 'Legal disputes', desc: 'Building evidence for court, restraining orders, or attorneys' },
+      { icon: '👨‍👧', label: 'Custody battles', desc: 'Documenting incidents, tracking patterns, protecting your case' },
+      { icon: '🏢', label: 'Workplace situations', desc: 'HR complaints, hostile environments, hostile managers' },
+      { icon: '🛡️', label: 'Safety situations', desc: 'Anyone who needs a serious private record that cannot be touched' },
+    ],
+    tones: null,
+  },
+]
+
+function FeatureTour({ next, back }) {
+  const [idx, setIdx] = useState(0)
+  const f = FEATURE_SLIDES[idx]
+  const total = FEATURE_SLIDES.length
+  const prev = () => setIdx(i => Math.max(0, i - 1))
+  const fwd  = () => setIdx(i => Math.min(total - 1, i + 1))
+  const isLast = idx === total - 1
+  return (
+    <div>
+      <div style={{ marginBottom: 20, textAlign: 'center' }}>
+        <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", letterSpacing: '0.14em', color: 'rgba(255,255,255,0.22)', textTransform: 'uppercase', marginBottom: 6 }}>
+          What's inside — {idx + 1} of {total}
+        </div>
+        <h2 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: 21, color: 'rgba(255,255,255,0.88)', margin: 0 }}>
+          Built for people who need more than a diary
+        </h2>
+      </div>
+      <div key={idx} style={{ padding: '20px 18px', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1.5px solid ' + f.accent + '33', boxShadow: '0 0 32px ' + f.accent + '11', marginBottom: 16, animation: 'up 0.25s cubic-bezier(0.22,1,0.36,1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: f.accent + '18', border: '1.5px solid ' + f.accent + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: f.accent }}>{f.icon}</div>
+          <div>
+            <div style={{ fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: 16, color: 'rgba(255,255,255,0.88)', lineHeight: 1.2 }}>{f.title}</div>
+            <div style={{ fontSize: 11, color: f.accent, fontFamily: "'IBM Plex Mono',monospace", marginTop: 2 }}>{f.tagline}</div>
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.65, margin: '0 0 12px' }}>{f.desc}</p>
+        {f.bullets && f.bullets.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {f.bullets.map((b, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: f.accent, flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: "'IBM Plex Mono',monospace" }}>{b}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {f.who && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", letterSpacing: '0.12em', color: 'rgba(255,255,255,0.22)', textTransform: 'uppercase', marginBottom: 8 }}>Who this is for</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+              {f.who.map((w, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>{w.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginBottom: 2 }}>{w.label}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', lineHeight: 1.4 }}>{w.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {f.tones && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {f.tones.map((t, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>{t.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: t.color, fontFamily: 'Syne,sans-serif' }}>{t.label}</span>
+                    {t.nsfw && <span style={{ fontSize: 9, fontFamily: "'IBM Plex Mono',monospace", color: '#f472b6', border: '1px solid rgba(244,114,182,0.4)', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.08em' }}>18+</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', lineHeight: 1.45 }}>{t.desc}</div>
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 8, marginTop: 2, background: 'rgba(244,114,182,0.05)', border: '1px solid rgba(244,114,182,0.22)' }}>
+              <span style={{ fontSize: 13, flexShrink: 0 }}>⚠️</span>
+              <span style={{ fontSize: 11, color: 'rgba(244,114,182,0.85)', lineHeight: 1.5, fontFamily: "'IBM Plex Mono',monospace" }}>Chaos Agent uses strong language and unfiltered opinions. Opt in from Settings when you're ready.</span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 18 }}>
+        {FEATURE_SLIDES.map((_, i) => (
+          <div key={i} onClick={() => setIdx(i)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 3, background: i === idx ? f.accent : 'rgba(255,255,255,0.1)', cursor: 'pointer', transition: 'all 0.25s' }} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {idx > 0
+          ? <button onClick={prev} style={{ padding: '11px 18px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 13, fontWeight: 600, fontFamily: 'Syne,sans-serif', cursor: 'pointer', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.35)' }}>← Prev</button>
+          : <button onClick={back} style={{ padding: '11px 18px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 13, fontWeight: 600, fontFamily: 'Syne,sans-serif', cursor: 'pointer', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.35)' }}>← Back</button>
+        }
+        {isLast
+          ? <button onClick={next} style={{ flex: 1, padding: '11px 0', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, fontFamily: 'Syne,sans-serif', cursor: 'pointer', background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>Let's set you up →</button>
+          : <button onClick={fwd}  style={{ flex: 1, padding: '11px 0', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, fontFamily: 'Syne,sans-serif', cursor: 'pointer', background: 'linear-gradient(135deg, ' + f.accent + ', ' + f.accent + 'bb)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>Next Feature →</button>
+        }
+      </div>
+    </div>
+  )
+}
+
 function Welcome({ next }) {
   return (
     <div style={{ textAlign:'center' }}>
@@ -1048,6 +1223,7 @@ export default function Onboarding() {
 
   const slides = [
     <Welcome next={next} />,
+    <FeatureTour next={next} back={back} />,
     <About   d={form} set={upd} next={next} back={back} />,
     <Situation d={form} set={upd} next={next} back={back} />,
     <People  d={form} set={upd} next={next} back={back} />,
