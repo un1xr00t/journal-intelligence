@@ -1117,6 +1117,62 @@ function AdminPanel() {
   )
 }
 
+// ── Mobile Case Creator ─────────────────────────────────────────────────────
+function MobileCaseCreator({ onCreate, creating }) {
+  const [show, setShow] = useState(false)
+  const [title, setTitle] = useState('')
+
+  const submit = async () => {
+    if (!title.trim()) return
+    await onCreate(title.trim())
+    setTitle('')
+    setShow(false)
+  }
+
+  if (!show) return (
+    <button
+      onClick={() => setShow(true)}
+      style={{
+        marginTop: 8, width: '100%', background: 'rgba(99,102,241,0.1)',
+        border: '1px dashed rgba(99,102,241,0.35)', borderRadius: 8,
+        padding: '8px 12px', color: 'var(--accent)', fontSize: 12,
+        fontFamily: 'IBM Plex Mono', cursor: 'pointer',
+      }}
+    >+ New Case</button>
+  )
+
+  return (
+    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+      <input
+        autoFocus
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && submit()}
+        placeholder="Case name..."
+        style={{
+          flex: 1, minWidth: 0, background: 'rgba(255,255,255,0.05)',
+          border: '1px solid var(--border)', borderRadius: 8,
+          padding: '8px 12px', color: 'var(--text-primary)',
+          fontSize: 12, outline: 'none',
+        }}
+      />
+      <button
+        onClick={submit}
+        disabled={creating}
+        style={{
+          background: 'var(--accent)', border: 'none', borderRadius: 8,
+          color: '#fff', fontSize: 12, padding: '8px 14px',
+          cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.5 : 1,
+        }}
+      >{creating ? '…' : 'Create'}</button>
+      <button
+        onClick={() => setShow(false)}
+        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 12, padding: '8px 10px', cursor: 'pointer' }}
+      >✕</button>
+    </div>
+  )
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function Detective() {
   const [access, setAccess] = useState(null)
@@ -1132,6 +1188,14 @@ export default function Detective() {
   const [adminTab, setAdminTab] = useState(false)
   const [loadingEntries, setLoadingEntries] = useState(false)
   const [casesOpen, setCasesOpen] = useState(true)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  const [casePartnerOpen, setCasePartnerOpen] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
   const navigate = useNavigate()
 
   // ── Access check ──
@@ -1326,7 +1390,33 @@ export default function Detective() {
           ))}
         </div>
 
-        <div style={{
+        {/* Mobile case picker */}
+        {isMobile && (
+          <div style={{ marginBottom: 12 }}>
+            <select
+              value={selectedCase?.id ?? ''}
+              onChange={e => {
+                const c = cases.find(x => x.id === parseInt(e.target.value))
+                if (c) selectCase(c)
+              }}
+              style={{
+                width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: '9px 12px', color: 'var(--text-primary)',
+                fontFamily: 'IBM Plex Mono', fontSize: 12, outline: 'none', cursor: 'pointer',
+              }}
+            >
+              {cases.length === 0 && <option value="">No cases yet</option>}
+              {cases.map(c => (
+                <option key={c.id} value={c.id}>{c.status === 'active' ? '● ' : '○ '}{c.title}</option>
+              ))}
+            </select>
+            <MobileCaseCreator onCreate={createCase} creating={creating} />
+          </div>
+        )}
+
+        <div style={isMobile ? {
+          display: 'flex', flexDirection: 'column', gap: 12, flex: 1,
+        } : {
           display: 'grid',
           gridTemplateColumns: casesOpen
             ? (activeTab === 'gallery' ? '220px 1fr' : '220px 1fr 360px')
@@ -1337,7 +1427,8 @@ export default function Detective() {
           height: 'calc(100vh - 120px)',
           transition: 'grid-template-columns 0.2s ease',
         }}>
-          {/* Left: Case list (collapsible) */}
+          {/* Left: Case list (collapsible, desktop only) */}
+          {isMobile ? null :
           <div style={{ minHeight: 0, position: 'relative', overflow: 'hidden' }}>
             {casesOpen ? (
               <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1377,7 +1468,7 @@ export default function Detective() {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Center: Investigation workspace */}
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
@@ -1432,8 +1523,8 @@ export default function Detective() {
             )}
           </div>
 
-          {/* Right: Case Partner */}
-          {activeTab !== 'gallery' && <div style={{ minHeight: 0 }}>
+          {/* Right: Case Partner (desktop only) */}
+          {!isMobile && activeTab !== 'gallery' && <div style={{ minHeight: 0 }}>
             {selectedCase ? (
               <CasePartner
                 caseId={selectedCase.id}
@@ -1449,6 +1540,37 @@ export default function Detective() {
             )}
           </div>}
         </div>
+
+        {/* Mobile: collapsible Case Partner */}
+        {isMobile && activeTab !== 'gallery' && selectedCase && (
+          <div style={{ marginTop: 4 }}>
+            <button
+              onClick={() => setCasePartnerOpen(o => !o)}
+              style={{
+                width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: casePartnerOpen ? '10px 10px 0 0' : 10,
+                padding: '11px 16px', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                fontFamily: 'Syne',
+              }}
+            >
+              <span>🕵️ Case Partner</span>
+              <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)' }}>
+                {casePartnerOpen ? '▲ collapse' : '▼ open'}
+              </span>
+            </button>
+            {casePartnerOpen && (
+              <div style={{ border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden' }}>
+                <CasePartner
+                  caseId={selectedCase.id}
+                  caseName={selectedCase.title}
+                  onWire={dropWire}
+                  wiring={wiring}
+                />
+              </div>
+            )}
+          </div>
+        )}
         </>
       )}
     </div>
