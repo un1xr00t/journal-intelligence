@@ -58,7 +58,7 @@ const GrainStyle = () => (
 
     .jw-frame {
       position: relative; z-index: 2;
-      min-height: 100vh; display: flex; flex-direction: column;
+      min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
       align-items: center; padding: 0 16px 80px;
     }
 
@@ -380,11 +380,49 @@ const GrainStyle = () => (
     .jw-img-add-label { font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
 
     @media (max-width: 640px) {
-      .jw-editor-inner { padding: 24px 20px 16px; }
-      .jw-editor-footer { padding: 12px 20px 16px; }
-      .jw-placeholder-text { left: 20px; right: 20px; top: 24px; }
-      .jw-textarea { font-size: 18px; }
-      .jw-main-title { font-size: 36px; }
+      /* Editor layout */
+      .jw-editor-inner { padding: 20px 16px 12px; }
+      .jw-editor-footer {
+        padding: 10px 16px 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .jw-placeholder-text { left: 16px; right: 16px; top: 20px; font-size: 18px; }
+      .jw-textarea { font-size: 18px; min-height: 300px; }
+      .jw-main-title { font-size: 30px; }
+
+      /* Prevent iOS zoom on all inputs — must be >= 16px */
+      .jw-date-input { font-size: 16px !important; padding: 8px 12px; }
+      .jw-textarea { font-size: 16px !important; }
+
+      /* Title block top margin reduced */
+      .jw-title-block { margin-top: 28px; }
+
+      /* Header */
+      .jw-header { padding: 16px 0 0; }
+
+      /* Workspace */
+      .jw-workspace { margin-top: 20px; }
+
+      /* Frame padding — bottom safe area */
+      .jw-frame {
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      /* Photo strip larger thumbs on mobile */
+      .jw-img-thumb { width: 72px; height: 72px; }
+      .jw-img-add-btn { width: 72px; height: 72px; }
+
+      /* Bigger touch targets */
+      .jw-save-btn { padding: 13px 24px; min-height: 44px; }
+
+      /* Upload zone */
+      .jw-upload-zone { min-height: 200px; padding: 32px 20px; }
+
+      /* Stats wrap on mobile */
+      .jw-stats { flex-wrap: wrap; gap: 12px; }
     }
   `}</style>
 )
@@ -558,7 +596,6 @@ function WriteMode({ entryDate }) {
               }
             }}
             spellCheck
-            autoFocus
           />
         </div>
         <div className="jw-editor-footer">
@@ -578,8 +615,9 @@ function WriteMode({ entryDate }) {
               title="Attach images (JPEG, PNG, WEBP, max 8 MB)"
               style={{
                 background: 'none', border: '1px solid rgba(200,169,110,0.18)',
-                borderRadius: 8, padding: '6px 10px', cursor: 'pointer',
-                color: 'rgba(200,169,110,0.45)', fontSize: 14, lineHeight: 1,
+                borderRadius: 8, padding: '10px 14px', cursor: 'pointer',
+                color: 'rgba(200,169,110,0.45)', fontSize: 16, lineHeight: 1,
+                minHeight: 44, minWidth: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >📷</button>
             <button
@@ -626,7 +664,7 @@ function WriteMode({ entryDate }) {
       <input
         ref={imgInputRef}
         type="file"
-        accept=".jpg,.jpeg,.png,.webp"
+        accept="image/*"
         multiple
         style={{ display: 'none' }}
         onChange={e => {

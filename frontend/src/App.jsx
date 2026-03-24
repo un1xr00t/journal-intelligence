@@ -1,3 +1,4 @@
+import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -33,6 +34,7 @@ import InviteAccess from './pages/InviteAccess'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
 import api from './services/api'
+import MobileShell from './MobileShell'
 
 function LoadingScreen() {
   return (
@@ -90,14 +92,17 @@ function Shell() {
   const handleFilterChange = (changes) => setFilters(f => ({ ...f, ...changes }))
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100dvh', minHeight: '100vh', overflow: 'hidden' }}>
       {user && <CrisisBanner />}
       {user && <EarlyWarningBanner />}
       {/* Mobile top bar */}
       {isMobile && !hideSidebar && user && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12,
-          padding: '0 16px', height: 52, flexShrink: 0,
+          padding: '0 16px',
+          paddingTop: 'env(safe-area-inset-top)',
+          height: 'calc(52px + env(safe-area-inset-top))',
+          flexShrink: 0,
           background: 'var(--bg-sidebar, rgba(7,7,15,0.97))',
           borderBottom: '1px solid var(--border)',
           zIndex: 100, position: 'relative',
@@ -197,8 +202,10 @@ function Shell() {
         <main style={{
           flex: 1,
           overflow: 'auto',
+          overflowX: 'hidden',
           background: 'var(--bg-base)',
-          padding: hideSidebar ? 0 : isMobile ? '20px 16px' : '28px 32px',
+          padding: hideSidebar ? 0 : isMobile ? '16px 14px' : '28px 32px',
+          paddingBottom: isMobile ? 'calc(16px + env(safe-area-inset-bottom))' : '28px',
         }}>
           <Routes>
             <Route path="/login"           element={<Login />} />
@@ -236,12 +243,22 @@ function Shell() {
   )
 }
 
+function AppInner() {
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768)
+  React.useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+  return isMobile ? <MobileShell /> : <Shell />
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <ThemeProvider>
-          <Shell />
+          <AppInner />
         </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>

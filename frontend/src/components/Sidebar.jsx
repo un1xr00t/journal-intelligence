@@ -114,7 +114,7 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
         background: 'linear-gradient(180deg, var(--bg-sidebar, rgba(7,7,15,0.97)) 0%, var(--bg-sidebar, rgba(7,7,15,0.92)) 100%)',
       }} />
 
-      <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', height: '100%', padding: '20px 0', overflowY: 'auto' }}>
+      <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', height: '100%', padding: '20px 0', paddingTop: 'calc(20px + env(safe-area-inset-top))', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {/* Brand + close button row */}
         <div style={{ padding: '0 20px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
