@@ -500,6 +500,324 @@ function CollapsedCases({ cases, selected, onSelect, onOpen }) {
   )
 }
 
+// ── Research Agent Modal ─────────────────────────────────────────────────────
+
+const FOCUS_OPTIONS = [
+  { key: 'social',     label: '📱 Social Media'     },
+  { key: 'employment', label: '💼 Employment'        },
+  { key: 'legal',      label: '⚖️ Legal Records'     },
+  { key: 'news',       label: '📰 News & Press'      },
+  { key: 'address',    label: '📍 Location (public)' },
+  { key: 'business',   label: '🏢 Business Records'  },
+]
+
+function ResearchModal({ caseId, onClose, onSaved }) {
+  const [subject, setSubject]   = useState('')
+  const [context, setContext]   = useState('')
+  const [focus, setFocus]       = useState([])
+  const [loading, setLoading]   = useState(false)
+  const [result, setResult]     = useState(null)
+  const [error, setError]       = useState(null)
+  const [step, setStep]         = useState('form') // form | running | result
+
+  const toggleFocus = (key) => setFocus(f => f.includes(key) ? f.filter(k => k !== key) : [...f, key])
+
+  const run = async () => {
+    if (!subject.trim()) return
+    setStep('running')
+    setLoading(true)
+    setError(null)
+    try {
+      const r = await api.post(`/api/detective/cases/${caseId}/research`, {
+        subject: subject.trim(),
+        context: context.trim() || null,
+        focus: focus.length > 0 ? focus : null,
+      })
+      setResult(r.data)
+      setStep('result')
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Research agent failed. Check your Anthropic API key in Settings.')
+      setStep('form')
+    }
+    setLoading(false)
+  }
+
+  const save = () => {
+    if (onSaved) onSaved(result)
+    onClose()
+  }
+
+  const overlay = {
+    position: 'fixed', inset: 0, zIndex: 9999,
+    background: 'rgba(0,0,0,0.75)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 24,
+  }
+  const modal = {
+    background: 'var(--bg-card)',
+    border: '1px solid rgba(99,102,241,0.3)',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: step === 'result' ? 760 : 520,
+    maxHeight: '90vh',
+    display: 'flex', flexDirection: 'column',
+    boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+  }
+  const field = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    color: 'var(--text-primary)',
+    padding: '10px 14px',
+    fontSize: 13,
+    fontFamily: 'inherit',
+    outline: 'none',
+  }
+  const btn = (active) => ({
+    padding: '6px 14px',
+    background: active ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.05)',
+    border: `1px solid ${active ? 'rgba(99,102,241,0.5)' : 'var(--border)'}`,
+    borderRadius: 6,
+    color: active ? '#a5b4fc' : 'var(--text-muted)',
+    fontSize: 12,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  })
+
+  return (
+    <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={modal}>
+
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 20 }}>🔍</span>
+          <div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 15, color: 'var(--text-primary)' }}>Research Agent</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Searches public web sources and adds a report to your case log</div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+
+          {step === 'form' && (
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {error && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#fca5a5', lineHeight: 1.6 }}>
+                  ⚠️ {error}
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Subject Name *
+                </label>
+                <input
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  placeholder="e.g. John Smith"
+                  style={field}
+                  onKeyDown={e => e.key === 'Enter' && subject.trim() && run()}
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Context (optional)
+                </label>
+                <textarea
+                  value={context}
+                  onChange={e => setContext(e.target.value)}
+                  placeholder="e.g. Works at Acme Corp, claims to be from Denver, involved in incident on 3/10"
+                  style={{ ...field, minHeight: 72, resize: 'vertical' }}
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 10, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Focus Areas (all selected by default)
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {FOCUS_OPTIONS.map(f => (
+                    <button key={f.key} onClick={() => toggleFocus(f.key)} style={btn(focus.includes(f.key))}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                ⚠️ This agent searches only publicly available information. It does not access private data, bypass authentication, or violate any privacy laws. Research is logged to your case file.
+              </div>
+            </div>
+          )}
+
+          {step === 'running' && (
+            <div style={{ padding: 60, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 20, animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>🔍</div>
+              <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 8 }}>
+                Agent Searching the Web…
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                Searching social media, news, public records, and professional profiles.<br />
+                This may take 30–90 seconds.
+              </div>
+              <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center', gap: 4 }}>
+                {[0,1,2].map(i => (
+                  <div key={i} style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: 'var(--accent)',
+                    animation: `pulse 1.2s ease-in-out ${i * 0.4}s infinite`,
+                  }} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 'result' && result && (
+            <div style={{ padding: 24 }}>
+              <div style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#86efac', marginBottom: 16 }}>
+                ✓ Research complete — report will be saved to your investigation log
+              </div>
+              <div style={{
+                background: 'rgba(0,0,0,0.3)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: '18px 20px',
+                fontFamily: 'IBM Plex Mono',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.8,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}>
+                {result.report}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          {step === 'result' ? (
+            <button onClick={save} style={{ padding: '8px 18px', background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Syne' }}>
+              ✓ Saved to Case Log
+            </button>
+          ) : (
+            <button
+              onClick={run}
+              disabled={!subject.trim() || loading}
+              style={{ padding: '8px 18px', background: subject.trim() && !loading ? 'var(--accent)' : 'rgba(99,102,241,0.3)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: subject.trim() && !loading ? 'pointer' : 'default', fontFamily: 'Syne', transition: 'all 0.15s' }}
+            >
+              🔍 Run Agent
+            </button>
+          )}
+        </div>
+
+      </div>
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+      `}</style>
+    </div>
+  )
+}
+
+// ── Research Reports Panel (tab view) ─────────────────────────────────────────
+
+function ResearchPanel({ caseId, refreshKey }) {
+  const [reports, setReports] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState(null)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const r = await api.get(`/api/detective/cases/${caseId}/research`)
+      setReports(r.data)
+    } catch {}
+    setLoading(false)
+  }
+
+  useEffect(() => { if (caseId) load() }, [caseId, refreshKey])
+
+  if (loading) return (
+    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading reports…</div>
+  )
+
+  if (!reports.length) return (
+    <div style={{ padding: 60, textAlign: 'center' }}>
+      <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
+      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 8 }}>No Research Reports Yet</div>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+        Click <strong>🔍 Research</strong> in the toolbar to deploy the agent.<br />
+        Reports are saved here and automatically added to your case context.
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {reports.map(r => {
+        const isOpen = expanded === r.id
+        // Extract subject from content: "[RESEARCH AGENT REPORT]\nSubject: NAME\n\n..."
+        const subjectMatch = r.content.match(/Subject:\s*(.+?)\n/)
+        const subject = subjectMatch ? subjectMatch[1] : 'Research Report'
+        const preview = r.content.replace(/\[RESEARCH AGENT REPORT\]\nSubject:.+?\n\n/, '').slice(0, 180) + '…'
+        return (
+          <div key={r.id} style={{ background: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 10, overflow: 'hidden' }}>
+            <div
+              onClick={() => setExpanded(isOpen ? null : r.id)}
+              style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', transition: 'background 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.06)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontSize: 16 }}>🔍</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>{subject}</div>
+                {!isOpen && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{preview}</div>}
+              </div>
+              <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
+                {r.created_at?.slice(0, 10)}
+              </div>
+              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{isOpen ? '▲' : '▼'}</span>
+            </div>
+            {isOpen && (
+              <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
+                <div style={{
+                  marginTop: 12,
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: 8,
+                  padding: '14px 16px',
+                  fontFamily: 'IBM Plex Mono',
+                  fontSize: 11,
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.8,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  maxHeight: 480,
+                  overflowY: 'auto',
+                }}>
+                  {r.content.replace('[RESEARCH AGENT REPORT]\n', '')}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Main DetectiveFull Page ───────────────────────────────────────────────────
 
 export default function DetectiveFull() {
@@ -519,6 +837,8 @@ export default function DetectiveFull() {
   // Panel collapse state
   const [casesOpen,   setCasesOpen]   = useState(true)
   const [partnerOpen, setPartnerOpen] = useState(true)
+  const [researchOpen, setResearchOpen] = useState(false)
+  const [researchKey, setResearchKey]   = useState(0)
 
   // ── Access check ──
   useEffect(() => {
@@ -647,16 +967,31 @@ export default function DetectiveFull() {
     { key: 'intelligence', label: '🧠 Intelligence' },
     { key: 'wires',        label: '📡 Wire History' },
     { key: 'export',       label: '📄 Export Report' },
+    { key: 'research',     label: '🔍 Research'       },
   ]
 
   // Column widths based on open/collapsed state
   const leftW   = casesOpen   ? PANEL_W  : ICON_W
   const rightW  = partnerOpen ? PARTNER_W : ICON_W
-  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires' && activeTab !== 'export'
+  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires' && activeTab !== 'export' && activeTab !== 'research'
   const effectiveRightW = showPartner ? rightW : 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-base)', overflow: 'hidden' }}>
+
+      {/* ── Research Agent Modal ── */}
+      {researchOpen && selectedCase && (
+        <ResearchModal
+          caseId={selectedCase.id}
+          onClose={() => setResearchOpen(false)}
+          onSaved={(result) => {
+            // Refresh entries + research tab
+            loadEntries()
+            setResearchKey(k => k + 1)
+            setActiveTab('research')
+          }}
+        />
+      )}
 
       {/* ── Top header bar ── */}
       <div style={{
@@ -695,6 +1030,19 @@ export default function DetectiveFull() {
             <span style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>{selectedCase.title}</span>
             <span style={{ ...mono, fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{selectedCase.status}</span>
           </div>
+        )}
+
+        {/* Research Agent button */}
+        {selectedCase && (
+          <button
+            onClick={() => setResearchOpen(true)}
+            title='Deploy Research Agent'
+            style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, color: '#a5b4fc', fontSize: 11, fontFamily: 'IBM Plex Mono', padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.22)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)' }}
+          >
+            🔍 Research
+          </button>
         )}
 
         {/* Panel toggles */}
@@ -854,6 +1202,9 @@ export default function DetectiveFull() {
                 )}
                 {activeTab === 'export' && (
                   <ExportTab caseId={selectedCase.id} caseName={selectedCase.title} />
+                )}
+                {activeTab === 'research' && (
+                  <ResearchPanel caseId={selectedCase.id} refreshKey={researchKey} />
                 )}
               </>
             )}
