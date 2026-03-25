@@ -835,7 +835,7 @@ export default function DetectiveFull() {
   const [loadingEntries, setLE]       = useState(false)
 
   // Panel collapse state
-  const [casesOpen,   setCasesOpen]   = useState(true)
+  const [casesOpen,   setCasesOpen]   = useState(false)
   const [partnerOpen, setPartnerOpen] = useState(true)
   const [researchOpen, setResearchOpen] = useState(false)
   const [researchKey, setResearchKey]   = useState(0)
