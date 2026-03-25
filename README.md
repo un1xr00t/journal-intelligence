@@ -55,6 +55,10 @@ These are the features that make this different from a notes app with an API key
 
 **✦ Personalized resources** — Not a generic list of hotlines. The system reads your memory profile, active alerts, and 30-day emotional averages and generates a ranked resource hub with context explaining why this applies to your specific situation.
 
+**🔍 Detective Mode** — A premium investigation workspace for when journaling becomes documentation. Case management, timestamped investigation log (tagged by type: note / observation / statement / admission / contradiction), photo evidence upload with Anthropic vision analysis, a Case Partner AI that knows your full case and journal history, Drop a Wire intelligence briefings, and a Research Agent that searches public records, social media, news, and business filings on any subject. Everything stays on your server. Nothing shared unless you choose.
+
+**⊘ Decision Assistant** — When you're stuck, the system reads your journal and helps you choose. Pick a goal (protect peace, get clarity, reduce conflict, stay safe, preserve relationship, prepare before acting), add optional context, and get three grounded options — lowest-risk, balanced, and decisive — each with a risk level, emotional cost, reversibility score, next 48 hours, and specific citations from your journal history. Generate a real conversation script for the option you choose. Save decisions for later review.
+
 **🔒 Fully self-hosted, fully private** — Your data lives in a SQLite database on infrastructure you control. Bring your own Anthropic key, use OpenAI, or run completely locally with Ollama or LM Studio. Zero telemetry. No analytics. No third-party servers touching your journal.
 
 ---
@@ -232,6 +236,40 @@ Change your password, manage active sessions, configure 2FA, and manage passkeys
 
 ### 📱 PWA — Install on Your Home Screen
 The dashboard is a Progressive Web App. On iPhone, tap the share button in Safari and choose "Add to Home Screen" — it installs like a native app, runs full-screen, and works gracefully offline.
+
+### ⊘ Decision Assistant — Help Me Choose
+
+When you're navigating something hard and can't see clearly, the system reads your journal and helps you decide.
+
+Pick a goal — protect my peace, get clarity, reduce conflict, stay safe, preserve the relationship, or prepare before acting. Add optional context. The system pulls the most relevant entries from your history via semantic search, reads your memory profile and active alerts, and returns exactly three options: **Lowest Risk**, **Balanced**, and **Most Decisive**.
+
+Each option includes: a plain-language summary, why it fits your specific situation, risk level, emotional cost, practical effort, reversibility, what to do in the next 48 hours, what to plan for over the next 30 days, when it's the right call, when to avoid it, and a note citing specific patterns from your own journal history.
+
+Choose an option and generate a **real conversation script** — an actual message or conversation opener, editable and copyable. Save decisions to review later.
+
+Available at `/decide` from the sidebar.
+
+---
+
+### 🔍 Detective Mode
+
+A premium investigation workspace. Built for when journaling becomes documentation.
+
+**Case management** — Create and manage named investigation cases. Each case is a contained workspace with its own log, evidence, and AI context.
+
+**Investigation log** — Timestamped entries tagged by type (note / observation / statement / admission / contradiction / timeline) and severity (critical / high / medium / low / info). Color-coded left borders. Every entry feeds into the AI.
+
+**Photo evidence** — Upload photos directly to cases or individual log entries. Anthropic vision analysis runs automatically — the AI describes what it sees in the context of your investigation. Full gallery view with lightbox and analysis panel.
+
+**Case Partner AI** — A persistent, context-aware AI chat that knows your full case: all log entries, all photo analyses, your journal history, all previous Wire drops. Conversation compresses at 20 messages to stay efficient. New chats digest prior sessions into the intelligence brief before clearing.
+
+**Drop a Wire** — Request a full intelligence briefing on your case: strongest evidence, detected patterns, contradictions, recommended next action. Stored in Wire History so you can track how the picture evolves.
+
+**Case Intelligence** — A compressed, auto-updated AI brief per case. Refreshes on each Wire drop. Visible in the Intelligence tab of the full workspace. The Case Partner uses it to answer questions efficiently without burning tokens on raw history.
+
+**Research Agent** — Search public sources on any subject directly from Detective. Covers public social media, news and press, LinkedIn and professional profiles, LLC and business filings, and public court records. Searches run as an agentic loop (up to 10 iterations). Results are saved as log entries and flow automatically into Case Partner and Wire briefings.
+
+Access Detective from **Premium Options** in the sidebar. Owner accounts always have access. Other accounts are granted access individually via Admin.
 
 ---
 
@@ -531,6 +569,8 @@ This is early. But the roadmap is ambitious - and I'm not slowing down.
 - **Life Cases / Threads** - persistent storylines that auto-aggregate related entries into a named case. "Relationship Conflict." "Custody Stress." "Burnout at Work." Each case gathers related entries, people, contradictions, attachments, key quotes, and a chronological event timeline.
 - **Moments extraction** - auto-pull the most emotionally significant lines from your entries. "I can't do this anymore." "Today was the first calm day in weeks." Organized into a curated feed — turning points, first appearances, most repeated promises.
 - **Safe evidence locker upgrade** - structured tagging, chain-of-context links to timeline entries, evidence bundles exportable as ZIP or PDF, OCR on uploaded images and documents.
+- **Truth Layer** - a view that surfaces patterns you may not consciously recognize. Recurring gaslighting indicators, memory invalidation patterns, broken promises cross-referenced against behavior, rewritten history. Grounded entirely in your own words. Observational, never diagnostic. The sentence that describes it: *"There's a view that shows you what the data actually says."*
+- **Promise tracker** - every "I'll change," "I won't do that again," "I promise" your journal records, cross-referenced against what happened next. Outcome badges: honored, broken, unknown, ongoing. Exportable as part of a legal documentation packet.
 - **Deeper pattern intelligence** - longer lookback windows, cross-pattern correlations, predictive mood modeling
 - **Community resources** - user-contributed topic configs, prompt packs, theme presets
 
