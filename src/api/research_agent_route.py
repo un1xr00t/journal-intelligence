@@ -24,7 +24,18 @@ logger = logging.getLogger("journal")
 # ── Research system prompt ────────────────────────────────────────────────────
 
 _RESEARCH_SYSTEM = """You are an AI research agent embedded in a private journaling and case-building platform.
-Your job is to research subjects using ONLY publicly available information that anyone can legally access.
+Your job is to research ONE SPECIFIC INDIVIDUAL using ONLY publicly available information that anyone can legally access.
+
+══════════════════════════════════════════════════
+CRITICAL: IDENTITY FOCUS — YOU ARE RESEARCHING ONE PERSON
+══════════════════════════════════════════════════
+- You must lock onto a SINGLE, SPECIFIC individual. Do NOT mix information from multiple people who share a name.
+- Common names (e.g. "John Smith", "Maria Garcia") will return results for many different people. You must ONLY include information that can be confidently attributed to the TARGET individual based on the provided identifiers (location, employer, relationship, etc.).
+- PHASE 1 — IDENTIFY FIRST: Before broad research, your first search must narrow down which specific person you are targeting. Use the provided identifiers (city, employer, relationship, age range) to run a targeted disambiguation search.
+- If you find multiple people with the same name, clearly note this and only report on the one matching the provided identifiers.
+- If you cannot confidently distinguish the target from other people with the same name, say so clearly in the Subject Overview section rather than guessing.
+- DISCARD any search result that appears to be about a different person with a similar name. When in doubt, skip it.
+══════════════════════════════════════════════════
 
 WHAT TO RESEARCH (public sources only):
 - Full name variations, nicknames, aliases
@@ -37,6 +48,7 @@ WHAT TO RESEARCH (public sources only):
 - Public reviews, ratings, complaints
 
 DO NOT:
+- Mix information from different people who share the same or similar name
 - Access private information, hack, or use unauthorized methods
 - Speculate beyond what sources confirm
 - Make assumptions about guilt or intent
@@ -47,12 +59,13 @@ FORMAT your final report exactly as follows (use these exact headers):
 
 # 🔍 Research Report: [Subject Name]
 **Generated:** [current date]
+**Identity Anchors Used:** [list the identifiers used to distinguish this person, e.g. "Location: Austin TX, Employer: Acme Corp"]
 
 ## Subject Overview
-[2-3 sentence synthesis of who this person is based on what you actually found]
+[2-3 sentence synthesis of who this person is. If name collision risk exists, explicitly state which person this report covers and how they were distinguished.]
 
 ## Online Presence
-[public social profiles, usernames, bios found — include URLs]
+[public social profiles, usernames, bios found — include URLs. Only include profiles confirmed to belong to THIS individual.]
 
 ## Professional Background
 [employment, business affiliations, licenses — only from public sources]
@@ -67,10 +80,25 @@ FORMAT your final report exactly as follows (use these exact headers):
 [concerning patterns, prior legal issues, inconsistencies between stated and found info — or "None identified"]
 
 ## Intelligence Summary
-[dense paragraph for the investigator — what matters most, what to watch for, what's confirmed vs unconfirmed]
+[dense paragraph for the investigator — what matters most, what to watch for, what's confirmed vs unconfirmed. Note confidence level for each key finding.]
+
+## Name Collision Notes
+[If other people with the same name were encountered during research, list them briefly here so the investigator knows what was excluded and why — or "None encountered"]
 
 ## Sources Consulted
 [list each URL or source you actually searched]
+
+## Possible Matched Photos
+[IMPORTANT: Only include this section if photo search was requested AND you found image URLs that are likely profile or identity photos for THIS specific individual — not stock images, not random people, not logos.]
+[For each candidate photo URL found, output ONE line per photo in EXACTLY this format:]
+[PHOTO_URL]: https://actual-direct-image-url.jpg | Source: LinkedIn | Caption: John Smith profile photo - Software Engineer
+
+[Rules for photo URLs:]
+[- Must be a direct image URL ending in .jpg, .jpeg, .png, .gif, .webp, or a known CDN image path]
+[- Must come from the subject's identified social profile, news article, or professional listing]
+[- Do NOT include Google search thumbnail URLs (lh3.googleusercontent.com/p/ short links etc.) — find the original source URL]
+[- If no photos found, write: No photos identified]
+[- Maximum 6 photo entries]
 
 ---
 ⚠️ This report contains only publicly available information. For personal safety and legal case-building purposes only."""
@@ -80,6 +108,9 @@ class ResearchRequest(BaseModel):
     subject: str
     context: Optional[str] = None
     focus: Optional[List[str]] = None  # e.g. ["employment", "social", "legal", "address"]
+    identifiers: Optional[dict] = None  # e.g. {"location": "Austin TX", "employer": "Acme", "relationship": "ex-partner", "age_range": "30s"}
+    include_photos: bool = True  # Whether to search for and return matched profile photos
+    search_options: Optional[List[str]] = None  # e.g. ["court", "business", "social", "news", "licenses", "phone", "address"]
 
 
 def _serialize_block(block) -> dict:
@@ -106,7 +137,7 @@ def _serialize_block(block) -> dict:
     return {"type": str(btype)}
 
 
-async def _run_agent(subject: str, context: Optional[str], focus: Optional[List[str]], api_key: str, model: str) -> str:
+async def _run_agent(subject: str, context: Optional[str], focus: Optional[List[str]], identifiers: Optional[dict], include_photos: bool, search_options: Optional[List[str]], api_key: str, model: str) -> str:
     """Run the agentic web search loop and return the final report text."""
     import anthropic
 
@@ -114,16 +145,67 @@ async def _run_agent(subject: str, context: Optional[str], focus: Optional[List[
 
     focus_str = ", ".join(focus) if focus else "all public information including employment, social media, legal records, and location"
 
-    user_prompt = (
-        f"Research subject: {subject}\n"
-        f"Focus areas: {focus_str}\n"
-    )
+    # Build identity anchors block — critical for disambiguation
+    identity_lines = []
+    if identifiers:
+        if identifiers.get("location"):
+            identity_lines.append(f"  Location/City: {identifiers['location']}")
+        if identifiers.get("employer"):
+            identity_lines.append(f"  Employer/Organization: {identifiers['employer']}")
+        if identifiers.get("relationship"):
+            identity_lines.append(f"  Relationship to investigator: {identifiers['relationship']}")
+        if identifiers.get("age_range"):
+            identity_lines.append(f"  Approximate age/age range: {identifiers['age_range']}")
+        if identifiers.get("other"):
+            identity_lines.append(f"  Other identifiers: {identifiers['other']}")
+
+    user_prompt = f"TARGET SUBJECT: {subject}\n"
+
+    if identity_lines:
+        user_prompt += "\nIDENTITY ANCHORS (use these to distinguish the target from others with the same name):\n"
+        user_prompt += "\n".join(identity_lines) + "\n"
+    else:
+        user_prompt += "\n⚠️  No identity anchors provided. Use any contextual clues below to distinguish the subject. If the name is common, note name collision risk clearly in the report.\n"
+
+    user_prompt += f"\nFocus areas: {focus_str}\n"
+
     if context:
-        user_prompt += f"Investigator context: {context}\n"
+        user_prompt += f"\nAdditional investigator context: {context}\n"
+
+    # Build search options instruction block
+    SEARCH_OPTION_MAP = {
+        "court":     "Perform a deep search of court records, restraining orders, criminal history, civil litigation, and public legal filings.",
+        "business":  "Search business registrations, LLC filings, UCC filings, professional licenses, registered agents, and corporate officer records.",
+        "social":    "Do a thorough deep-dive across all public social media: LinkedIn, Twitter/X, Facebook, Instagram, TikTok, Reddit, YouTube. Look for usernames, bios, post history (public only), follower counts, and connections.",
+        "news":      "Search news archives, local newspapers, press releases, and media mentions. Include older archived articles, not just recent coverage.",
+        "licenses":  "Search state professional license databases, contractor licenses, medical/legal/financial licenses, certifications, and any regulatory filings.",
+        "phone":     "Search public white pages, reverse phone directories, and any publicly listed phone numbers associated with the subject.",
+        "address":   "Search public voter registration records, property tax records, business registered addresses, and any publicly filed address information. No private residential addresses unless in public court filings.",
+        "photos":    "Search for publicly available profile photos, headshots, and identity images. Return direct image URLs in the [PHOTO_URL]: format specified.",
+    }
+
+    active_options = search_options or ["court", "business", "social", "news", "licenses"]
+    if include_photos and "photos" not in active_options:
+        active_options = list(active_options) + ["photos"]
+
+    option_instructions = []
+    for opt in active_options:
+        if opt in SEARCH_OPTION_MAP:
+            option_instructions.append(f"  [{opt.upper()}] {SEARCH_OPTION_MAP[opt]}")
+
+    if option_instructions:
+        user_prompt += "\nACTIVE SEARCH MODULES:\n" + "\n".join(option_instructions) + "\n"
+
+    if not include_photos:
+        user_prompt += "\n⚠️ Photo search is DISABLED. Do NOT include the 'Possible Matched Photos' section in the report.\n"
+
     user_prompt += (
-        "\nSearch thoroughly across multiple sources. "
-        "Check social media, news, professional profiles, business records, and public court records. "
-        "After gathering enough information, compile a comprehensive research report using the exact format specified."
+        "\nINSTRUCTIONS:\n"
+        "PHASE 1 — Start with a targeted disambiguation search using the subject name + identity anchors "
+        "(e.g. search 'John Smith Austin Texas software engineer'). Lock onto the specific individual before broad research.\n"
+        "PHASE 2 — Once you have confirmed the identity of the target, execute the ACTIVE SEARCH MODULES above thoroughly.\n"
+        "PHASE 3 — Compile the comprehensive research report using the exact format specified. "
+        "Only include information you can confidently attribute to THIS specific individual."
     )
 
     messages = [{"role": "user", "content": user_prompt}]
@@ -282,6 +364,9 @@ def register_research_agent_routes(app, require_any_user, require_owner):
                 subject=subject,
                 context=body.context,
                 focus=body.focus,
+                identifiers=body.identifiers,
+                include_photos=body.include_photos,
+                search_options=body.search_options,
                 api_key=api_key,
                 model=model,
             )

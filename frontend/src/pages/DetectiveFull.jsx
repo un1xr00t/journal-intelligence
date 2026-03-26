@@ -511,10 +511,81 @@ const FOCUS_OPTIONS = [
   { key: 'business',   label: '🏢 Business Records'  },
 ]
 
+// ── Search module definitions ─────────────────────────────────────────────────
+
+const SEARCH_MODULES = [
+  { key: 'social',   icon: '👤', label: 'Social Media',       desc: 'LinkedIn, Twitter, Facebook, Instagram, TikTok, Reddit' },
+  { key: 'court',    icon: '⚖️', label: 'Court & Legal',      desc: 'Criminal history, restraining orders, civil litigation' },
+  { key: 'news',     icon: '📰', label: 'News Archive',        desc: 'Local papers, press mentions, archived articles' },
+  { key: 'business', icon: '🏢', label: 'Business & LLC',      desc: 'Registrations, UCC filings, corporate officer records' },
+  { key: 'licenses', icon: '🪪', label: 'Professional Licenses', desc: 'State license databases, certifications, regulatory filings' },
+  { key: 'address',  icon: '📍', label: 'Address History',     desc: 'Voter registration, property tax, public filed addresses' },
+  { key: 'phone',    icon: '📞', label: 'Phone Lookup',        desc: 'White pages, reverse directories, public listings' },
+]
+
+// ── Photo parser ──────────────────────────────────────────────────────────────
+
+function parsePhotoLines(text) {
+  const photos = []
+  const lines = text.split('\n')
+  for (const line of lines) {
+    const m = line.match(/^\[PHOTO_URL\]:\s*(https?:\/\/\S+)\s*\|\s*Source:\s*(.+?)\s*\|\s*Caption:\s*(.+)$/)
+    if (m) {
+      photos.push({ url: m[1].trim(), source: m[2].trim(), caption: m[3].trim() })
+    }
+  }
+  return photos
+}
+
+// ── Strip photo lines from text (so they don't appear in the text body) ───────
+
+function stripPhotoLines(text) {
+  return text.split('\n').filter(l => !l.match(/^\[PHOTO_URL\]:/)).join('\n')
+}
+
+// ── Photo grid component ──────────────────────────────────────────────────────
+
+function PhotoGrid({ photos }) {
+  const [failed, setFailed] = useState({})
+  if (!photos.length) return null
+  const visible = photos.filter((_, i) => !failed[i])
+  if (!visible.length) return null
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
+        📸 Possible Matched Photos
+        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0, marginLeft: 8 }}>— verify manually before relying on any match</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
+        {photos.map((p, i) => failed[i] ? null : (
+          <div key={i} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <img
+              src={p.url}
+              alt={p.caption}
+              onError={() => setFailed(f => ({ ...f, [i]: true }))}
+              style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }}
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
+            />
+            <div style={{ padding: '5px 7px' }}>
+              <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 9, color: '#a5b4fc', marginBottom: 2 }}>{p.source}</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.caption}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ResearchModal({ caseId, onClose, onSaved }) {
   const [subject, setSubject]   = useState('')
   const [context, setContext]   = useState('')
   const [focus, setFocus]       = useState([])
+  const [identifiers, setIdent] = useState({ location: '', employer: '', relationship: '', age_range: '' })
+  const [includePhotos, setIncludePhotos] = useState(true)
+  const [searchOpts, setSearchOpts] = useState(['court', 'business', 'social', 'news', 'licenses'])
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [loading, setLoading]   = useState(false)
   const [result, setResult]     = useState(null)
   const [error, setError]       = useState(null)
@@ -528,10 +599,14 @@ function ResearchModal({ caseId, onClose, onSaved }) {
     setLoading(true)
     setError(null)
     try {
+      const cleanIdent = Object.fromEntries(Object.entries(identifiers).filter(([, v]) => v.trim()))
       const r = await api.post(`/api/detective/cases/${caseId}/research`, {
         subject: subject.trim(),
         context: context.trim() || null,
         focus: focus.length > 0 ? focus : null,
+        identifiers: Object.keys(cleanIdent).length > 0 ? cleanIdent : null,
+        include_photos: includePhotos,
+        search_options: searchOpts.length > 0 ? searchOpts : null,
       })
       setResult(r.data)
       setStep('result')
@@ -625,30 +700,117 @@ function ResearchModal({ caseId, onClose, onSaved }) {
                 />
               </div>
 
+              <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
+                  🎯 Identity Anchors <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 0 }}>— helps the agent find the RIGHT person, not just anyone with this name</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4, fontFamily: 'IBM Plex Mono' }}>City / Location</label>
+                    <input
+                      value={identifiers.location}
+                      onChange={e => setIdent(p => ({ ...p, location: e.target.value }))}
+                      placeholder="e.g. Austin, TX"
+                      style={{ ...field, fontSize: 12, padding: '7px 10px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4, fontFamily: 'IBM Plex Mono' }}>Employer / Organization</label>
+                    <input
+                      value={identifiers.employer}
+                      onChange={e => setIdent(p => ({ ...p, employer: e.target.value }))}
+                      placeholder="e.g. Acme Corp"
+                      style={{ ...field, fontSize: 12, padding: '7px 10px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4, fontFamily: 'IBM Plex Mono' }}>Relationship to You</label>
+                    <input
+                      value={identifiers.relationship}
+                      onChange={e => setIdent(p => ({ ...p, relationship: e.target.value }))}
+                      placeholder="e.g. ex-partner, coworker"
+                      style={{ ...field, fontSize: 12, padding: '7px 10px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4, fontFamily: 'IBM Plex Mono' }}>Approx. Age / Age Range</label>
+                    <input
+                      value={identifiers.age_range}
+                      onChange={e => setIdent(p => ({ ...p, age_range: e.target.value }))}
+                      placeholder="e.g. mid-30s, born ~1990"
+                      style={{ ...field, fontSize: 12, padding: '7px 10px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Context (optional)
+                  Additional Context (optional)
                 </label>
                 <textarea
                   value={context}
                   onChange={e => setContext(e.target.value)}
-                  placeholder="e.g. Works at Acme Corp, claims to be from Denver, involved in incident on 3/10"
-                  style={{ ...field, minHeight: 72, resize: 'vertical' }}
-                  rows={3}
+                  placeholder="e.g. involved in incident on 3/10, claims to be a contractor, drives a blue truck"
+                  style={{ ...field, minHeight: 60, resize: 'vertical' }}
+                  rows={2}
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 10, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Focus Areas (all selected by default)
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {FOCUS_OPTIONS.map(f => (
-                    <button key={f.key} onClick={() => toggleFocus(f.key)} style={btn(focus.includes(f.key))}>
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
+                <button
+                  onClick={() => setShowAdvanced(v => !v)}
+                  style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, width: '100%', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                >
+                  <span>⚙️</span>
+                  <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Search Options</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 10 }}>{showAdvanced ? '▲ Hide' : '▼ Configure'}</span>
+                </button>
+
+                {showAdvanced && (
+                  <div style={{ marginTop: 12, background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px' }}>
+
+                    {/* Photo toggle */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>📸 Photo Search</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Attempt to find and return profile / identity photos</div>
+                      </div>
+                      <button
+                        onClick={() => setIncludePhotos(v => !v)}
+                        style={{ padding: '5px 14px', background: includePhotos ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.05)', border: `1px solid ${includePhotos ? 'rgba(99,102,241,0.5)' : 'var(--border)'}`, borderRadius: 20, color: includePhotos ? '#a5b4fc' : 'var(--text-muted)', fontSize: 11, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
+                      >
+                        {includePhotos ? '✓ On' : 'Off'}
+                      </button>
+                    </div>
+
+                    {/* Search modules */}
+                    <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Search Modules</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {SEARCH_MODULES.map(m => {
+                        const active = searchOpts.includes(m.key)
+                        return (
+                          <div
+                            key={m.key}
+                            onClick={() => setSearchOpts(s => active ? s.filter(k => k !== m.key) : [...s, m.key])}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: active ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.02)', border: `1px solid ${active ? 'rgba(99,102,241,0.35)' : 'var(--border)'}`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
+                          >
+                            <span style={{ fontSize: 15, flexShrink: 0 }}>{m.icon}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, color: active ? '#a5b4fc' : 'var(--text-primary)', fontWeight: 600 }}>{m.label}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{m.desc}</div>
+                            </div>
+                            <div style={{ width: 16, height: 16, borderRadius: 4, background: active ? 'var(--accent)' : 'transparent', border: `2px solid ${active ? 'var(--accent)' : 'rgba(255,255,255,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {active && <span style={{ fontSize: 9, color: '#fff', fontWeight: 800 }}>✓</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7 }}>
@@ -696,8 +858,9 @@ function ResearchModal({ caseId, onClose, onSaved }) {
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
               }}>
-                {result.report}
+                {stripPhotoLines(result.report)}
               </div>
+              <PhotoGrid photos={parsePhotoLines(result.report)} />
             </div>
           )}
         </div>
@@ -793,22 +956,32 @@ function ResearchPanel({ caseId, refreshKey }) {
             </div>
             {isOpen && (
               <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
-                <div style={{
-                  marginTop: 12,
-                  background: 'rgba(0,0,0,0.3)',
-                  borderRadius: 8,
-                  padding: '14px 16px',
-                  fontFamily: 'IBM Plex Mono',
-                  fontSize: 11,
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.8,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  maxHeight: 480,
-                  overflowY: 'auto',
-                }}>
-                  {r.content.replace('[RESEARCH AGENT REPORT]\n', '')}
-                </div>
+                {(() => {
+                  const reportText = r.content.replace('[RESEARCH AGENT REPORT]\n', '')
+                  const photos = parsePhotoLines(reportText)
+                  const cleanText = stripPhotoLines(reportText)
+                  return (
+                    <>
+                      <div style={{
+                        marginTop: 12,
+                        background: 'rgba(0,0,0,0.3)',
+                        borderRadius: 8,
+                        padding: '14px 16px',
+                        fontFamily: 'IBM Plex Mono',
+                        fontSize: 11,
+                        color: 'var(--text-secondary)',
+                        lineHeight: 1.8,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        maxHeight: 480,
+                        overflowY: 'auto',
+                      }}>
+                        {cleanText}
+                      </div>
+                      {photos.length > 0 && <PhotoGrid photos={photos} />}
+                    </>
+                  )
+                })()}
               </div>
             )}
           </div>

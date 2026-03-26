@@ -1264,6 +1264,18 @@ async def delete_entry(
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Entry not found")
+        # delete physical attachment files first
+        att_rows = conn.execute(
+            "SELECT file_path FROM entry_attachments WHERE entry_id = ?", (entry_id,)
+        ).fetchall()
+        import os
+        for att in att_rows:
+            try:
+                if att[0] and os.path.exists(att[0]):
+                    os.remove(att[0])
+            except Exception:
+                pass
+        conn.execute("DELETE FROM entry_attachments WHERE entry_id = ?", (entry_id,))
         conn.execute("DELETE FROM derived_summaries WHERE entry_id = ?", (entry_id,))
         conn.execute("DELETE FROM evidence WHERE entry_id = ?", (entry_id,))
         conn.execute("DELETE FROM ingest_log WHERE entry_id = ?", (entry_id,))

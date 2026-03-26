@@ -478,15 +478,18 @@ function WriteMode({ entryDate }) {
         entry_date: entryDate,
       })
       const data = res.data
-      if (data.status === 'success' || data.status === 'inserted') {
+      if (data.status === 'success' || data.status === 'inserted' || data.status === 'partial') {
+        if (data.status === 'partial') {
+          setStatus({ type: 'partial', message: data.message || 'Saved — AI extraction pending.' })
+        }
         setResult(data)
-        if (pendingImages.length > 0 && data.id) {
+        if (pendingImages.length > 0 && (data.entry_id || data.id)) {
           setUploadingImages(true)
           try {
             for (const img of pendingImages) {
               const fd = new FormData()
               fd.append('file', img.file, img.name)
-              await api.post(`/api/entries/${data.id}/attachments`, fd, {
+              await api.post(`/api/entries/${data.entry_id || data.id}/attachments`, fd, {
                 headers: { 'Content-Type': 'multipart/form-data' },
               })
             }
@@ -497,9 +500,6 @@ function WriteMode({ entryDate }) {
             setPendingImages([])
           }
         }
-      } else if (data.status === 'partial') {
-        setStatus({ type: 'partial', message: data.message || 'Saved — AI extraction pending.' })
-        setResult(data)
       } else if (data.status === 'skipped') {
         setStatus({ type: 'error', message: 'An identical entry for this date already exists.' })
       } else {
