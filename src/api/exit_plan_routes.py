@@ -460,6 +460,179 @@ def _maybe_unlock_phases(conn, plan_id: int):
 
 # ── Route registration ─────────────────────────────────────────────────────────
 
+
+
+# ── AI-powered task resources ──────────────────────────────────────────────────
+
+_RES_SYSTEM = (
+    "You are a resource matcher for an exit plan app. "
+    "Select ONLY the most relevant support resource categories for a specific task. "
+    "Be highly selective -- most tasks need 2-3 categories at most. "
+    "Return ONLY a raw JSON array. No markdown, no code fences, no explanation."
+)
+
+_RES_CATEGORIES = (
+    "- crisis: Immediate crisis support (DV hotline, crisis text line, 988)\n"
+    "- relationship: DV and toxic relationship support\n"
+    "- legal: Legal aid, courts, protection orders, divorce, custody agreements\n"
+    "- housing: Finding housing, rent assistance, tenant rights, storage units\n"
+    "- parenting: Co-parenting, custody, childcare, school logistics, child support\n"
+    "- financial: Bank accounts, credit report, budgeting, joint assets\n"
+    "- emotional_support: Therapy, counseling, mental health, processing emotions\n"
+    "- safety_planning: Safety plans, encrypted communication, incident documentation\n"
+    "- income: Gig work, freelance, side income, immediate earning\n"
+    "- job_search: Job applications, resume, career change, unemployment benefits\n"
+    "- pets: Pet care, boarding, vet costs, pet transport during a move\n"
+    "- documentation: Organizing records, cloud storage, evidence gathering\n"
+    "- self_care: Stress management, meditation, sleep, grounding routines\n"
+)
+
+
+def _register_ai_resources_route(app, require_any_user):
+    import json
+    import re
+    import hashlib
+    import logging
+    from fastapi import HTTPException, Depends
+
+    logger = logging.getLogger("journal")
+
+    def _ensure_cache_table(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS exit_plan_task_resources (
+                task_id     INTEGER PRIMARY KEY,
+                task_hash   TEXT NOT NULL,
+                result_json TEXT NOT NULL,
+                created_at  TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.commit()
+
+    def _task_hash(task):
+        raw = (task.get("title") or "") + (task.get("description") or "") + (task.get("why_it_matters") or "")
+        return hashlib.md5(raw.encode()).hexdigest()
+
+    @app.post("/api/exit-plan/tasks/{task_id}/resources")
+    async def get_ai_task_resources(
+        task_id: int,
+        current_user=Depends(require_any_user),
+    ):
+        user_id = current_user["id"]
+
+        from src.auth.auth_db import get_db
+        conn = get_db()
+        _ensure_cache_table(conn)
+
+        row = conn.execute(
+            """
+            SELECT t.id, t.title, t.description, t.why_it_matters,
+                   p.title       AS phase_title,
+                   p.description AS phase_desc,
+                   ep.plan_type
+            FROM exit_plan_tasks  t
+            JOIN exit_plan_phases p  ON p.id  = t.phase_id
+            JOIN exit_plans       ep ON ep.id = p.plan_id
+            WHERE t.id = ? AND ep.user_id = ?
+            """,
+            (task_id, user_id),
+        ).fetchone()
+
+        if not row:
+            conn.close()
+            raise HTTPException(404, "Task not found")
+
+        task = dict(row)
+        current_hash = _task_hash(task)
+
+        cached = conn.execute(
+            "SELECT task_hash, result_json FROM exit_plan_task_resources WHERE task_id = ?",
+            (task_id,),
+        ).fetchone()
+
+        if cached and cached["task_hash"] == current_hash:
+            conn.close()
+            logger.debug(f"[exit_plan_resources] cache hit task {task_id}")
+            return {**json.loads(cached["result_json"]), "cached": True}
+
+        conn.close()
+
+        rules = (
+            "Rules:\n"
+            "- Packing/moving physical objects: NO housing unless about finding a new home.\n"
+            "- Tasks about specific items (TV, boxes, monitors): only self_care or documentation.\n"
+            "- Banking/money tasks: financial.\n"
+            "- Tasks involving children: parenting.\n"
+            "- safety_planning/crisis ONLY for tasks explicitly about personal safety.\n"
+            "- emotional_support ONLY for tasks explicitly about emotional wellbeing.\n"
+        )
+
+        user_prompt = (
+            "Task details:\n"
+            f"Title: {task['title']}\n"
+            f"Description: {task.get('description') or 'N/A'}\n"
+            f"Why it matters: {task.get('why_it_matters') or 'N/A'}\n"
+            f"Phase: {task['phase_title']} -- {task.get('phase_desc') or ''}\n"
+            f"Plan type: {task['plan_type']}\n\n"
+            "Available resource categories:\n"
+            + _RES_CATEGORIES
+            + "\n"
+            + rules
+            + '\nReturn ONLY a JSON array like:\n'
+            '[{"category": "financial", "reason": "This task is about opening a separate bank account."}]'
+        )
+
+        try:
+            from src.api.ai_client import create_message
+
+            raw = create_message(
+                user_id,
+                system=_RES_SYSTEM,
+                user_prompt=user_prompt,
+                max_tokens=350,
+                call_type="exit_plan_resources",
+            )
+            raw = raw.strip()
+            raw = re.sub(r"^```[a-z]*\s*", "", raw, flags=re.MULTILINE)
+            raw = re.sub(r"```\s*$", "", raw).strip()
+
+            categories = json.loads(raw)
+            if not isinstance(categories, list):
+                raise ValueError("Expected a list")
+            categories = [
+                {
+                    "category": str(c.get("category", "")),
+                    "reason":   str(c.get("reason", "")),
+                }
+                for c in categories
+                if isinstance(c, dict) and c.get("category")
+            ]
+
+            result = {"categories": categories, "ai_powered": True}
+
+            conn2 = get_db()
+            _ensure_cache_table(conn2)
+            conn2.execute(
+                """
+                INSERT INTO exit_plan_task_resources (task_id, task_hash, result_json)
+                VALUES (?, ?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    task_hash   = excluded.task_hash,
+                    result_json = excluded.result_json,
+                    created_at  = datetime('now')
+                """,
+                (task_id, current_hash, json.dumps(result)),
+            )
+            conn2.commit()
+            conn2.close()
+
+            return {**result, "cached": False}
+
+        except Exception as exc:
+            logger.warning(f"[exit_plan_resources] AI failed task {task_id}: {exc}")
+            return {"categories": [], "ai_powered": False, "cached": False}
+
+
+
 def register_exit_plan_routes(app, require_any_user):
     from src.auth.auth_db import get_db
     from src.api.onboarding_routes import load_user_memory
@@ -757,6 +930,8 @@ def register_exit_plan_routes(app, require_any_user):
             "cached":     False,
             "phases":     phases_created,
         }
+
+    _register_ai_resources_route(app, require_any_user)
 
     # ── GET /api/exit-plan/detect ───────────────────────────────────────────────
     @app.get("/api/exit-plan/detect")

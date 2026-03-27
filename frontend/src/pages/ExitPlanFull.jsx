@@ -4,7 +4,7 @@
  * Opens from ExitPlan.jsx via "Open Full Workspace" button.
  * Shares all data with the main ExitPlan page (same API endpoints).
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
@@ -208,7 +208,7 @@ function getTaskResources(task) {
 
 // ── Resource chip ──────────────────────────────────────────────────────────────
 
-function ResourceChip({ resource }) {
+function ResourceChip({ resource, aiReason }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -230,6 +230,11 @@ function ResourceChip({ resource }) {
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.5 }}>
           {resource.description}
         </div>
+        {aiReason && (
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4, fontStyle: 'italic' }}>
+            {aiReason}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -441,7 +446,7 @@ function LeftPanel({ plan, selectedTask, onSelectTask }) {
 
 // ── Right panel: task detail ───────────────────────────────────────────────────
 
-function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
+function RightPanel({ task, phase, onClose, onStatusChange, onRefresh, resourceCache }) {
   const [notes,              setNotes]              = useState([])
   const [noteText,           setNoteText]           = useState('')
   const [saving,             setSaving]             = useState(false)
@@ -449,6 +454,9 @@ function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
   const [attachments,        setAttachments]        = useState([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [uploadingFile,      setUploadingFile]      = useState(false)
+  const [aiResources,        setAiResources]        = useState(null)
+  const [aiLoading,          setAiLoading]          = useState(false)
+  const [aiResLoading,       setAiResLoading]       = useState(false)
 
   const loadNotes = useCallback(() => {
     if (!task) return
@@ -468,8 +476,19 @@ function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
       .finally(() => setLoadingAttachments(false))
   }, [task?.id])
 
-  useEffect(() => { loadNotes() }, [loadNotes])
+  const loadAiResources = useCallback(() => {
+    if (!task) return
+    setAiResources(null)
+    setAiResLoading(true)
+    api.post(`/api/exit-plan/tasks/${task.id}/resources`)
+      .then(r => setAiResources(r.data))
+      .catch(() => setAiResources({ categories: [], ai_powered: false }))
+      .finally(() => setAiResLoading(false))
+  }, [task?.id])
+
+  useEffect(() => { loadNotes() },       [loadNotes])
   useEffect(() => { loadAttachments() }, [loadAttachments])
+  useEffect(() => { loadAiResources() }, [loadAiResources])
 
   const submitNote = async () => {
     if (!noteText.trim()) return
@@ -597,16 +616,51 @@ function RightPanel({ task, phase, onClose, onStatusChange, onRefresh }) {
           >🗑 Delete task</button>
         </div>
 
-        {/* Resources */}
+        {/* Resources — AI-powered with frontend session cache */}
         {(() => {
-          const resources = getTaskResources(task)
-          if (resources.length === 0) return null
+          let chips = []
+          if (aiResources?.categories?.length > 0) {
+            const seen = new Set()
+            for (const { category } of aiResources.categories) {
+              const lib = RESOURCE_LIBRARY[category]
+              if (!lib) continue
+              for (const r of lib.resources.slice(0, 2)) {
+                if (!seen.has(r.name)) {
+                  seen.add(r.name)
+                  chips.push({ ...r, cat_title: lib.title, cat_icon: lib.icon, cat_color: lib.color })
+                }
+              }
+            }
+            chips = chips.slice(0, 7)
+          } else if (!aiLoading) {
+            chips = getTaskResources(task)
+          }
+
           return (
             <div>
-              <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
                 Resources for this step
+                {aiLoading && (
+                  <span style={{ fontSize: 9, color: 'var(--accent)', fontWeight: 600, animation: 'pulse 1.2s ease-in-out infinite' }}>
+                    ✦ thinking…
+                  </span>
+                )}
+                {!aiLoading && aiResources?.cached === false && (
+                  <span style={{ fontSize: 9, color: '#10b981', fontWeight: 600 }}>✦ AI</span>
+                )}
+                {!aiLoading && aiResources?.cached === true && (
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>cached</span>
+                )}
               </div>
-              {resources.map((r, i) => <ResourceChip key={i} resource={r} />)}
+
+              {aiLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0' }}>
+                  <span style={{ fontSize: 16, animation: 'spin 1.4s linear infinite', display: 'inline-block' }}>⟳</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Finding the best resources…</span>
+                </div>
+              ) : chips.length > 0 ? (
+                chips.map((r, i) => <ResourceChip key={i} resource={r} />)
+              ) : null}
             </div>
           )
         })()}
@@ -2108,6 +2162,9 @@ export default function ExitPlanFull() {
   const [showUpdate,    setShowUpdate]    = useState(false)
   const [checkingUp,    setCheckingUp]    = useState(false)
 
+  // Session-level cache: task_id -> AI resource result (avoids re-fetching on task switch)
+  const resourceCacheRef = useRef(new Map())
+
   const loadPlan = useCallback(async () => {
     try {
       const r = await api.get('/api/exit-plan')
@@ -2418,6 +2475,7 @@ export default function ExitPlanFull() {
           onClose={() => { setSelectedTask(null); setSelectedPhase(null) }}
           onStatusChange={handleStatusChange}
           onRefresh={loadPlan}
+          resourceCache={resourceCacheRef}
         />
       </div>
 
