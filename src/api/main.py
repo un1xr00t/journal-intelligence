@@ -2205,4 +2205,9 @@ from src.api.research_agent_route import register_research_agent_routes
 register_detective_routes(app, require_any_user, require_owner)
 register_research_agent_routes(app, require_any_user, require_owner)
 
+from src.api.fairness_routes import register_fairness_routes
+from src.auth.auth_db import get_db as _fairness_get_db
+from src.api.ai_client import create_message as _fairness_create_message
+register_fairness_routes(app, _fairness_get_db, require_any_user, _fairness_create_message)
+
 

@@ -40,7 +40,8 @@ const NAV_GROUPS = [
   {
     label: 'Premium Options',
     links: [
-      { to: '/detective', icon: '🕵', label: 'Detective Mode', detectiveOnly: true },
+      { to: '/detective',  icon: '🕵', label: 'Detective Mode',    detectiveOnly: true },
+      { to: '/fairness',   icon: '⚖',  label: 'Fairness Ledger'   },
     ]
   },
   {

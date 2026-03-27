@@ -29,6 +29,7 @@ import EarlyWarning from './pages/EarlyWarning'
 import DayOneImport from './pages/DayOneImport'
 import DecisionAssistant from './pages/DecisionAssistant'
 import Detective from './pages/Detective'
+import FairnessLedger from './pages/FairnessLedger'
 import DetectiveFull from './pages/DetectiveFull'
 import InviteAccess from './pages/InviteAccess'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
@@ -232,6 +233,7 @@ function Shell() {
             <Route path="/import/dayone" element={<ProtectedRoute><DayOneImport /></ProtectedRoute>} />
             <Route path="/decide" element={<ProtectedRoute><DecisionAssistant /></ProtectedRoute>} />
             <Route path="/detective" element={<ProtectedRoute><Detective /></ProtectedRoute>} />
+            <Route path="/fairness" element={<ProtectedRoute><FairnessLedger /></ProtectedRoute>} />
             <Route path="/detective/full" element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="/invite/:token" element={<InviteAccess />} />
