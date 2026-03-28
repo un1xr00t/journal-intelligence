@@ -64,6 +64,11 @@ class EntryCreate(BaseModel):
     entry_type: Optional[str] = "note"
     severity: Optional[str] = "medium"
 
+class EntryUpdate(BaseModel):
+    content: Optional[str] = None
+    entry_type: Optional[str] = None
+    severity: Optional[str] = None
+
 class ChatRequest(BaseModel):
     message: str
     history: Optional[list] = []
@@ -231,7 +236,7 @@ def register_detective_routes(app, require_any_user, require_owner):
 
         entries = conn.execute(
             "SELECT id, content, entry_type, severity, created_at, "
-            "attachment_filename, attachment_analysis, attachment_status "
+            "attachment_filename, attachment_analysis, attachment_status, multi_photo_analysis "
             "FROM detective_entries WHERE case_id = ? ORDER BY created_at DESC LIMIT 20",
             (case_id,)
         ).fetchall()
@@ -265,6 +270,11 @@ def register_detective_routes(app, require_any_user, require_owner):
                         f"  ^ ATTACHED PHOTO EVIDENCE ('{e['attachment_filename']}'):\n"
                         f"  {e['attachment_analysis']}"
                     )
+                if e["multi_photo_analysis"]:
+                    parts.append(
+                        f"  ^ MULTI-PHOTO SYNTHESIS:\n"
+                        f"  {e['multi_photo_analysis']}"
+                    )
 
         if uploads:
             parts.append("\n--- PHOTO EVIDENCE (GALLERY UPLOADS) ---")
@@ -295,7 +305,7 @@ def register_detective_routes(app, require_any_user, require_owner):
             # Recent log entries (with attachment analyses inline)
             recent = conn.execute(
                 "SELECT id, content, entry_type, severity, created_at, "
-                "attachment_filename, attachment_analysis, attachment_status "
+                "attachment_filename, attachment_analysis, attachment_status, multi_photo_analysis "
                 "FROM detective_entries WHERE case_id = ? ORDER BY created_at DESC LIMIT 5",
                 (case_id,)
             ).fetchall()
@@ -310,6 +320,11 @@ def register_detective_routes(app, require_any_user, require_owner):
                     recent_lines.append(
                         f"  ^ PHOTO ATTACHED ('{e['attachment_filename']}'):\n"
                         f"  {e['attachment_analysis']}"
+                    )
+                if e["multi_photo_analysis"]:
+                    recent_lines.append(
+                        f"  ^ MULTI-PHOTO SYNTHESIS:\n"
+                        f"  {e['multi_photo_analysis']}"
                     )
             recent_text = "\n".join(recent_lines) or "No recent entries."
 
@@ -427,6 +442,62 @@ def register_detective_routes(app, require_any_user, require_owner):
         return msg.content[0].text
 
 
+    def _call_vision_multi(user_id: int, images: list, entry_content: str) -> str:
+        """Send multiple images to vision API and return a combined evidence synthesis."""
+        from src.api.ai_client import get_anthropic_key, get_model
+        import anthropic
+
+        _mime_map = {
+            "image/jpg": "image/jpeg", "image/jpeg": "image/jpeg",
+            "image/png": "image/png", "image/gif": "image/gif", "image/webp": "image/webp",
+        }
+        key = get_anthropic_key(user_id)
+        if not key:
+            raise RuntimeError("No Anthropic API key configured.")
+        model = get_model()
+        client = anthropic.Anthropic(api_key=key)
+
+        content_blocks = []
+        for i, (b64, mime) in enumerate(images, 1):
+            safe_mime = _mime_map.get((mime or "").lower(), "image/jpeg")
+            content_blocks.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": safe_mime, "data": b64}
+            })
+            content_blocks.append({"type": "text", "text": f"[Photo {i} of {len(images)}]"})
+
+        synthesis_prompt = (
+            "CRITICAL RULES: Write in plain prose — no markdown, no bold, no bullets, no headers. "
+            "The context block above identifies the INVESTIGATOR by name. "
+            "That person wrote the notes and took the photos — they are NEVER in the photos, NEVER sending "
+            "the messages shown, NEVER a participant in anything depicted. "
+            "If you see their name in the case context, that is because they wrote about themselves — "
+            "do NOT attribute any message, action, or role in the photos to them. "
+            "The people IN the photos are the subjects being investigated.\n\n"
+            f"CASE CONTEXT + ENTRY NOTE:\n{entry_content[:2000]}\n\n"
+            f"Analyze these {len(images)} photo(s) as forensic evidence. In plain prose: "
+            "transcribe visible text or messages verbatim, identify who is talking to who "
+            "(using names visible in the screenshots — NOT the investigator's name), "
+            "note the platform and timestamps, then explain how the visual evidence "
+            "supports the investigator's note. Call out the most important detail. No fluff."
+        )
+        content_blocks.append({"type": "text", "text": synthesis_prompt})
+
+        msg = client.messages.create(
+            model=model,
+            max_tokens=1200,
+            system=_PARTNER_SYSTEM,
+            messages=[{"role": "user", "content": content_blocks}]
+        )
+        try:
+            from src.api.ai_client import _log_usage
+            _log_usage(user_id, "anthropic", model,
+                       msg.usage.input_tokens, msg.usage.output_tokens,
+                       call_type="detective_multi_photo_synthesis")
+        except Exception:
+            pass
+        return msg.content[0].text
+
     # ── Access Check ──────────────────────────────────────────────────────────
 
     @app.get("/api/detective/access")
@@ -507,11 +578,35 @@ def register_detective_routes(app, require_any_user, require_owner):
             _get_case(case_id, user["id"], conn)
             rows = conn.execute(
                 "SELECT id, content, entry_type, severity, created_at, "
-                "attachment_filename, attachment_analysis, attachment_status "
+                "attachment_filename, attachment_analysis, attachment_status, multi_photo_analysis "
                 "FROM detective_entries WHERE case_id = ? ORDER BY created_at DESC",
                 (case_id,)
             ).fetchall()
-            return [dict(r) for r in rows]
+            # Fetch all photos for this case in one query (no N+1)
+            photo_rows = conn.execute(
+                "SELECT id, entry_id, original_filename, ai_analysis, analysis_status, created_at "
+                "FROM detective_entry_photos WHERE case_id = ? AND user_id = ? ORDER BY created_at ASC",
+                (case_id, user["id"])
+            ).fetchall()
+            photos_by_entry = {}
+            for p in photo_rows:
+                photos_by_entry.setdefault(p["entry_id"], []).append({
+                    "id": p["id"],
+                    "original_filename": p["original_filename"],
+                    "ai_analysis": p["ai_analysis"],
+                    "analysis_status": p["analysis_status"],
+                    "created_at": p["created_at"],
+                    "image_url": (
+                        f"/api/detective/cases/{case_id}"
+                        f"/entries/{p['entry_id']}/photos/{p['id']}/image"
+                    ),
+                })
+            result = []
+            for r in rows:
+                d = dict(r)
+                d["photos"] = photos_by_entry.get(r["id"], [])
+                result.append(d)
+            return result
         finally:
             conn.close()
 
@@ -559,6 +654,29 @@ def register_detective_routes(app, require_any_user, require_owner):
 
             return {"id": entry_id, "content": body.content, "entry_type": body.entry_type,
                     "severity": body.severity, "created_at": datetime.utcnow().isoformat()}
+        finally:
+            conn.close()
+
+    @app.put("/api/detective/cases/{case_id}/entries/{entry_id}")
+    async def update_entry(case_id: int, entry_id: int, body: EntryUpdate, user: dict = Depends(_require_detective)):
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            fields, vals = [], []
+            if body.content is not None:
+                fields.append("content = ?"); vals.append(body.content.strip())
+            if body.entry_type is not None:
+                fields.append("entry_type = ?"); vals.append(body.entry_type)
+            if body.severity is not None:
+                fields.append("severity = ?"); vals.append(body.severity)
+            if not fields:
+                return {"ok": True}
+            conn.execute(
+                f"UPDATE detective_entries SET {', '.join(fields)} WHERE id = ? AND case_id = ? AND user_id = ?",
+                [*vals, entry_id, case_id, user["id"]]
+            )
+            conn.commit()
+            return {"ok": True}
         finally:
             conn.close()
 
@@ -740,6 +858,263 @@ def register_detective_routes(app, require_any_user, require_owner):
 
 
 
+    # ── Entry Multi-Photo Attachments ────────────────────────────────────────
+
+    def _resize_for_vision(data: bytes, mime: str) -> tuple:
+        """Resize image bytes to fit under Anthropic's 4 MB base64 limit."""
+        LIMIT = 4 * 1024 * 1024
+        if len(data) <= LIMIT:
+            return data, mime
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(data)).convert("RGB")
+            quality = 85
+            while True:
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=quality, optimize=True)
+                compressed = buf.getvalue()
+                if len(compressed) <= LIMIT or quality < 40:
+                    return compressed, "image/jpeg"
+                quality -= 10
+        except Exception:
+            return data, mime
+
+    @app.post("/api/detective/cases/{case_id}/entries/{entry_id}/photos")
+    async def upload_entry_photo(
+        case_id: int, entry_id: int,
+        file: UploadFile = File(...),
+        user: dict = Depends(_require_detective)
+    ):
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=415, detail="Only JPEG, PNG, WEBP, and GIF allowed.")
+        data = await file.read()
+        if len(data) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=413, detail="Image must be under 10 MB.")
+
+        data, mime_out = _resize_for_vision(data, file.content_type)
+
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            entry = conn.execute(
+                "SELECT id, content FROM detective_entries "
+                "WHERE id = ? AND case_id = ? AND user_id = ?",
+                (entry_id, case_id, user["id"])
+            ).fetchone()
+            if not entry:
+                raise HTTPException(status_code=404, detail="Entry not found.")
+
+            # Save file to disk
+            case_dir = os.path.join(
+                DETECTIVE_STORAGE, f"user_{user['id']}", f"case_{case_id}", "entry_photos"
+            )
+            os.makedirs(case_dir, exist_ok=True)
+            ext = os.path.splitext(file.filename or "img.jpg")[1] or ".jpg"
+            stored = f"ep_{entry_id}_{uuid.uuid4().hex[:8]}{ext}"
+            fpath = os.path.join(case_dir, stored)
+            with open(fpath, "wb") as fh:
+                fh.write(data)
+
+            # Insert DB record
+            cur = conn.execute(
+                "INSERT INTO detective_entry_photos "
+                "(entry_id, case_id, user_id, original_filename, stored_filename, "
+                " file_path, mime_type, file_size, analysis_status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'analyzing')",
+                (entry_id, case_id, user["id"], file.filename,
+                 stored, fpath, mime_out, len(data))
+            )
+            conn.commit()
+            photo_id = cur.lastrowid
+
+            # No individual analysis — combined synthesis is run after all uploads
+            conn.execute(
+                "UPDATE detective_entry_photos SET analysis_status='done' WHERE id=?",
+                (photo_id,)
+            )
+            conn.commit()
+
+            return {
+                "id": photo_id,
+                "original_filename": file.filename,
+                "ai_analysis": None,
+                "analysis_status": "done",
+                "image_url": (
+                    f"/api/detective/cases/{case_id}"
+                    f"/entries/{entry_id}/photos/{photo_id}/image"
+                ),
+            }
+        finally:
+            conn.close()
+
+    @app.get("/api/detective/cases/{case_id}/entries/{entry_id}/photos/{photo_id}/image")
+    async def get_entry_photo(
+        case_id: int, entry_id: int, photo_id: int,
+        user: dict = Depends(_require_detective)
+    ):
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            row = conn.execute(
+                "SELECT file_path, mime_type FROM detective_entry_photos "
+                "WHERE id = ? AND entry_id = ? AND case_id = ? AND user_id = ?",
+                (photo_id, entry_id, case_id, user["id"])
+            ).fetchone()
+            if not row or not row["file_path"] or not os.path.exists(row["file_path"]):
+                raise HTTPException(status_code=404, detail="Photo not found.")
+            return FileResponse(row["file_path"], media_type=row["mime_type"] or "image/jpeg")
+        finally:
+            conn.close()
+
+    @app.delete("/api/detective/cases/{case_id}/entries/{entry_id}/photos/{photo_id}")
+    async def delete_entry_photo(
+        case_id: int, entry_id: int, photo_id: int,
+        user: dict = Depends(_require_detective)
+    ):
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            row = conn.execute(
+                "SELECT file_path FROM detective_entry_photos "
+                "WHERE id = ? AND entry_id = ? AND case_id = ? AND user_id = ?",
+                (photo_id, entry_id, case_id, user["id"])
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Photo not found.")
+            if row["file_path"] and os.path.exists(row["file_path"]):
+                try:
+                    os.remove(row["file_path"])
+                except Exception:
+                    pass
+            conn.execute(
+                "DELETE FROM detective_entry_photos WHERE id = ?", (photo_id,)
+            )
+            conn.commit()
+            return {"ok": True}
+        finally:
+            conn.close()
+
+    @app.post("/api/detective/cases/{case_id}/entries/{entry_id}/photos/synthesize")
+    async def synthesize_entry_photos(
+        case_id: int, entry_id: int,
+        user: dict = Depends(_require_detective)
+    ):
+        """Load all photos for this entry, send them together to vision AI, store synthesis."""
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            entry = conn.execute(
+                "SELECT id, content FROM detective_entries "
+                "WHERE id = ? AND case_id = ? AND user_id = ?",
+                (entry_id, case_id, user["id"])
+            ).fetchone()
+            if not entry:
+                raise HTTPException(status_code=404, detail="Entry not found.")
+
+            photos = conn.execute(
+                "SELECT file_path, mime_type FROM detective_entry_photos "
+                "WHERE entry_id = ? AND user_id = ? ORDER BY created_at ASC",
+                (entry_id, user["id"])
+            ).fetchall()
+
+            images = []
+
+            # Include legacy single-attachment if it exists
+            legacy = conn.execute(
+                "SELECT attachment_path, attachment_mime FROM detective_entries "
+                "WHERE id = ? AND user_id = ?",
+                (entry_id, user["id"])
+            ).fetchone()
+            if legacy and legacy["attachment_path"] and os.path.exists(legacy["attachment_path"]):
+                with open(legacy["attachment_path"], "rb") as fh:
+                    raw = fh.read()
+                b64 = base64.standard_b64encode(raw).decode()
+                images.append((b64, legacy["attachment_mime"] or "image/jpeg"))
+
+            for p in photos:
+                fp = p["file_path"]
+                if fp and os.path.exists(fp):
+                    with open(fp, "rb") as fh:
+                        raw = fh.read()
+                    b64 = base64.standard_b64encode(raw).decode()
+                    images.append((b64, p["mime_type"] or "image/jpeg"))
+
+            if not images:
+                raise HTTPException(status_code=400, detail="No photos to synthesize.")
+
+            if not images:
+                raise HTTPException(status_code=400, detail="Could not read photo files.")
+
+            # Build rich context: case name + intelligence + recent entries + entry note
+            case_context = ""
+            try:
+                case_row = conn.execute(
+                    "SELECT title, description FROM detective_cases WHERE id = ? AND user_id = ?",
+                    (case_id, user["id"])
+                ).fetchone()
+                if case_row:
+                    case_context += (
+                        f"CASE SUBJECT: The primary subject of this investigation is '{case_row['title']}'. "
+                        f"When the investigator writes 'her', 'she', 'he', 'him', 'they', or 'this person', "
+                        f"they are referring to '{case_row['title']}' unless another name is clearly indicated.\n"
+                    )
+                    if case_row["description"]:
+                        case_context += f"Case description: {case_row['description']}\n"
+                    case_context += "\n"
+                intel = _get_intelligence(case_id, user["id"], conn)
+                if intel and intel["summary"]:
+                    case_context += f"CASE INTELLIGENCE:\n{intel['summary']}\n\n"
+                # Pull last 10 entries for subject name context
+                recent = conn.execute(
+                    "SELECT content, created_at FROM detective_entries "
+                    "WHERE case_id = ? AND user_id = ? AND id != ? "
+                    "ORDER BY created_at DESC LIMIT 10",
+                    (case_id, user["id"], entry_id)
+                ).fetchall()
+                if recent:
+                    recent_text = "\n".join(
+                        f"[{r['created_at'][:10]}] {(r['content'] or '')[:200]}"
+                        for r in recent
+                    )
+                    case_context += f"RECENT CASE LOG (for context on who people are):\n{recent_text}\n\n"
+            except Exception as ctx_ex:
+                logger.warning(f"[detective] context fetch for synthesis failed: {ctx_ex}")
+
+            # Get investigator username so AI never attributes photo content to them
+            investigator_row = conn.execute(
+                "SELECT username FROM users WHERE id = ?", (user["id"],)
+            ).fetchone()
+            investigator_name = investigator_row["username"] if investigator_row else "the investigator"
+
+            full_entry_context = (
+                f"INVESTIGATOR IDENTITY: The person who wrote these notes and uploaded these photos is "
+                f"'{investigator_name}'. They are NEVER a participant in the photos — do not assign any "
+                f"messages, actions, or roles in the photos to '{investigator_name}'.\n\n"
+                f"{case_context}"
+                f"THIS ENTRY'S NOTE:\n{entry['content'] or ''}"
+            )
+
+            synthesis = _call_vision_multi(
+                user["id"], images, full_entry_context
+            )
+            conn.execute(
+                "UPDATE detective_entries SET multi_photo_analysis=? WHERE id=?",
+                (synthesis, entry_id)
+            )
+            conn.commit()
+            return {"synthesis": synthesis, "photo_count": len(images)}
+        except HTTPException:
+            raise
+        except Exception as ex:
+            logger.error(f"[detective] photo synthesis failed: {ex}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Synthesis failed: {str(ex)[:300]}"
+            )
+        finally:
+            conn.close()
+
     # ── Photo Uploads + Vision Analysis ───────────────────────────────────────
 
     @app.get("/api/detective/cases/{case_id}/uploads")
@@ -780,6 +1155,32 @@ def register_detective_routes(app, require_any_user, require_owner):
                     'source': 'entry',
                     'source_note': (r['content'] or '')[:100],
                 })
+            # Include multi-entry photos from detective_entry_photos
+            mphoto_rows = conn.execute(
+                "SELECT dep.id, dep.original_filename, dep.ai_analysis, dep.analysis_status, "
+                "dep.created_at, dep.entry_id, de.content "
+                "FROM detective_entry_photos dep "
+                "JOIN detective_entries de ON de.id = dep.entry_id "
+                "WHERE dep.case_id = ? AND dep.user_id = ? ORDER BY dep.created_at DESC",
+                (case_id, user["id"])
+            ).fetchall()
+            for r in mphoto_rows:
+                result.append({
+                    'id': f"mphoto_{r['id']}",
+                    'original_filename': r['original_filename'],
+                    'file_size': None,
+                    'mime_type': None,
+                    'ai_analysis': r['ai_analysis'],
+                    'analysis_status': r['analysis_status'],
+                    'created_at': r['created_at'],
+                    'image_url': (
+                        f"/api/detective/cases/{case_id}"
+                        f"/entries/{r['entry_id']}/photos/{r['id']}/image"
+                    ),
+                    'source': 'multi_entry',
+                    'source_note': (r['content'] or '')[:100],
+                })
+
             result.sort(key=lambda x: x['created_at'] or '', reverse=True)
             return result
         finally:

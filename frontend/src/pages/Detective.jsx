@@ -110,15 +110,19 @@ export function CaseList({ cases, selected, onSelect, onCreate, creating }) {
   )
 }
 
-export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmentUpdate, loading }) {
+export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmentUpdate, onPhotosUpdate, loading }) {
   const [content, setContent] = useState('')
   const [type, setType] = useState('note')
   const [severity, setSeverity] = useState('medium')
   const [adding, setAdding] = useState(false)
   const [expanded, setExpanded] = useState(null)
-  const [pendingFile, setPendingFile] = useState(null)
+  const [pendingFiles, setPendingFiles] = useState([])
   const [uploadingFor, setUploadingFor] = useState(null)
   const [lightboxEntry, setLightboxEntry] = useState(null)
+  const [lightboxPhotoIdx, setLightboxPhotoIdx] = useState(0)
+  const [synthesizing, setSynthesizing] = useState(null)
+  const [editingEntry, setEditingEntry] = useState(null) // { id, content, entry_type, severity }
+  const [saving, setSaving] = useState(false)
   const attachRef = useRef(null)
   const perEntryRef = useRef({})
 
@@ -127,9 +131,9 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
     setAdding(true)
     try {
       const entry = await onAdd({ content: content.trim(), entry_type: type, severity })
-      if (pendingFile && entry?.id) {
-        await uploadAttachment(entry.id, pendingFile)
-        setPendingFile(null)
+      if (pendingFiles.length > 0 && entry?.id) {
+        await uploadPhotosAndSynthesize(entry.id, pendingFiles)
+        setPendingFiles([])
       }
       setContent('')
     } finally {
@@ -137,21 +141,52 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
     }
   }
 
-  const uploadAttachment = async (entryId, file) => {
+  const uploadPhoto = async (entryId, file) => {
     setUploadingFor(entryId)
     try {
       const form = new FormData()
       form.append('file', file)
       const r = await api.post(
-        `/api/detective/cases/${caseId}/entries/${entryId}/attachment`,
+        `/api/detective/cases/${caseId}/entries/${entryId}/photos`,
         form,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       )
-      if (onAttachmentUpdate) onAttachmentUpdate(entryId, r.data)
+      if (onPhotosUpdate) onPhotosUpdate(entryId, r.data, 'add')
+      return r.data
     } catch (e) {
-      alert(e.response?.data?.detail || 'Attachment upload failed.')
+      alert(e.response?.data?.detail || 'Photo upload failed.')
     } finally {
       setUploadingFor(null)
+    }
+  }
+
+  const uploadPhotosAndSynthesize = async (entryId, files) => {
+    for (const f of files) {
+      await uploadPhoto(entryId, f)
+    }
+    // After all uploads, run combined synthesis
+    await synthesize(entryId)
+  }
+
+  const deletePhoto = async (entryId, photoId, e) => {
+    e.stopPropagation()
+    try {
+      await api.delete(`/api/detective/cases/${caseId}/entries/${entryId}/photos/${photoId}`)
+      if (onPhotosUpdate) onPhotosUpdate(entryId, { id: photoId }, 'delete')
+    } catch {}
+  }
+
+  const synthesize = async (entryId) => {
+    setSynthesizing(entryId)
+    try {
+      const r = await api.post(
+        `/api/detective/cases/${caseId}/entries/${entryId}/photos/synthesize`
+      )
+      if (onAttachmentUpdate) onAttachmentUpdate(entryId, { multi_photo_analysis: r.data.synthesis })
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Synthesis failed. Check your API key in Settings.')
+    } finally {
+      setSynthesizing(null)
     }
   }
 
@@ -161,6 +196,27 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
       await api.delete(`/api/detective/cases/${caseId}/entries/${entryId}/attachment`)
       if (onAttachmentUpdate) onAttachmentUpdate(entryId, { attachment_filename: null, attachment_analysis: null, attachment_status: 'none' })
     } catch {}
+  }
+
+  const saveEdit = async () => {
+    if (!editingEntry) return
+    setSaving(true)
+    try {
+      await api.put(
+        `/api/detective/cases/${caseId}/entries/${editingEntry.id}`,
+        { content: editingEntry.content, entry_type: editingEntry.entry_type, severity: editingEntry.severity }
+      )
+      if (onAttachmentUpdate) onAttachmentUpdate(editingEntry.id, {
+        content: editingEntry.content,
+        entry_type: editingEntry.entry_type,
+        severity: editingEntry.severity,
+      })
+      setEditingEntry(null)
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Save failed.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -180,21 +236,25 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
           }}
         />
 
-        {/* Pending file preview */}
-        {pendingFile && (
-          <div style={{
-            marginTop: 8, padding: '6px 10px', background: 'rgba(99,102,241,0.08)',
-            border: '1px solid rgba(99,102,241,0.25)', borderRadius: 6,
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-            <span style={{ fontSize: 14 }}>📎</span>
-            <span style={{ ...mono, fontSize: 10, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {pendingFile.name}
-            </span>
-            <button
-              onClick={() => { setPendingFile(null); if (attachRef.current) attachRef.current.value = '' }}
-              style={{ background: 'none', border: 'none', color: 'rgba(239,68,68,0.6)', cursor: 'pointer', fontSize: 13, padding: 0 }}
-            >✕</button>
+        {/* Pending files preview strip */}
+        {pendingFiles.length > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {pendingFiles.map((f, i) => (
+              <div key={i} style={{
+                padding: '4px 8px', background: 'rgba(99,102,241,0.08)',
+                border: '1px solid rgba(99,102,241,0.25)', borderRadius: 6,
+                display: 'flex', alignItems: 'center', gap: 6, maxWidth: 200,
+              }}>
+                <span style={{ fontSize: 12 }}>📎</span>
+                <span style={{ ...mono, fontSize: 9, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {f.name}
+                </span>
+                <button
+                  onClick={() => setPendingFiles(pf => pf.filter((_, j) => j !== i))}
+                  style={{ background: 'none', border: 'none', color: 'rgba(239,68,68,0.6)', cursor: 'pointer', fontSize: 11, padding: 0 }}
+                >✕</button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -214,23 +274,33 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
             {Object.keys(SEVERITY_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
 
-          {/* Attach image button */}
+          {/* Attach photos button (multi-select) */}
           <button
             onClick={() => attachRef.current?.click()}
-            title="Attach image evidence"
+            title="Attach photos (multiple allowed)"
             style={{
-              background: pendingFile ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${pendingFile ? 'rgba(99,102,241,0.45)' : 'var(--border)'}`,
-              borderRadius: 6, color: pendingFile ? 'var(--accent)' : 'var(--text-muted)',
+              background: pendingFiles.length > 0 ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${pendingFiles.length > 0 ? 'rgba(99,102,241,0.45)' : 'var(--border)'}`,
+              borderRadius: 6, color: pendingFiles.length > 0 ? 'var(--accent)' : 'var(--text-muted)',
               fontSize: 13, padding: '4px 10px', cursor: 'pointer', transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', gap: 5,
             }}
-          >📎</button>
+          >
+            <span>📎</span>
+            {pendingFiles.length > 0 && <span style={{ ...mono, fontSize: 9 }}>{pendingFiles.length}</span>}
+          </button>
           <input
             ref={attachRef}
             type="file"
             accept="image/*"
+            multiple
             style={{ display: 'none' }}
-            onChange={e => { if (e.target.files?.[0]) setPendingFile(e.target.files[0]) }}
+            onChange={e => {
+              if (e.target.files?.length) {
+                setPendingFiles(pf => [...pf, ...Array.from(e.target.files)])
+                e.target.value = ''
+              }
+            }}
           />
 
           <div style={{ flex: 1 }} />
@@ -244,7 +314,7 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
               transition: 'background 0.15s',
             }}
           >
-            {adding ? (pendingFile ? 'Logging + attaching…' : 'Adding…') : 'Log it'}
+            {adding ? (pendingFiles.length > 0 ? `Logging + ${pendingFiles.length} photo${pendingFiles.length > 1 ? 's' : ''}…` : 'Adding…') : 'Log it'}
           </button>
         </div>
       </div>
@@ -258,8 +328,11 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
         </div>
       ) : entries.map(e => {
         const hasAttachment = e.attachment_status && e.attachment_status !== 'none'
+        const photos = e.photos || []
         const isUploading = uploadingFor === e.id
         const isExpanded = expanded === e.id
+        const isSynthesizing = synthesizing === e.id
+        const isEditing = editingEntry?.id === e.id
 
         return (
           <div
@@ -270,7 +343,12 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <span style={{ ...mono, fontSize: 10, background: 'rgba(255,255,255,0.07)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{e.entry_type}</span>
               <span style={{ ...mono, fontSize: 10, color: SEVERITY_COLORS[e.severity] || 'var(--text-muted)', textTransform: 'uppercase' }}>{e.severity}</span>
-              {hasAttachment && (
+              {photos.length > 0 && (
+                <span style={{ ...mono, fontSize: 9, color: '#22c55e', textTransform: 'uppercase' }}>
+                  📎 {photos.length} photo{photos.length !== 1 ? 's' : ''}
+                </span>
+              )}
+              {hasAttachment && photos.length === 0 && (
                 <span style={{ ...mono, fontSize: 9, color: e.attachment_status === 'done' ? '#22c55e' : e.attachment_status === 'failed' ? '#ef4444' : '#f59e0b', textTransform: 'uppercase' }}>
                   📎 {e.attachment_status === 'done' ? 'evidence' : e.attachment_status === 'failed' ? 'attach failed' : '… analyzing'}
                 </span>
@@ -278,25 +356,35 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
               <div style={{ flex: 1 }} />
               <span style={{ ...mono, fontSize: 10, color: 'var(--text-muted)' }}>{e.created_at?.slice(0, 16).replace('T', ' ')}</span>
 
-              {/* Per-entry attach button (for existing entries without attachment) */}
-              {!hasAttachment && !isUploading && (
+              {/* Per-entry add photo button */}
+              {!isUploading ? (
                 <button
                   onClick={ev => { ev.stopPropagation(); perEntryRef.current[e.id]?.click() }}
-                  title="Attach image to this entry"
+                  title="Add photos to this entry"
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: '0 4px', opacity: 0.6 }}
                 >📎</button>
-              )}
-              {isUploading && (
+              ) : (
                 <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--accent)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
               )}
               <input
                 ref={el => { perEntryRef.current[e.id] = el }}
                 type="file"
                 accept="image/*"
+                multiple
                 style={{ display: 'none' }}
-                onChange={ev => { if (ev.target.files?.[0]) { uploadAttachment(e.id, ev.target.files[0]); ev.target.value = '' } }}
+                onChange={async ev => {
+                  if (!ev.target.files?.length) return
+                  const files = Array.from(ev.target.files)
+                  ev.target.value = ''
+                  await uploadPhotosAndSynthesize(e.id, files)
+                }}
               />
 
+              <button
+                onClick={() => setEditingEntry(isEditing ? null : { id: e.id, content: e.content, entry_type: e.entry_type, severity: e.severity })}
+                title={isEditing ? 'Cancel edit' : 'Edit entry'}
+                style={{ background: 'none', border: 'none', color: isEditing ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: '0 4px', opacity: isEditing ? 1 : 0.6 }}
+              >✎</button>
               <button
                 onClick={() => onDelete(e.id)}
                 style={{ background: 'none', border: 'none', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
@@ -304,27 +392,134 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
               >✕</button>
             </div>
 
-            {/* Content */}
-            <div
-              onClick={() => setExpanded(isExpanded ? null : e.id)}
-              style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, cursor: 'pointer',
-                overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 3, WebkitBoxOrient: 'vertical' }}
-            >
-              {e.content}
-            </div>
+            {/* Content / Edit form */}
+            {isEditing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                <textarea
+                  autoFocus
+                  value={editingEntry.content}
+                  onChange={ev => setEditingEntry(ed => ({ ...ed, content: ev.target.value }))}
+                  rows={4}
+                  style={{
+                    width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--accent)',
+                    borderRadius: 8, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 13,
+                    outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.5,
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    value={editingEntry.entry_type}
+                    onChange={ev => setEditingEntry(ed => ({ ...ed, entry_type: ev.target.value }))}
+                    style={{ ...mono, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer' }}
+                  >
+                    {ENTRY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select
+                    value={editingEntry.severity}
+                    onChange={ev => setEditingEntry(ed => ({ ...ed, severity: ev.target.value }))}
+                    style={{ ...mono, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', color: SEVERITY_COLORS[editingEntry.severity] || 'var(--text-secondary)', fontSize: 11, cursor: 'pointer' }}
+                  >
+                    {Object.keys(SEVERITY_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    onClick={() => setEditingEntry(null)}
+                    style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontSize: 11, padding: '4px 12px', cursor: 'pointer' }}
+                  >Cancel</button>
+                  <button
+                    onClick={saveEdit}
+                    disabled={saving || !editingEntry.content.trim()}
+                    style={{ background: 'var(--accent)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 14px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
+                  >{saving ? 'Saving…' : 'Save'}</button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => setExpanded(isExpanded ? null : e.id)}
+                style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, cursor: 'pointer',
+                  overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 3, WebkitBoxOrient: 'vertical' }}
+              >
+                {e.content}
+              </div>
+            )}
 
-            {/* Attachment section — shown when expanded or when attachment exists */}
-            {hasAttachment && (
+            {/* Multi-photo strip */}
+            {photos.length > 0 && (
+              <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
+                {/* Photo row */}
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                  {photos.map((p, idx) => (
+                    <div
+                      key={p.id}
+                      style={{ position: 'relative', flexShrink: 0, width: 80, height: 80, borderRadius: 7, overflow: 'hidden',
+                        border: '1px solid var(--border)', cursor: 'zoom-in', background: 'rgba(255,255,255,0.04)' }}
+                      onClick={() => { setLightboxEntry(e); setLightboxPhotoIdx(idx) }}
+                    >
+                      <AuthedImage
+                        src={p.image_url}
+                        alt={p.original_filename}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                      {/* Status badge */}
+                      <div style={{
+                        position: 'absolute', bottom: 3, left: 3,
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: p.analysis_status === 'done' ? '#22c55e' : p.analysis_status === 'failed' ? '#ef4444' : '#f59e0b',
+                      }} />
+                      {/* Delete overlay */}
+                      <button
+                        onClick={ev => deletePhoto(e.id, p.id, ev)}
+                        title="Remove photo"
+                        style={{
+                          position: 'absolute', top: 2, right: 2,
+                          background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
+                          width: 16, height: 16, color: '#fff', fontSize: 9, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0,
+                        }}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Synthesize / synthesis result */}
+                {isSynthesizing && (
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, ...mono, fontSize: 10, color: 'var(--text-muted)' }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid var(--accent)', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite' }} />
+                    Analyzing {photos.length} photo{photos.length !== 1 ? 's' : ''} together…
+                  </div>
+                )}
+                {e.multi_photo_analysis && (
+                  <div style={{ marginTop: 8, borderTop: '1px dashed rgba(99,102,241,0.2)', paddingTop: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                      <span style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>— Combined Analysis —</span>
+                      {(photos.length > 1 || (photos.length >= 1 && e.attachment_status === 'done')) && (
+                        <button
+                          onClick={() => synthesize(e.id)}
+                          disabled={isSynthesizing}
+                          title="Re-run synthesis"
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 10, padding: 0, marginLeft: 'auto', fontFamily: 'IBM Plex Mono' }}
+                        >{isSynthesizing ? '…' : '↺ refresh'}</button>
+                      )}
+                    </div>
+                    <div style={{
+                      fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6,
+                      overflow: 'hidden', display: '-webkit-box',
+                      WebkitLineClamp: isExpanded ? 'unset' : 5, WebkitBoxOrient: 'vertical',
+                    }}>
+                      {e.multi_photo_analysis}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Legacy single attachment section */}
+            {hasAttachment && photos.length === 0 && (
               <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  {/* Thumbnail */}
                   <div
-                    onClick={() => setLightboxEntry(e)}
-                    style={{
-                      width: 72, height: 72, borderRadius: 6, overflow: 'hidden', flexShrink: 0,
-                      cursor: 'zoom-in', border: '1px solid var(--border)',
-                      background: 'rgba(255,255,255,0.04)',
-                    }}
+                    onClick={() => { setLightboxEntry(e); setLightboxPhotoIdx(-1) }}
+                    style={{ width: 72, height: 72, borderRadius: 6, overflow: 'hidden', flexShrink: 0, cursor: 'zoom-in', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)' }}
                   >
                     {e.attachment_status === 'done' || e.attachment_status === 'failed' ? (
                       <AuthedImage
@@ -338,13 +533,9 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
                       </div>
                     )}
                   </div>
-
-                  {/* Analysis */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                        — Evidence Analysis —
-                      </span>
+                      <span style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>— Evidence Analysis —</span>
                       <button
                         onClick={ev => deleteAttachment(e.id, ev)}
                         title="Remove attachment"
@@ -355,8 +546,7 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
                       <div style={{
                         fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55,
                         overflow: 'hidden', display: '-webkit-box',
-                        WebkitLineClamp: isExpanded ? 'unset' : 4,
-                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: isExpanded ? 'unset' : 4, WebkitBoxOrient: 'vertical',
                       }}>
                         {e.attachment_analysis}
                       </div>
@@ -371,7 +561,7 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
         )
       })}
 
-      {/* Attachment lightbox */}
+      {/* Photo lightbox — supports both multi and legacy */}
       {lightboxEntry && (
         <div
           onClick={() => setLightboxEntry(null)}
@@ -382,25 +572,59 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
             padding: 32, gap: 20,
           }}
         >
-          <div onClick={ev => ev.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, maxWidth: '90vw' }}>
-            <AuthedImage
-              src={`/api/detective/cases/${caseId}/entries/${lightboxEntry.id}/attachment/image`}
-              alt={lightboxEntry.attachment_filename}
-              style={{ maxWidth: '82vw', maxHeight: '55vh', objectFit: 'contain', borderRadius: 12, display: 'block', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}
-            />
-            {lightboxEntry.attachment_analysis && (
-              <div style={{
-                width: '100%', maxWidth: 640,
-                background: 'rgba(12,12,24,0.95)', border: '1px solid var(--border)',
-                borderRadius: 12, padding: '16px 20px',
-              }}>
-                <div style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>
-                  — Evidence Analysis —
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxHeight: '26vh', overflowY: 'auto' }}>
-                  {lightboxEntry.attachment_analysis}
-                </div>
-              </div>
+          <div onClick={ev => ev.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, maxWidth: '90vw', width: '100%' }}>
+            {/* Multi-photo navigation */}
+            {lightboxEntry.photos?.length > 0 ? (() => {
+              const lp = lightboxEntry.photos
+              const cur = lp[lightboxPhotoIdx] || lp[0]
+              return (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', justifyContent: 'center' }}>
+                    {lp.length > 1 && (
+                      <button
+                        onClick={() => setLightboxPhotoIdx(i => Math.max(0, i - 1))}
+                        disabled={lightboxPhotoIdx === 0}
+                        style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 36, height: 36, color: '#fff', fontSize: 18, cursor: lightboxPhotoIdx === 0 ? 'not-allowed' : 'pointer', opacity: lightboxPhotoIdx === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >&#8249;</button>
+                    )}
+                    <AuthedImage
+                      src={cur.image_url}
+                      alt={cur.original_filename}
+                      style={{ maxWidth: '76vw', maxHeight: '52vh', objectFit: 'contain', borderRadius: 12, display: 'block', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}
+                    />
+                    {lp.length > 1 && (
+                      <button
+                        onClick={() => setLightboxPhotoIdx(i => Math.min(lp.length - 1, i + 1))}
+                        disabled={lightboxPhotoIdx === lp.length - 1}
+                        style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 36, height: 36, color: '#fff', fontSize: 18, cursor: lightboxPhotoIdx === lp.length - 1 ? 'not-allowed' : 'pointer', opacity: lightboxPhotoIdx === lp.length - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >&#8250;</button>
+                    )}
+                  </div>
+                  {lp.length > 1 && (
+                    <div style={{ ...mono, fontSize: 9, color: 'var(--text-muted)' }}>{lightboxPhotoIdx + 1} / {lp.length}</div>
+                  )}
+                  {cur.ai_analysis && (
+                    <div style={{ width: '100%', maxWidth: 640, background: 'rgba(12,12,24,0.95)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
+                      <div style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>— Evidence Analysis —</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxHeight: '26vh', overflowY: 'auto' }}>{cur.ai_analysis}</div>
+                    </div>
+                  )}
+                </>
+              )
+            })() : (
+              <>
+                <AuthedImage
+                  src={`/api/detective/cases/${caseId}/entries/${lightboxEntry.id}/attachment/image`}
+                  alt={lightboxEntry.attachment_filename}
+                  style={{ maxWidth: '82vw', maxHeight: '55vh', objectFit: 'contain', borderRadius: 12, display: 'block', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}
+                />
+                {lightboxEntry.attachment_analysis && (
+                  <div style={{ width: '100%', maxWidth: 640, background: 'rgba(12,12,24,0.95)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
+                    <div style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>— Evidence Analysis —</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxHeight: '26vh', overflowY: 'auto' }}>{lightboxEntry.attachment_analysis}</div>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <button
@@ -1266,6 +1490,19 @@ export default function Detective() {
     setEntries(es => es.map(e => e.id === entryId ? { ...e, ...attachData } : e))
   }
 
+  const updateEntryPhotos = (entryId, photoData, action) => {
+    setEntries(es => es.map(e => {
+      if (e.id !== entryId) return e
+      if (action === 'add') {
+        return { ...e, photos: [...(e.photos || []), photoData] }
+      }
+      if (action === 'delete') {
+        return { ...e, photos: (e.photos || []).filter(p => p.id !== photoData.id) }
+      }
+      return e
+    }))
+  }
+
   const deleteEntry = async (entryId) => {
     try {
       await api.delete(`/api/detective/cases/${selectedCase.id}/entries/${entryId}`)
@@ -1500,6 +1737,7 @@ export default function Detective() {
                     onAdd={addEntry}
                     onDelete={deleteEntry}
                     onAttachmentUpdate={updateEntryAttachment}
+                    onPhotosUpdate={updateEntryPhotos}
                     loading={loadingEntries}
                   />
                 )}
