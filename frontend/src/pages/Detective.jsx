@@ -605,8 +605,14 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
                   )}
                   {cur.ai_analysis && (
                     <div style={{ width: '100%', maxWidth: 640, background: 'rgba(12,12,24,0.95)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
-                      <div style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>— Evidence Analysis —</div>
-                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxHeight: '26vh', overflowY: 'auto' }}>{cur.ai_analysis}</div>
+                      <div style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>— Photo {lightboxPhotoIdx + 1} Analysis —</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxHeight: '22vh', overflowY: 'auto' }}>{cur.ai_analysis}</div>
+                    </div>
+                  )}
+                  {lightboxEntry.multi_photo_analysis && (
+                    <div style={{ width: '100%', maxWidth: 640, background: 'rgba(12,12,24,0.95)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 12, padding: '16px 20px' }}>
+                      <div style={{ ...mono, fontSize: 9, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>— Combined Analysis —</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxHeight: '28vh', overflowY: 'auto' }}>{lightboxEntry.multi_photo_analysis}</div>
                     </div>
                   )}
                 </>

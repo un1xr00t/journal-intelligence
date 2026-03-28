@@ -442,7 +442,50 @@ def register_detective_routes(app, require_any_user, require_owner):
         return msg.content[0].text
 
 
-    def _call_vision_multi(user_id: int, images: list, entry_content: str) -> str:
+    def _extract_participants(note, investigator, case_subject, subject_pronouns="she/her"):
+        import re
+        lines = [
+            f"INVESTIGATOR (logged this entry, NOT in photos): {investigator}",
+            f"CASE SUBJECT (person being investigated): {case_subject}",
+        ]
+        me_and = re.search(r"between me and ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)", note or "", re.IGNORECASE)
+        and_me = re.search(r"between ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?) and me", note or "", re.IGNORECASE)
+        pronoun_and = re.search(r"between (?:her|him|them|she|he|they) and ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)", note or "", re.IGNORECASE)
+        and_pronoun = re.search(r"between ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?) and (?:her|him|them|she|he|they)", note or "", re.IGNORECASE)
+        if me_and or and_me:
+            other = (me_and or and_me).group(1).strip()
+            lines.append(f"CONVERSATION: between {investigator} and {other}. Attribute messages to '{investigator}' or '{other}' by name.")
+        elif pronoun_and or and_pronoun:
+            other = (pronoun_and or and_pronoun).group(1).strip()
+            lines.append(f"CONVERSATION: between {case_subject} and {other}. Attribute messages to '{case_subject}' or '{other}' by name.")
+        else:
+            # Handle relational terms: "her mom", "his dad", "her sister", etc.
+            relational = re.search(
+                r"between\s+(?:her|him|them|she|he|they)\s+and\s+((?:her|his|their|the)\s+\w+|[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)",
+                note or "", re.IGNORECASE
+            )
+            relational2 = re.search(
+                r"between\s+((?:her|his|their|the)\s+\w+|[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+and\s+(?:her|him|them|she|he|they)",
+                note or "", re.IGNORECASE
+            )
+            if relational or relational2:
+                other = (relational or relational2).group(1).strip()
+                lines.append(f"CONVERSATION: between {case_subject} and {other}. Attribute messages to '{case_subject}' or '{other}' by name.")
+            else:
+                found = re.findall(r"\b([A-Z][a-z]{2,})\b", note or "")
+                skip = {"The","This","That","These","Those","When","Where","What","Also","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"}
+                names = [n for n in found if n not in skip and n.lower() != investigator.lower()]
+                if names:
+                    unique = list(dict.fromkeys(names))
+                    lines.append(f"NAMED PEOPLE IN NOTE: {', '.join(unique[:4])}. Use visible names from screenshots or these. '{case_subject}' is the primary subject.")
+                else:
+                    lines.append(f"Use visible names from screenshots. Otherwise refer to '{case_subject}' as the primary subject and 'the other party' for anyone else.")
+        return "\n".join(lines)
+
+    def _call_vision_multi(user_id: int, images: list, entry_content: str,
+                           investigator_name: str = "the investigator",
+                           case_subject_name: str = "the subject",
+                           subject_pronouns: str = "she/her") -> str:
         """Send multiple images to vision API and return a combined evidence synthesis."""
         from src.api.ai_client import get_anthropic_key, get_model
         import anthropic
@@ -457,6 +500,12 @@ def register_detective_routes(app, require_any_user, require_owner):
         model = get_model()
         client = anthropic.Anthropic(api_key=key)
 
+        _investigator_name = investigator_name
+        _case_subject_name = case_subject_name
+
+        _investigator_name = investigator_name
+        _case_subject_name = case_subject_name
+
         content_blocks = []
         for i, (b64, mime) in enumerate(images, 1):
             safe_mime = _mime_map.get((mime or "").lower(), "image/jpeg")
@@ -466,27 +515,37 @@ def register_detective_routes(app, require_any_user, require_owner):
             })
             content_blocks.append({"type": "text", "text": f"[Photo {i} of {len(images)}]"})
 
+        participant_map = _extract_participants(
+            entry_content, _investigator_name, _case_subject_name, subject_pronouns
+        )
+
         synthesis_prompt = (
-            "CRITICAL RULES: Write in plain prose — no markdown, no bold, no bullets, no headers. "
-            "The context block above identifies the INVESTIGATOR by name. "
-            "That person wrote the notes and took the photos — they are NEVER in the photos, NEVER sending "
-            "the messages shown, NEVER a participant in anything depicted. "
-            "If you see their name in the case context, that is because they wrote about themselves — "
-            "do NOT attribute any message, action, or role in the photos to them. "
-            "The people IN the photos are the subjects being investigated.\n\n"
+            f"PARTICIPANT MAP\n{participant_map}\n\n"
             f"CASE CONTEXT + ENTRY NOTE:\n{entry_content[:2000]}\n\n"
-            f"Analyze these {len(images)} photo(s) as forensic evidence. In plain prose: "
-            "transcribe visible text or messages verbatim, identify who is talking to who "
-            "(using names visible in the screenshots — NOT the investigator's name), "
-            "note the platform and timestamps, then explain how the visual evidence "
-            "supports the investigator's note. Call out the most important detail. No fluff."
+            f"Analyze these {len(images)} photo(s) as forensic evidence. "
+            "Prioritize: (1) device/platform details visible in the status bar or UI — carrier, WiFi-only, SOS only, timestamp, battery; "
+            "(2) verbatim transcription of the most significant messages; "
+            "(3) behavioral observations — who initiated, emotional tone, admissions, contradictions; "
+            "(4) the single most forensically significant detail. "
+            "Use names from the PARTICIPANT MAP — never generic labels. "
+            "Third person only. Plain prose. No markdown. 3-5 sentences max."
         )
         content_blocks.append({"type": "text", "text": synthesis_prompt})
+
+        _FORENSIC_SYSTEM = (
+            "You are a forensic evidence analyst producing written investigation reports. "
+            "Third person only — never address the investigator directly. "
+            "Lead with observable device/platform details (status bar, carrier, WiFi-only, SOS, timestamps). "
+            "Transcribe key messages verbatim. Call out behavioral signals and admissions. "
+            "End every report with the single most significant forensic finding. "
+            "Use real names from context — never 'blue bubble', 'gray bubble', 'one party', 'the recipient'. "
+            "No markdown, no bullets, no headers. Hard limit: 3-5 sentences."
+        )
 
         msg = client.messages.create(
             model=model,
             max_tokens=1200,
-            system=_PARTNER_SYSTEM,
+            system=_FORENSIC_SYSTEM,
             messages=[{"role": "user", "content": content_blocks}]
         )
         try:
@@ -1085,7 +1144,17 @@ def register_detective_routes(app, require_any_user, require_owner):
             investigator_row = conn.execute(
                 "SELECT username FROM users WHERE id = ?", (user["id"],)
             ).fetchone()
-            investigator_name = investigator_row["username"] if investigator_row else "the investigator"
+            # Prefer real name from detective settings over username
+            settings_row = conn.execute(
+                "SELECT investigator_name, subject_pronouns FROM detective_settings WHERE user_id = ?", (user["id"],)
+            ).fetchone()
+            if settings_row and settings_row["investigator_name"]:
+                investigator_name = settings_row["investigator_name"]
+            elif investigator_row:
+                investigator_name = investigator_row["username"]
+            else:
+                investigator_name = "the investigator"
+            subject_pronouns = (settings_row["subject_pronouns"] or "she/her") if settings_row else "she/her"
 
             full_entry_context = (
                 f"INVESTIGATOR IDENTITY: The person who wrote these notes and uploaded these photos is "
@@ -1096,7 +1165,10 @@ def register_detective_routes(app, require_any_user, require_owner):
             )
 
             synthesis = _call_vision_multi(
-                user["id"], images, full_entry_context
+                user["id"], images, full_entry_context,
+                investigator_name=investigator_name,
+                case_subject_name=case_row["title"] if case_row else "the subject",
+                subject_pronouns=subject_pronouns,
             )
             conn.execute(
                 "UPDATE detective_entries SET multi_photo_analysis=? WHERE id=?",
@@ -1667,6 +1739,144 @@ def register_detective_routes(app, require_any_user, require_owner):
                 (case_id, user["id"])
             ).fetchall()
             return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+
+    # ── Detective Settings ────────────────────────────────────────────────────
+
+    @app.get("/api/detective/settings")
+    async def get_detective_settings(user: dict = Depends(_require_detective)):
+        conn = _db()
+        try:
+            row = conn.execute(
+                "SELECT investigator_name, investigator_pronouns, background_context "
+                "FROM detective_settings WHERE user_id = ?",
+                (user["id"],)
+            ).fetchone()
+            if not row:
+                return {"investigator_name": "", "investigator_pronouns": "", "background_context": ""}
+            return dict(row)
+        finally:
+            conn.close()
+
+    @app.post("/api/detective/settings")
+    async def save_detective_settings(body: dict, user: dict = Depends(_require_detective)):
+        conn = _db()
+        try:
+            conn.execute(
+                """INSERT INTO detective_settings (user_id, investigator_name, investigator_pronouns, background_context, updated_at)
+                   VALUES (?, ?, ?, ?, datetime('now'))
+                   ON CONFLICT(user_id) DO UPDATE SET
+                     investigator_name = excluded.investigator_name,
+                     investigator_pronouns = excluded.investigator_pronouns,
+                     background_context = excluded.background_context,
+                     updated_at = excluded.updated_at""",
+                (
+                    user["id"],
+                    (body.get("investigator_name") or "").strip(),
+                    (body.get("investigator_pronouns") or "").strip(),
+                    (body.get("background_context") or "").strip(),
+                )
+            )
+            conn.commit()
+            return {"ok": True}
+        finally:
+            conn.close()
+
+
+    @app.get("/api/detective/cases/{case_id}/entries/{entry_id}/photos/debug-context")
+    async def debug_synthesis_context(
+        case_id: int, entry_id: int,
+        user: dict = Depends(_require_detective)
+    ):
+        """Return the exact context string that would be sent to the AI for photo synthesis.
+        No AI call is made. Use this to diagnose participant resolution issues."""
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            entry = conn.execute(
+                "SELECT id, content FROM detective_entries "
+                "WHERE id = ? AND case_id = ? AND user_id = ?",
+                (entry_id, case_id, user["id"])
+            ).fetchone()
+            if not entry:
+                raise HTTPException(status_code=404, detail="Entry not found.")
+
+            case_context = ""
+            case_row = conn.execute(
+                "SELECT title, description FROM detective_cases WHERE id = ? AND user_id = ?",
+                (case_id, user["id"])
+            ).fetchone()
+            if case_row:
+                case_context += (
+                    f"CASE SUBJECT: The primary subject of this investigation is '{case_row['title']}'. "
+                    f"When the investigator writes 'her', 'she', 'he', 'him', 'they', or 'this person', "
+                    f"they are referring to '{case_row['title']}' unless another name is clearly indicated.\n"
+                )
+                if case_row["description"]:
+                    case_context += f"Case description: {case_row['description']}\n"
+                case_context += "\n"
+
+            intel = _get_intelligence(case_id, user["id"], conn)
+            if intel and intel["summary"]:
+                case_context += f"CASE INTELLIGENCE:\n{intel['summary']}\n\n"
+
+            recent = conn.execute(
+                "SELECT content, created_at FROM detective_entries "
+                "WHERE case_id = ? AND user_id = ? AND id != ? "
+                "ORDER BY created_at DESC LIMIT 10",
+                (case_id, user["id"], entry_id)
+            ).fetchall()
+            if recent:
+                recent_text = "\n".join(
+                    f"[{r['created_at'][:10]}] {(r['content'] or '')[:200]}"
+                    for r in recent
+                )
+                case_context += f"RECENT CASE LOG (for context on who people are):\n{recent_text}\n\n"
+
+            investigator_row = conn.execute(
+                "SELECT username FROM users WHERE id = ?", (user["id"],)
+            ).fetchone()
+            settings_row = conn.execute(
+                "SELECT investigator_name, subject_pronouns FROM detective_settings WHERE user_id = ?", (user["id"],)
+            ).fetchone()
+            if settings_row and settings_row["investigator_name"]:
+                investigator_name = settings_row["investigator_name"]
+            elif investigator_row:
+                investigator_name = investigator_row["username"]
+            else:
+                investigator_name = "the investigator"
+
+            case_subject_name = case_row["title"] if case_row else "the subject"
+
+            full_entry_context = (
+                f"INVESTIGATOR IDENTITY: The person who wrote these notes and uploaded these photos is "
+                f"'{investigator_name}'. They are NEVER a participant in the photos unless the note "
+                f"explicitly says 'between me and...'.\n\n"
+                f"{case_context}"
+                f"THIS ENTRY'S NOTE:\n{entry['content'] or ''}"
+            )
+
+            participant_map = _extract_participants(
+                entry["content"] or "", investigator_name, case_subject_name, subject_pronouns
+            )
+
+            photo_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM detective_entry_photos "
+                "WHERE entry_id = ? AND user_id = ?",
+                (entry_id, user["id"])
+            ).fetchone()["cnt"]
+
+            return {
+                "investigator_name": investigator_name,
+                "case_subject_name": case_subject_name,
+                "entry_note": entry["content"],
+                "participant_map": participant_map,
+                "full_entry_context": full_entry_context,
+                "photo_count": photo_count,
+                "context_length": len(full_entry_context),
+            }
         finally:
             conn.close()
 

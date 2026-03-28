@@ -991,6 +991,141 @@ function ResearchPanel({ caseId, refreshKey }) {
   )
 }
 
+
+// ── Detective Settings Panel ──────────────────────────────────────────────────
+
+function DetectiveSettings() {
+  const [form, setForm] = useState({
+    investigator_name: '',
+    investigator_pronouns: '',
+    background_context: '',
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
+
+  useEffect(() => {
+    api.get('/api/detective/settings')
+      .then(r => setForm(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      await api.post('/api/detective/settings', form)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Save failed.')
+    }
+    setSaving(false)
+  }
+
+  const field = {
+    width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)',
+    border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-primary)',
+    fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box',
+    outline: 'none', transition: 'border-color 0.15s',
+  }
+  const label = {
+    fontSize: 11, fontFamily: 'IBM Plex Mono', textTransform: 'uppercase',
+    letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, display: 'block',
+  }
+
+  if (loading) return (
+    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+      Loading settings…
+    </div>
+  )
+
+  return (
+    <div style={{ padding: 24, maxWidth: 560 }}>
+      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', marginBottom: 6 }}>
+        ⚙️ Detective Settings
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.7 }}>
+        These settings are injected into all AI photo analyses and case partner conversations so the AI knows who's who.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* Investigator real name */}
+        <div>
+          <label style={label}>Your Real Name</label>
+          <input
+            type="text"
+            value={form.investigator_name}
+            onChange={e => setForm(f => ({ ...f, investigator_name: e.target.value }))}
+            placeholder="e.g. Alex"
+            style={field}
+            onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, lineHeight: 1.6 }}>
+            Used in photo analysis so the AI knows you are never a participant in screenshots unless explicitly mentioned. Example: "Alex".
+          </div>
+        </div>
+
+        {/* Pronouns */}
+        <div>
+          <label style={label}>Your Pronouns (optional)</label>
+          <input
+            type="text"
+            value={form.investigator_pronouns}
+            onChange={e => setForm(f => ({ ...f, investigator_pronouns: e.target.value }))}
+            placeholder="e.g. he/him"
+            style={{ ...field, maxWidth: 200 }}
+            onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+          />
+        </div>
+
+        {/* Background context */}
+        <div>
+          <label style={label}>Background Context (optional)</label>
+          <textarea
+            value={form.background_context}
+            onChange={e => setForm(f => ({ ...f, background_context: e.target.value }))}
+            placeholder="e.g. I am documenting an abusive relationship. The subject has a history of manipulation and gaslighting."
+            style={{ ...field, minHeight: 80, resize: 'vertical', lineHeight: 1.6 }}
+            rows={3}
+            onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, lineHeight: 1.6 }}>
+            Injected into photo analysis and AI chat to provide broader context. Keep it concise.
+          </div>
+        </div>
+
+        <button
+          onClick={save}
+          disabled={saving}
+          style={{
+            padding: '10px 24px',
+            background: saving ? 'rgba(99,102,241,0.3)' : saved ? 'rgba(16,185,129,0.3)' : 'var(--accent)',
+            border: saved ? '1px solid rgba(16,185,129,0.5)' : 'none',
+            borderRadius: 8, color: '#fff',
+            fontSize: 13, fontWeight: 700, fontFamily: 'Syne',
+            cursor: saving ? 'default' : 'pointer',
+            transition: 'all 0.2s', alignSelf: 'flex-start',
+          }}
+        >
+          {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Settings'}
+        </button>
+
+      </div>
+
+      <div style={{ marginTop: 36, padding: '16px 18px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 10, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: 'var(--text-primary)', marginBottom: 8 }}>How this works</div>
+        When you attach photos to a log entry and run Combined Analysis, the AI is told exactly who you are, who the case subject is, and how to map iMessage bubbles to real names. Instead of "the gray bubble sender," it will say "[Subject] sent 4 texts between 9:23–9:25 AM accusing [your name] of ignoring her calls" — using the real names you've configured.
+      </div>
+    </div>
+  )
+}
+
 // ── Main DetectiveFull Page ───────────────────────────────────────────────────
 
 export default function DetectiveFull() {
@@ -1141,12 +1276,13 @@ export default function DetectiveFull() {
     { key: 'wires',        label: '📡 Wire History' },
     { key: 'export',       label: '📄 Export Report' },
     { key: 'research',     label: '🔍 Research'       },
+    { key: 'settings',     label: '⚙️ Settings'      },
   ]
 
   // Column widths based on open/collapsed state
   const leftW   = casesOpen   ? PANEL_W  : ICON_W
   const rightW  = partnerOpen ? PARTNER_W : ICON_W
-  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires' && activeTab !== 'export' && activeTab !== 'research'
+  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires' && activeTab !== 'export' && activeTab !== 'research' && activeTab !== 'settings'
   const effectiveRightW = showPartner ? rightW : 0
 
   return (
@@ -1378,6 +1514,9 @@ export default function DetectiveFull() {
                 )}
                 {activeTab === 'research' && (
                   <ResearchPanel caseId={selectedCase.id} refreshKey={researchKey} />
+                )}
+                {activeTab === 'settings' && (
+                  <DetectiveSettings />
                 )}
               </>
             )}
