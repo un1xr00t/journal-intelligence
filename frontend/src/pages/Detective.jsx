@@ -128,15 +128,18 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
 
   const submit = async () => {
     if (!content.trim()) return
+    // Capture pending files immediately so async work uses a stable snapshot
+    const filesToUpload = [...pendingFiles]
     setAdding(true)
     try {
       const entry = await onAdd({ content: content.trim(), entry_type: type, severity })
-      if (pendingFiles.length > 0 && entry?.id) {
-        await uploadPhotosAndSynthesize(entry.id, pendingFiles)
-        setPendingFiles([])
+      if (filesToUpload.length > 0 && entry?.id) {
+        await uploadPhotosAndSynthesize(entry.id, filesToUpload)
       }
       setContent('')
     } finally {
+      // Always clear pending chips whether upload succeeded, failed, or was skipped
+      setPendingFiles([])
       setAdding(false)
     }
   }
@@ -170,10 +173,13 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
 
   const deletePhoto = async (entryId, photoId, e) => {
     e.stopPropagation()
+    e.preventDefault()
     try {
       await api.delete(`/api/detective/cases/${caseId}/entries/${entryId}/photos/${photoId}`)
       if (onPhotosUpdate) onPhotosUpdate(entryId, { id: photoId }, 'delete')
-    } catch {}
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete photo. Try refreshing.')
+    }
   }
 
   const synthesize = async (entryId) => {
@@ -471,7 +477,7 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
                         onClick={ev => deletePhoto(e.id, p.id, ev)}
                         title="Remove photo"
                         style={{
-                          position: 'absolute', top: 2, right: 2,
+                          position: 'absolute', top: 2, right: 2, zIndex: 2,
                           background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
                           width: 16, height: 16, color: '#fff', fontSize: 9, cursor: 'pointer',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0,
@@ -738,7 +744,7 @@ export function GalleryView({ caseId, uploads, onDelete }) {
                 </span>
                 {u.source !== 'entry' && (
                 <button
-                  onClick={() => onDelete(u.id)}
+                  onClick={() => onDelete(u)}
                   style={{ background: 'none', border: 'none', color: 'rgba(239,68,68,0.45)', cursor: 'pointer', fontSize: 13, flexShrink: 0, padding: 0, lineHeight: 1 }}
                   title="Delete photo"
                 >✕</button>
@@ -896,7 +902,7 @@ export function PhotoEvidence({ caseId, uploads, onUpload, onDelete, uploading }
                   </span>
                   {u.source !== 'entry' && (
                   <button
-                    onClick={() => onDelete(u.id)}
+                    onClick={() => onDelete(u)}
                     style={{ background: 'none', border: 'none', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: 12, flexShrink: 0, padding: 0 }}
                   >✕</button>
                   )}
@@ -1531,11 +1537,20 @@ export default function Detective() {
     setUploading(false)
   }
 
-  const deleteUpload = async (uploadId) => {
+  const deleteUpload = async (upload) => {
+    const item = typeof upload === 'object' ? upload : { id: upload, source: 'upload' }
     try {
-      await api.delete(`/api/detective/cases/${selectedCase.id}/uploads/${uploadId}`)
-      setUploads(u => u.filter(x => x.id !== uploadId))
-    } catch { }
+      if (item.source === 'multi_entry') {
+        const photoId = String(item.id).replace('mphoto_', '')
+        // Use the direct endpoint — entry may be deleted (orphaned photo), so don't rely on entry_id
+        await api.delete(`/api/detective/cases/${selectedCase.id}/entry-photos/${photoId}`)
+      } else {
+        await api.delete(`/api/detective/cases/${selectedCase.id}/uploads/${item.id}`)
+      }
+      setUploads(u => u.filter(x => x.id !== item.id))
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete photo. Try refreshing.')
+    }
   }
 
   const dropWire = async () => {

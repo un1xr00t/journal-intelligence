@@ -1026,6 +1026,35 @@ def register_detective_routes(app, require_any_user, require_owner):
         finally:
             conn.close()
 
+    @app.delete("/api/detective/cases/{case_id}/entry-photos/{photo_id}")
+    async def delete_entry_photo_direct(
+        case_id: int, photo_id: int,
+        user: dict = Depends(_require_detective)
+    ):
+        """Delete an entry photo by photo_id alone — handles orphaned photos."""
+        conn = _db()
+        try:
+            _get_case(case_id, user["id"], conn)
+            row = conn.execute(
+                "SELECT file_path FROM detective_entry_photos "
+                "WHERE id = ? AND case_id = ? AND user_id = ?",
+                (photo_id, case_id, user["id"])
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Photo not found.")
+            if row["file_path"] and os.path.exists(row["file_path"]):
+                try:
+                    os.remove(row["file_path"])
+                except Exception:
+                    pass
+            conn.execute(
+                "DELETE FROM detective_entry_photos WHERE id = ?", (photo_id,)
+            )
+            conn.commit()
+            return {"ok": True}
+        finally:
+            conn.close()
+
     @app.delete("/api/detective/cases/{case_id}/entries/{entry_id}/photos/{photo_id}")
     async def delete_entry_photo(
         case_id: int, entry_id: int, photo_id: int,
@@ -1251,6 +1280,7 @@ def register_detective_routes(app, require_any_user, require_owner):
                     ),
                     'source': 'multi_entry',
                     'source_note': (r['content'] or '')[:100],
+                    'entry_id': r['entry_id'],
                 })
 
             result.sort(key=lambda x: x['created_at'] or '', reverse=True)
