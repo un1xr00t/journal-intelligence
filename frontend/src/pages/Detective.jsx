@@ -121,6 +121,7 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
   const [lightboxEntry, setLightboxEntry] = useState(null)
   const [lightboxPhotoIdx, setLightboxPhotoIdx] = useState(0)
   const [synthesizing, setSynthesizing] = useState(null)
+  const [expandedStrips, setExpandedStrips] = useState({})
   const [editingEntry, setEditingEntry] = useState(null) // { id, content, entry_type, severity }
   const [saving, setSaving] = useState(false)
   const attachRef = useRef(null)
@@ -452,40 +453,80 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
             {/* Multi-photo strip */}
             {photos.length > 0 && (
               <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
-                {/* Photo row */}
-                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                  {photos.map((p, idx) => (
-                    <div
-                      key={p.id}
-                      style={{ position: 'relative', flexShrink: 0, width: 80, height: 80, borderRadius: 7, overflow: 'hidden',
-                        border: '1px solid var(--border)', cursor: 'zoom-in', background: 'rgba(255,255,255,0.04)' }}
-                      onClick={() => { setLightboxEntry(e); setLightboxPhotoIdx(idx) }}
-                    >
-                      <AuthedImage
-                        src={p.image_url}
-                        alt={p.original_filename}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
-                      {/* Status badge */}
-                      <div style={{
-                        position: 'absolute', bottom: 3, left: 3,
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: p.analysis_status === 'done' ? '#22c55e' : p.analysis_status === 'failed' ? '#ef4444' : '#f59e0b',
-                      }} />
-                      {/* Delete overlay */}
-                      <button
-                        onClick={ev => deletePhoto(e.id, p.id, ev)}
-                        title="Remove photo"
-                        style={{
-                          position: 'absolute', top: 2, right: 2, zIndex: 2,
-                          background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
-                          width: 16, height: 16, color: '#fff', fontSize: 9, cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0,
-                        }}
-                      >✕</button>
+                {/* Photo row — capped at 5 with expand overflow */}
+                {(() => {
+                  const STRIP_LIMIT = 5
+                  const isStripExpanded = expandedStrips[e.id]
+                  const visiblePhotos = isStripExpanded ? photos : photos.slice(0, STRIP_LIMIT)
+                  const hiddenCount = photos.length - STRIP_LIMIT
+                  return (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 4, alignItems: 'center' }}>
+                      {visiblePhotos.map((p, idx) => (
+                        <div
+                          key={p.id}
+                          style={{ position: 'relative', flexShrink: 0, width: 80, height: 80, borderRadius: 7, overflow: 'hidden',
+                            border: '1px solid var(--border)', cursor: 'zoom-in', background: 'rgba(255,255,255,0.04)' }}
+                          onClick={() => { setLightboxEntry(e); setLightboxPhotoIdx(isStripExpanded ? idx : idx) }}
+                        >
+                          <AuthedImage
+                            src={p.image_url}
+                            alt={p.original_filename}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          />
+                          {/* Status badge */}
+                          <div style={{
+                            position: 'absolute', bottom: 3, left: 3,
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: p.analysis_status === 'done' ? '#22c55e' : p.analysis_status === 'failed' ? '#ef4444' : '#f59e0b',
+                          }} />
+                          {/* Delete overlay */}
+                          <button
+                            onClick={ev => deletePhoto(e.id, p.id, ev)}
+                            title="Remove photo"
+                            style={{
+                              position: 'absolute', top: 2, right: 2, zIndex: 2,
+                              background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
+                              width: 16, height: 16, color: '#fff', fontSize: 9, cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0,
+                            }}
+                          >✕</button>
+                        </div>
+                      ))}
+                      {/* Overflow pill */}
+                      {!isStripExpanded && hiddenCount > 0 && (
+                        <button
+                          onClick={ev => { ev.stopPropagation(); setExpandedStrips(s => ({ ...s, [e.id]: true })) }}
+                          style={{
+                            flexShrink: 0, width: 80, height: 80, borderRadius: 7,
+                            background: 'rgba(99,102,241,0.12)', border: '1px dashed rgba(99,102,241,0.4)',
+                            color: 'var(--accent)', fontFamily: 'IBM Plex Mono', fontSize: 11, fontWeight: 700,
+                            cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            justifyContent: 'center', gap: 3, lineHeight: 1.2,
+                          }}
+                        >
+                          <span style={{ fontSize: 16 }}>+{hiddenCount}</span>
+                          <span style={{ fontSize: 9, opacity: 0.8 }}>more</span>
+                        </button>
+                      )}
+                      {/* Collapse pill when expanded */}
+                      {isStripExpanded && photos.length > STRIP_LIMIT && (
+                        <button
+                          onClick={ev => { ev.stopPropagation(); setExpandedStrips(s => ({ ...s, [e.id]: false })) }}
+                          style={{
+                            flexShrink: 0, width: 80, height: 80, borderRadius: 7,
+                            background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.12)',
+                            color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono', fontSize: 9,
+                            cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            justifyContent: 'center', gap: 3, lineHeight: 1.2,
+                          }}
+                        >
+                          <span style={{ fontSize: 14 }}>▲</span>
+                          <span>collapse</span>
+                        </button>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  )
+                })()}
 
                 {/* Synthesize / synthesis result */}
                 {isSynthesizing && (
@@ -683,9 +724,12 @@ export function AuthedImage({ src, alt, style }) {
   return <img src={blobUrl} alt={alt} style={style} />
 }
 
+const PHOTOS_PER_PAGE = 12
+
 export function GalleryView({ caseId, uploads, onDelete }) {
   const [lightbox, setLightbox] = useState(null)
   const [expandedAnalysis, setExpandedAnalysis] = useState(null)
+  const [page, setPage] = useState(1)
 
   if (uploads.length === 0) {
     return (
@@ -696,14 +740,17 @@ export function GalleryView({ caseId, uploads, onDelete }) {
     )
   }
 
+  const totalPages = Math.ceil(uploads.length / PHOTOS_PER_PAGE)
+  const pageUploads = uploads.slice((page - 1) * PHOTOS_PER_PAGE, page * PHOTOS_PER_PAGE)
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ ...mono, color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-        {uploads.length} photo{uploads.length !== 1 ? 's' : ''} · click to expand
+        {uploads.length} photo{uploads.length !== 1 ? 's' : ''} · page {page} of {totalPages} · click to expand
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-        {uploads.map(u => (
+        {pageUploads.map(u => (
           <div key={u.id} style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'transform 0.15s, box-shadow 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)' }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
@@ -758,6 +805,9 @@ export function GalleryView({ caseId, uploads, onDelete }) {
               )}
               {u.ai_analysis && (
                 <div>
+                  <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>
+                    — {u.analysis_label || 'AI Analysis'} —
+                  </div>
                   <div style={{
                     fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
                     overflow: 'hidden', display: '-webkit-box',
@@ -786,6 +836,79 @@ export function GalleryView({ caseId, uploads, onDelete }) {
         ))}
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: 8 }}>
+          <button
+            onClick={() => setPage(1)}
+            disabled={page === 1}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              color: page === 1 ? 'var(--text-muted)' : 'var(--text-secondary)',
+              fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 8px', cursor: page === 1 ? 'default' : 'pointer',
+              opacity: page === 1 ? 0.4 : 1,
+            }}
+          >«</button>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              color: page === 1 ? 'var(--text-muted)' : 'var(--text-secondary)',
+              fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 10px', cursor: page === 1 ? 'default' : 'pointer',
+              opacity: page === 1 ? 0.4 : 1,
+            }}
+          >‹</button>
+
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => {
+            const isNear = Math.abs(n - page) <= 2 || n === 1 || n === totalPages
+            if (!isNear) {
+              if (n === page - 3 || n === page + 3) {
+                return <span key={n} style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', padding: '0 2px' }}>…</span>
+              }
+              return null
+            }
+            return (
+              <button
+                key={n}
+                onClick={() => setPage(n)}
+                style={{
+                  background: n === page ? 'rgba(99,102,241,0.2)' : 'none',
+                  border: n === page ? '1px solid rgba(99,102,241,0.5)' : '1px solid var(--border)',
+                  borderRadius: 6,
+                  color: n === page ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 10px',
+                  cursor: n === page ? 'default' : 'pointer',
+                  fontWeight: n === page ? 700 : 400,
+                  minWidth: 32,
+                }}
+              >{n}</button>
+            )
+          })}
+
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              color: page === totalPages ? 'var(--text-muted)' : 'var(--text-secondary)',
+              fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 10px', cursor: page === totalPages ? 'default' : 'pointer',
+              opacity: page === totalPages ? 0.4 : 1,
+            }}
+          >›</button>
+          <button
+            onClick={() => setPage(totalPages)}
+            disabled={page === totalPages}
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              color: page === totalPages ? 'var(--text-muted)' : 'var(--text-secondary)',
+              fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 8px', cursor: page === totalPages ? 'default' : 'pointer',
+              opacity: page === totalPages ? 0.4 : 1,
+            }}
+          >»</button>
+        </div>
+      )}
+
       {/* Lightbox */}
       {lightbox && (
         <div
@@ -810,7 +933,7 @@ export function GalleryView({ caseId, uploads, onDelete }) {
                 borderRadius: 12, padding: '16px 20px',
               }}>
                 <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10 }}>
-                  — AI Analysis —
+                  — {lightbox.analysis_label || 'AI Analysis'} —
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxHeight: '24vh', overflowY: 'auto' }}>
                   {lightbox.ai_analysis}
@@ -838,6 +961,10 @@ export function PhotoEvidence({ caseId, uploads, onUpload, onDelete, uploading }
   const fileRef = useRef(null)
   const [lightbox, setLightbox] = useState(null)
   const [expandedAnalysis, setExpandedAnalysis] = useState(null)
+  const [page, setPage] = useState(1)
+
+  const totalPages = Math.ceil(uploads.length / PHOTOS_PER_PAGE)
+  const pageUploads = uploads.slice((page - 1) * PHOTOS_PER_PAGE, page * PHOTOS_PER_PAGE)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -873,8 +1000,12 @@ export function PhotoEvidence({ caseId, uploads, onUpload, onDelete, uploading }
 
       {/* Gallery grid */}
       {uploads.length > 0 && (
+        <>
+        <div style={{ ...mono, color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          {uploads.length} photo{uploads.length !== 1 ? 's' : ''}{totalPages > 1 ? ` · page ${page} of ${totalPages}` : ''}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-          {uploads.map(u => (
+          {pageUploads.map(u => (
             <div key={u.id} style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               {/* Image tile */}
               <div style={{ position: 'relative', cursor: 'zoom-in', height: 160 }} onClick={() => setLightbox(u)}>
@@ -941,6 +1072,80 @@ export function PhotoEvidence({ caseId, uploads, onUpload, onDelete, uploading }
             </div>
           ))}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: 4 }}>
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+                color: page === 1 ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 8px', cursor: page === 1 ? 'default' : 'pointer',
+                opacity: page === 1 ? 0.4 : 1,
+              }}
+            >«</button>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+                color: page === 1 ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 10px', cursor: page === 1 ? 'default' : 'pointer',
+                opacity: page === 1 ? 0.4 : 1,
+              }}
+            >‹</button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => {
+              const isNear = Math.abs(n - page) <= 2 || n === 1 || n === totalPages
+              if (!isNear) {
+                if (n === page - 3 || n === page + 3) {
+                  return <span key={n} style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', padding: '0 2px' }}>…</span>
+                }
+                return null
+              }
+              return (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  style={{
+                    background: n === page ? 'rgba(99,102,241,0.2)' : 'none',
+                    border: n === page ? '1px solid rgba(99,102,241,0.5)' : '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: n === page ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 10px',
+                    cursor: n === page ? 'default' : 'pointer',
+                    fontWeight: n === page ? 700 : 400,
+                    minWidth: 32,
+                  }}
+                >{n}</button>
+              )
+            })}
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+                color: page === totalPages ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 10px', cursor: page === totalPages ? 'default' : 'pointer',
+                opacity: page === totalPages ? 0.4 : 1,
+              }}
+            >›</button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+                color: page === totalPages ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontFamily: 'IBM Plex Mono', fontSize: 11, padding: '4px 8px', cursor: page === totalPages ? 'default' : 'pointer',
+                opacity: page === totalPages ? 0.4 : 1,
+              }}
+            >»</button>
+          </div>
+        )}
+        </>
       )}
 
       {/* Lightbox */}

@@ -486,7 +486,8 @@ def register_detective_routes(app, require_any_user, require_owner):
                            investigator_name: str = "the investigator",
                            case_subject_name: str = "the subject",
                            subject_pronouns: str = "she/her") -> str:
-        """Send multiple images to vision API and return a combined evidence synthesis."""
+        """Send multiple images to vision API and return a combined evidence synthesis.
+        Automatically batches large sets (>4 images) to avoid 413 request_too_large errors."""
         from src.api.ai_client import get_anthropic_key, get_model
         import anthropic
 
@@ -500,37 +501,9 @@ def register_detective_routes(app, require_any_user, require_owner):
         model = get_model()
         client = anthropic.Anthropic(api_key=key)
 
-        _investigator_name = investigator_name
-        _case_subject_name = case_subject_name
-
-        _investigator_name = investigator_name
-        _case_subject_name = case_subject_name
-
-        content_blocks = []
-        for i, (b64, mime) in enumerate(images, 1):
-            safe_mime = _mime_map.get((mime or "").lower(), "image/jpeg")
-            content_blocks.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": safe_mime, "data": b64}
-            })
-            content_blocks.append({"type": "text", "text": f"[Photo {i} of {len(images)}]"})
-
         participant_map = _extract_participants(
-            entry_content, _investigator_name, _case_subject_name, subject_pronouns
+            entry_content, investigator_name, case_subject_name, subject_pronouns
         )
-
-        synthesis_prompt = (
-            f"PARTICIPANT MAP\n{participant_map}\n\n"
-            f"CASE CONTEXT + ENTRY NOTE:\n{entry_content[:2000]}\n\n"
-            f"Analyze these {len(images)} photo(s) as forensic evidence. "
-            "Prioritize: (1) device/platform details visible in the status bar or UI — carrier, WiFi-only, SOS only, timestamp, battery; "
-            "(2) verbatim transcription of the most significant messages; "
-            "(3) behavioral observations — who initiated, emotional tone, admissions, contradictions; "
-            "(4) the single most forensically significant detail. "
-            "Use names from the PARTICIPANT MAP — never generic labels. "
-            "Third person only. Plain prose. No markdown. 3-5 sentences max."
-        )
-        content_blocks.append({"type": "text", "text": synthesis_prompt})
 
         _FORENSIC_SYSTEM = (
             "You are a forensic evidence analyst producing written investigation reports. "
@@ -542,20 +515,123 @@ def register_detective_routes(app, require_any_user, require_owner):
             "No markdown, no bullets, no headers. Hard limit: 3-5 sentences."
         )
 
-        msg = client.messages.create(
-            model=model,
-            max_tokens=1200,
-            system=_FORENSIC_SYSTEM,
-            messages=[{"role": "user", "content": content_blocks}]
+        BATCH_SIZE = 4
+
+        def _analyze_batch(batch_images, batch_num, total_batches, offset):
+            """Analyze a single batch of images and return text summary."""
+            content_blocks = []
+            for i, (b64, mime) in enumerate(batch_images, 1):
+                safe_mime = _mime_map.get((mime or "").lower(), "image/jpeg")
+                content_blocks.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": safe_mime, "data": b64}
+                })
+                content_blocks.append({
+                    "type": "text",
+                    "text": f"[Photo {offset + i} of {len(images)}]"
+                })
+
+            prompt = (
+                f"PARTICIPANT MAP\n{participant_map}\n\n"
+                f"CASE CONTEXT + ENTRY NOTE:\n{entry_content[:1500]}\n\n"
+                f"Analyze these {len(batch_images)} photo(s) (batch {batch_num} of {total_batches}, "
+                f"photos {offset + 1}-{offset + len(batch_images)} of {len(images)} total) as forensic evidence. "
+                "Prioritize: (1) device/platform details — carrier, WiFi-only, SOS, timestamp, battery; "
+                "(2) verbatim transcription of the most significant messages; "
+                "(3) behavioral observations — who initiated, emotional tone, admissions, contradictions; "
+                "(4) the single most forensically significant detail. "
+                "Use names from the PARTICIPANT MAP — never generic labels. "
+                "Third person only. Plain prose. No markdown. 3-5 sentences max."
+            )
+            content_blocks.append({"type": "text", "text": prompt})
+
+            msg = client.messages.create(
+                model=model,
+                max_tokens=600,
+                system=_FORENSIC_SYSTEM,
+                messages=[{"role": "user", "content": content_blocks}]
+            )
+            try:
+                from src.api.ai_client import _log_usage
+                _log_usage(user_id, "anthropic", model,
+                           msg.usage.input_tokens, msg.usage.output_tokens,
+                           call_type="detective_multi_photo_synthesis")
+            except Exception:
+                pass
+            return msg.content[0].text
+
+        # If small enough, single-pass
+        if len(images) <= BATCH_SIZE:
+            content_blocks = []
+            for i, (b64, mime) in enumerate(images, 1):
+                safe_mime = _mime_map.get((mime or "").lower(), "image/jpeg")
+                content_blocks.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": safe_mime, "data": b64}
+                })
+                content_blocks.append({"type": "text", "text": f"[Photo {i} of {len(images)}]"})
+
+            synthesis_prompt = (
+                f"PARTICIPANT MAP\n{participant_map}\n\n"
+                f"CASE CONTEXT + ENTRY NOTE:\n{entry_content[:2000]}\n\n"
+                f"Analyze these {len(images)} photo(s) as forensic evidence. "
+                "Prioritize: (1) device/platform details visible in the status bar or UI — carrier, WiFi-only, SOS only, timestamp, battery; "
+                "(2) verbatim transcription of the most significant messages; "
+                "(3) behavioral observations — who initiated, emotional tone, admissions, contradictions; "
+                "(4) the single most forensically significant detail. "
+                "Use names from the PARTICIPANT MAP — never generic labels. "
+                "Third person only. Plain prose. No markdown. 3-5 sentences max."
+            )
+            content_blocks.append({"type": "text", "text": synthesis_prompt})
+
+            msg = client.messages.create(
+                model=model,
+                max_tokens=1200,
+                system=_FORENSIC_SYSTEM,
+                messages=[{"role": "user", "content": content_blocks}]
+            )
+            try:
+                from src.api.ai_client import _log_usage
+                _log_usage(user_id, "anthropic", model,
+                           msg.usage.input_tokens, msg.usage.output_tokens,
+                           call_type="detective_multi_photo_synthesis")
+            except Exception:
+                pass
+            return msg.content[0].text
+
+        # Large set: batch analyze, then synthesize text results
+        batches = [images[i:i + BATCH_SIZE] for i in range(0, len(images), BATCH_SIZE)]
+        total_batches = len(batches)
+        logger.info(f"[detective] batching {len(images)} photos into {total_batches} batches of up to {BATCH_SIZE}")
+
+        batch_summaries = []
+        for batch_idx, batch in enumerate(batches):
+            offset = batch_idx * BATCH_SIZE
+            summary = _analyze_batch(batch, batch_idx + 1, total_batches, offset)
+            batch_summaries.append(f"[Photos {offset + 1}-{offset + len(batch)}]\n{summary}")
+
+        # Final text-only synthesis pass
+        combined = "\n\n".join(batch_summaries)
+        final_prompt = (
+            f"PARTICIPANT MAP\n{participant_map}\n\n"
+            f"CASE CONTEXT:\n{entry_content[:1000]}\n\n"
+            f"You have analyzed {len(images)} photos in {total_batches} batches. "
+            f"Here are the per-batch findings:\n\n{combined}\n\n"
+            "Now write a single unified forensic synthesis covering all photos. "
+            "Identify the strongest evidence, any timeline or behavioral patterns across the photos, "
+            "and the single most significant forensic finding from the full set. "
+            "Use names from the PARTICIPANT MAP. Third person only. Plain prose. No markdown. 4-6 sentences."
         )
-        try:
-            from src.api.ai_client import _log_usage
-            _log_usage(user_id, "anthropic", model,
-                       msg.usage.input_tokens, msg.usage.output_tokens,
-                       call_type="detective_multi_photo_synthesis")
-        except Exception:
-            pass
-        return msg.content[0].text
+
+        from src.api.ai_client import create_message
+        final = create_message(
+            user_id,
+            system=_FORENSIC_SYSTEM,
+            user_prompt=final_prompt,
+            max_tokens=800,
+            call_type="detective_multi_photo_synthesis_final",
+        )
+        return final
 
     # ── Access Check ──────────────────────────────────────────────────────────
 
@@ -987,18 +1063,35 @@ def register_detective_routes(app, require_any_user, require_owner):
             conn.commit()
             photo_id = cur.lastrowid
 
-            # No individual analysis — combined synthesis is run after all uploads
-            conn.execute(
-                "UPDATE detective_entry_photos SET analysis_status='done' WHERE id=?",
-                (photo_id,)
-            )
+            # Run individual vision analysis (so gallery shows per-photo AI text)
+            analysis = None
+            try:
+                b64 = base64.standard_b64encode(data).decode()
+                analysis = _call_vision(
+                    user["id"], b64, mime_out,
+                    "Analyze this image as forensic evidence. "
+                    "Note: device/platform details visible in the status bar or UI — carrier, WiFi-only, SOS, timestamp, battery; "
+                    "verbatim transcription of the most significant messages; "
+                    "behavioral observations — who initiated, emotional tone, admissions, contradictions. "
+                    "Be specific and observational. Plain prose only."
+                )
+                conn.execute(
+                    "UPDATE detective_entry_photos SET ai_analysis=?, analysis_status='done' WHERE id=?",
+                    (analysis, photo_id)
+                )
+            except Exception as _ae:
+                logger.warning(f"[detective] entry photo vision failed: {_ae}")
+                conn.execute(
+                    "UPDATE detective_entry_photos SET analysis_status='failed' WHERE id=?",
+                    (photo_id,)
+                )
             conn.commit()
 
             return {
                 "id": photo_id,
                 "original_filename": file.filename,
-                "ai_analysis": None,
-                "analysis_status": "done",
+                "ai_analysis": analysis,
+                "analysis_status": "done" if analysis else "failed",
                 "image_url": (
                     f"/api/detective/cases/{case_id}"
                     f"/entries/{entry_id}/photos/{photo_id}/image"
@@ -1259,19 +1352,32 @@ def register_detective_routes(app, require_any_user, require_owner):
             # Include multi-entry photos from detective_entry_photos
             mphoto_rows = conn.execute(
                 "SELECT dep.id, dep.original_filename, dep.ai_analysis, dep.analysis_status, "
-                "dep.created_at, dep.entry_id, de.content "
+                "dep.created_at, dep.entry_id, de.content, de.multi_photo_analysis "
                 "FROM detective_entry_photos dep "
                 "JOIN detective_entries de ON de.id = dep.entry_id "
                 "WHERE dep.case_id = ? AND dep.user_id = ? ORDER BY dep.created_at DESC",
                 (case_id, user["id"])
             ).fetchall()
             for r in mphoto_rows:
+                # Per-photo analysis if available; otherwise fall back to combined synthesis
+                per_photo = r['ai_analysis']
+                combined = r['multi_photo_analysis']
+                if per_photo:
+                    display_analysis = per_photo
+                    is_combined = False
+                elif combined:
+                    display_analysis = combined
+                    is_combined = True
+                else:
+                    display_analysis = None
+                    is_combined = False
                 result.append({
                     'id': f"mphoto_{r['id']}",
                     'original_filename': r['original_filename'],
                     'file_size': None,
                     'mime_type': None,
-                    'ai_analysis': r['ai_analysis'],
+                    'ai_analysis': display_analysis,
+                    'analysis_label': 'Combined Analysis' if is_combined else 'Evidence Analysis',
                     'analysis_status': r['analysis_status'],
                     'created_at': r['created_at'],
                     'image_url': (
