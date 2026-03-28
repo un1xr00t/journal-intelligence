@@ -82,6 +82,7 @@ const DRAWER_GROUPS = [
     label: 'Premium',
     links: [
       { to: '/detective', icon: '🕵', label: 'Detective Mode', detectiveOnly: true },
+      { to: '/my-story',  icon: '✦',  label: 'My Story'                         },
     ]
   },
   {

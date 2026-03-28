@@ -31,6 +31,7 @@ import DecisionAssistant from './pages/DecisionAssistant'
 import Detective from './pages/Detective'
 import FairnessLedger from './pages/FairnessLedger'
 import DetectiveFull from './pages/DetectiveFull'
+import MyStory from './pages/MyStory'
 import InviteAccess from './pages/InviteAccess'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
@@ -235,6 +236,7 @@ function Shell() {
             <Route path="/detective" element={<ProtectedRoute><Detective /></ProtectedRoute>} />
             <Route path="/fairness" element={<ProtectedRoute><FairnessLedger /></ProtectedRoute>} />
             <Route path="/detective/full" element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
+            <Route path="/my-story" element={<ProtectedRoute><MyStory /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="/invite/:token" element={<InviteAccess />} />
             <Route path="*"               element={<Navigate to="/" replace />} />

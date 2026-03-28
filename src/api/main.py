@@ -2201,8 +2201,10 @@ from src.api.entry_attachments_routes import register_entry_attachment_routes
 register_entry_attachment_routes(app, require_any_user)
 
 from src.api.detective_routes import register_detective_routes
+from src.api.my_story_routes import register_my_story_routes
 from src.api.research_agent_route import register_research_agent_routes
 register_detective_routes(app, require_any_user, require_owner)
+register_my_story_routes(app, require_any_user)
 register_research_agent_routes(app, require_any_user, require_owner)
 
 from src.api.fairness_routes import register_fairness_routes

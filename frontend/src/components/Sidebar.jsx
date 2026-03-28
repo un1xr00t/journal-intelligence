@@ -42,6 +42,7 @@ const NAV_GROUPS = [
     links: [
       { to: '/detective',  icon: '🕵', label: 'Detective Mode',    detectiveOnly: true },
       { to: '/fairness',   icon: '⚖',  label: 'Fairness Ledger'   },
+      { to: '/my-story',   icon: '✦',  label: 'My Story'          },
     ]
   },
   {
