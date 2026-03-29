@@ -30,6 +30,7 @@ import DayOneImport from './pages/DayOneImport'
 import DecisionAssistant from './pages/DecisionAssistant'
 import Detective from './pages/Detective'
 import FairnessLedger from './pages/FairnessLedger'
+import MentalHealth from './pages/MentalHealth'
 import DetectiveFull from './pages/DetectiveFull'
 import MyStory from './pages/MyStory'
 import InviteAccess from './pages/InviteAccess'
@@ -236,6 +237,7 @@ function Shell() {
             <Route path="/detective" element={<ProtectedRoute><Detective /></ProtectedRoute>} />
             <Route path="/fairness" element={<ProtectedRoute><FairnessLedger /></ProtectedRoute>} />
             <Route path="/detective/full" element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
+            <Route path="/mental-health" element={<ProtectedRoute><MentalHealth /></ProtectedRoute>} />
             <Route path="/my-story" element={<ProtectedRoute><MyStory /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="/invite/:token" element={<InviteAccess />} />

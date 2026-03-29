@@ -31,6 +31,7 @@ import DayOneImport from './pages/DayOneImport'
 import DecisionAssistant from './pages/DecisionAssistant'
 import Detective from './pages/Detective'
 import DetectiveFull from './pages/DetectiveFull'
+import MentalHealth from './pages/MentalHealth'
 import InviteAccess from './pages/InviteAccess'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
@@ -83,6 +84,7 @@ const DRAWER_GROUPS = [
     links: [
       { to: '/detective', icon: '🕵', label: 'Detective Mode', detectiveOnly: true },
       { to: '/my-story',  icon: '✦',  label: 'My Story'                         },
+      { to: '/mental-health', icon: '♥', label: 'My Mental Health'               },
     ]
   },
   {
@@ -456,6 +458,7 @@ export default function MobileShell() {
             <Route path="/decide"                 element={<ProtectedRoute><DecisionAssistant /></ProtectedRoute>} />
             <Route path="/detective"              element={<ProtectedRoute><Detective /></ProtectedRoute>} />
             <Route path="/detective/full"         element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
+            <Route path="/mental-health"          element={<ProtectedRoute><MentalHealth /></ProtectedRoute>} />
             <Route path="/share/plan/:token"      element={<ExitPlanShareView />} />
             <Route path="/invite/:token"          element={<InviteAccess />} />
             <Route path="*"                       element={<Navigate to="/" replace />} />

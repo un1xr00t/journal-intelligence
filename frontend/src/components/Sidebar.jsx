@@ -42,7 +42,8 @@ const NAV_GROUPS = [
       { to: '/detective',  icon: '🕵', label: 'Detective Mode', detectiveOnly: true  },
       { to: '/exit-plan',  icon: '🗺', label: 'Exit Plan'                             },
       { to: '/fairness',   icon: '⚖',  label: 'Fairness Ledger'                      },
-      { to: '/my-story',   icon: '✦',  label: 'My Story'                             },
+      { to: '/my-story',   icon: '✦',  label: 'My Story'          },
+      { to: '/mental-health', icon: '♥', label: 'My Mental Health' },
     ]
   },
   {
