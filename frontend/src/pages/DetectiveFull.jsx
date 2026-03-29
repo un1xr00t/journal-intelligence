@@ -299,9 +299,55 @@ function WireHistory({ caseId }) {
 
 // ── Export Tab ────────────────────────────────────────────────────────────────
 
+const EXPORT_TONES = [
+  {
+    id: 'case_file',
+    icon: '\u{1F5C2}',
+    label: 'Case File',
+    tag: 'INVESTIGATIVE',
+    tagColor: '#ef4444',
+    tagBg: 'rgba(239,68,68,0.12)',
+    tagBorder: 'rgba(239,68,68,0.3)',
+    desc: 'Full forensic report. Every entry, wire drop, photo, and AI analysis. Built to document everything, completely.',
+    includes: ['Cover page with stats', 'AI intelligence brief', 'Full log with severity badges', 'Wire briefing history', 'Photo evidence + AI analysis', 'Full-res appendix'],
+    accent: '#6366f1',
+    glow: 'rgba(99,102,241,0.08)',
+    border: 'rgba(99,102,241,0.25)',
+  },
+  {
+    id: 'conversation',
+    icon: '\u{1F4AC}',
+    label: 'The Conversation',
+    tag: 'PERSONAL',
+    tagColor: '#a855f7',
+    tagBg: 'rgba(168,85,247,0.12)',
+    tagBorder: 'rgba(168,85,247,0.3)',
+    desc: 'From you to her. The pattern, the evidence, your decision \u2014 written as a personal statement for when the talk happens.',
+    includes: ['Personal statement cover', 'Pattern summary', 'What you documented', 'Your exchanges', 'Supporting evidence'],
+    accent: '#a855f7',
+    glow: 'rgba(168,85,247,0.07)',
+    border: 'rgba(168,85,247,0.22)',
+  },
+  {
+    id: 'personal_record',
+    icon: '\u{1F4CB}',
+    label: 'Personal Record',
+    tag: 'ARCHIVAL',
+    tagColor: '#38bdf8',
+    tagBg: 'rgba(56,189,248,0.1)',
+    tagBorder: 'rgba(56,189,248,0.25)',
+    desc: 'Clean, readable account for therapy, legal consultation, or long-term archives. No forensic badge clutter.',
+    includes: ['Neutral cover', 'AI analysis summary', 'Chronological journal record', 'Correspondence log', 'Supporting materials'],
+    accent: '#38bdf8',
+    glow: 'rgba(56,189,248,0.06)',
+    border: 'rgba(56,189,248,0.2)',
+  },
+]
+
 function ExportTab({ caseId, caseName }) {
+  const [tone,      setTone]      = useState('case_file')
   const [exporting, setExporting] = useState(false)
-  const [status,    setStatus]    = useState(null)  // null | 'generating' | 'done' | 'error'
+  const [status,    setStatus]    = useState(null)
   const [errorMsg,  setErrorMsg]  = useState('')
 
   const generate = async () => {
@@ -310,17 +356,16 @@ function ExportTab({ caseId, caseName }) {
     setErrorMsg('')
     try {
       const res = await api.post(
-        `/api/detective/cases/${caseId}/export`,
+        `/api/detective/cases/${caseId}/export?tone=${tone}`,
         {},
         { responseType: 'blob' }
       )
-      // Trigger browser download
       const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
       const cd   = res.headers['content-disposition'] || ''
       const fnMatch = cd.match(/filename="([^"]+)"/)
       link.href     = url
-      link.download = fnMatch ? fnMatch[1] : `case_report_${caseId}.pdf`
+      link.download = fnMatch ? fnMatch[1] : `case_report_${caseId}_${tone}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -329,7 +374,7 @@ function ExportTab({ caseId, caseName }) {
     } catch (e) {
       const msg = e.response?.data?.detail
         || (e.response?.data instanceof Blob
-            ? await e.response.data.text().then(t => { try { return JSON.parse(t).detail } catch { return t } })
+            ? await e.response.data.text().then(t => { try { return JSON.parse(t).detail } catch (_) { return t } })
             : null)
         || 'Export failed. Check logs.'
       setErrorMsg(msg)
@@ -338,44 +383,99 @@ function ExportTab({ caseId, caseName }) {
     setExporting(false)
   }
 
+  const selected = EXPORT_TONES.find(t => t.id === tone)
+
   return (
-    <div style={{ padding: 32, maxWidth: 700 }}>
+    <div style={{ padding: '36px 40px', maxWidth: 720 }}>
 
       {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: 'var(--text-primary)', marginBottom: 6 }}>
-          📄 Export Case Report
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 24, color: 'var(--text-primary)', marginBottom: 8, letterSpacing: '-0.02em' }}>
+          Export Report
         </div>
-        <div style={{ ...mono, fontSize: 11, color: 'var(--text-muted)' }}>
-          Generate a comprehensive PDF report of the entire case
+        <div style={{ ...mono, fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Choose a format &mdash; each produces a different kind of PDF
         </div>
       </div>
 
-      {/* What's included card */}
-      <div style={{
-        background: 'rgba(99,102,241,0.04)',
-        border: '1px solid rgba(99,102,241,0.18)',
-        borderRadius: 12, padding: '22px 24px', marginBottom: 24,
-      }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', marginBottom: 14 }}>
-          What&apos;s included in the report
-        </div>
-        {[
-          ['🎯', 'Cover Page', 'Case title, stats summary, generated timestamp'],
-          ['🧠', 'Intelligence Brief', 'Full AI-synthesized case analysis (if generated)'],
-          ['◷',  'Investigation Log', 'Every log entry with type, severity, content & attached photo analyses'],
-          ['📡', 'Wire Briefings', 'Complete history of all wire drops, full text'],
-          ['📷', 'Photo Evidence', 'Gallery thumbnails with AI analysis text'],
-          ['🖼',  'Appendix', 'Full-resolution evidence photos embedded at the end'],
-        ].map(([icon, title, desc]) => (
-          <div key={title} style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
-            <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{icon}</span>
-            <div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>{desc}</span>
+      {/* Tone cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+        {EXPORT_TONES.map(t => {
+          const isSel = tone === t.id
+          return (
+            <div
+              key={t.id}
+              onClick={() => { setTone(t.id); setStatus(null) }}
+              style={{
+                background: isSel ? t.glow : 'rgba(255,255,255,0.015)',
+                border: `1px solid ${isSel ? t.border : 'rgba(255,255,255,0.06)'}`,
+                borderRadius: 12,
+                padding: '18px 20px',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                display: 'flex',
+                gap: 16,
+                alignItems: 'flex-start',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              {isSel && (
+                <div style={{
+                  position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+                  background: t.accent, borderRadius: '12px 0 0 12px',
+                }} />
+              )}
+
+              <div style={{ fontSize: 22, flexShrink: 0, marginTop: 2, opacity: isSel ? 1 : 0.45, transition: 'opacity 0.15s' }}>
+                {t.icon}
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 5 }}>
+                  <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 14, color: isSel ? '#fff' : 'rgba(232,234,246,0.8)', transition: 'color 0.15s' }}>
+                    {t.label}
+                  </span>
+                  <span style={{
+                    fontFamily: 'IBM Plex Mono', fontSize: 9, letterSpacing: '0.14em',
+                    background: t.tagBg, border: `1px solid ${t.tagBorder}`,
+                    color: t.tagColor, borderRadius: 4, padding: '2px 7px',
+                  }}>
+                    {t.tag}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(232,234,246,0.55)', lineHeight: 1.55, marginBottom: isSel ? 12 : 0 }}>
+                  {t.desc}
+                </div>
+                {isSel && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {t.includes.map(item => (
+                      <span key={item} style={{
+                        fontFamily: 'IBM Plex Mono', fontSize: 9,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 4, padding: '3px 7px',
+                        color: 'rgba(232,234,246,0.45)',
+                      }}>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{
+                width: 17, height: 17, borderRadius: '50%', flexShrink: 0, marginTop: 3,
+                border: `2px solid ${isSel ? t.accent : 'rgba(255,255,255,0.18)'}`,
+                background: isSel ? t.accent : 'transparent',
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {isSel && <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff' }} />}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Generate button */}
@@ -384,73 +484,61 @@ function ExportTab({ caseId, caseName }) {
         disabled={exporting}
         style={{
           width: '100%',
-          padding: '14px 24px',
-          background: exporting
-            ? 'rgba(99,102,241,0.1)'
-            : 'linear-gradient(135deg, rgba(99,102,241,0.3), rgba(168,85,247,0.25))',
-          border: '1px solid rgba(99,102,241,0.45)',
+          padding: '15px 24px',
+          background: exporting ? 'rgba(255,255,255,0.03)' : `linear-gradient(135deg, ${selected.glow}, rgba(0,0,0,0.15))`,
+          border: `1px solid ${exporting ? 'rgba(255,255,255,0.08)' : selected.border}`,
           borderRadius: 10,
-          color: exporting ? 'var(--text-muted)' : 'var(--text-primary)',
+          color: exporting ? 'var(--text-muted)' : '#fff',
           fontFamily: 'Syne',
           fontWeight: 800,
-          fontSize: 14,
-          letterSpacing: '0.04em',
+          fontSize: 13,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
           cursor: exporting ? 'not-allowed' : 'pointer',
           transition: 'all 0.15s',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: 10,
-          marginBottom: 16,
+          marginBottom: 14,
         }}
       >
         {exporting ? (
-          <>
-            <span style={{ fontSize: 16 }}>⏳</span>
-            Generating report…
-          </>
+          <span>Generating PDF&hellip;</span>
         ) : (
-          <>
-            <span style={{ fontSize: 16 }}>📄</span>
-            Generate &amp; Download PDF
-          </>
+          <span>{selected.icon}&nbsp;&nbsp;Generate {selected.label}</span>
         )}
       </button>
 
-      {/* Status messages */}
+      {/* Status */}
       {status === 'done' && (
         <div style={{
-          padding: '12px 16px',
-          background: 'rgba(34,197,94,0.08)',
-          border: '1px solid rgba(34,197,94,0.25)',
-          borderRadius: 8,
-          display: 'flex', alignItems: 'center', gap: 10,
-          fontSize: 13, color: '#22c55e',
+          padding: '11px 15px', marginBottom: 12,
+          background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.2)',
+          borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10,
+          fontSize: 12, color: '#22c55e',
         }}>
-          <span>✓</span>
-          <span>Report downloaded successfully. Check your downloads folder.</span>
+          <span>&#10003;</span>
+          <span>Downloaded &mdash; check your downloads folder.</span>
         </div>
       )}
 
       {status === 'error' && (
         <div style={{
-          padding: '12px 16px',
-          background: 'rgba(239,68,68,0.08)',
-          border: '1px solid rgba(239,68,68,0.25)',
-          borderRadius: 8,
-          fontSize: 13, color: '#ef4444',
-          lineHeight: 1.6,
+          padding: '11px 15px', marginBottom: 12,
+          background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
+          borderRadius: 8, fontSize: 12, color: '#ef4444', lineHeight: 1.6,
         }}>
           <strong>Export failed:</strong> {errorMsg}
         </div>
       )}
 
-      {/* Note about PDF backend */}
-      <div style={{ marginTop: 20, padding: '10px 14px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', borderRadius: 8 }}>
-        <div style={{ ...mono, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          PDF requires <strong>weasyprint</strong> on the server. If generation fails, run:
-          <br />
-          <span style={{ color: 'rgba(99,102,241,0.8)' }}>pip install weasyprint --break-system-packages</span>
+      {/* Tip */}
+      <div style={{ padding: '10px 14px', background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 }}>
+        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'rgba(123,130,166,0.55)', lineHeight: 1.6 }}>
+          Requires <strong style={{ color: 'rgba(123,130,166,0.85)' }}>weasyprint</strong> on the server.
+          &nbsp;If it fails:&nbsp;
+          <span style={{ color: 'rgba(99,102,241,0.65)' }}>pip install weasyprint --break-system-packages</span>
         </div>
       </div>
     </div>

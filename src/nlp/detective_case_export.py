@@ -107,6 +107,284 @@ def _nl2div(text: str) -> str:
     return "<br>".join(_esc(line) for line in text.splitlines())
 
 
+def _tone_config(tone: str) -> dict:
+    """Return display strings keyed by export tone."""
+    if tone == "conversation":
+        return {
+            "eyebrow":          "Journal Intelligence  ·  A Personal Statement",
+            "tag_text":         "PERSONAL",
+            "tag_bg":           "rgba(168,85,247,0.15)",
+            "tag_border":       "rgba(168,85,247,0.35)",
+            "tag_color":        "#a855f7",
+            "cover_desc_suffix": "This is a personal account of what I documented, the pattern I identified, and the decision I have made.",
+            "footer_right":     "This document is a personal record prepared by the author.",
+            "sec1_title":       "The Pattern",
+            "sec1_sub":         "What the evidence shows",
+            "sec2_title":       "What I Documented",
+            "sec2_sub":         "A record of incidents, in my own words",
+            "sec3_title":       "Our Exchanges",
+            "sec3_sub":         "Conversation history and analysis",
+            "sec4_title":       "Supporting Evidence",
+            "sec4_sub":         "Screenshots and photos with context",
+            "appendix_title":   "Full Evidence Photos",
+            "stat_entries":     "Documented Incidents",
+            "stat_photos":      "Supporting Photos",
+            "stat_wires":       "Conversation Analyses",
+            "show_badges":      False,
+        }
+    if tone == "personal_record":
+        return {
+            "eyebrow":          "Journal Intelligence  ·  Personal Record",
+            "tag_text":         "PERSONAL RECORD",
+            "tag_bg":           "rgba(56,189,248,0.12)",
+            "tag_border":       "rgba(56,189,248,0.3)",
+            "tag_color":        "#38bdf8",
+            "cover_desc_suffix": "A complete, chronological account maintained for personal reference, therapy, or legal consultation.",
+            "footer_right":     "Private document. Prepared for personal use.",
+            "sec1_title":       "AI Analysis Summary",
+            "sec1_sub":         "Synthesized overview of documented events",
+            "sec2_title":       "Journal Record",
+            "sec2_sub":         "Chronological account of events",
+            "sec3_title":       "Correspondence Log",
+            "sec3_sub":         "Analysis of written communications",
+            "sec4_title":       "Supporting Materials",
+            "sec4_sub":         "Photographic evidence with notes",
+            "appendix_title":   "Full-Resolution Attachments",
+            "stat_entries":     "Recorded Events",
+            "stat_photos":      "Attached Photos",
+            "stat_wires":       "Correspondence Reviews",
+            "show_badges":      True,
+        }
+    # default: case_file
+    return {
+        "eyebrow":          "Journal Intelligence  ·  Detective Mode  ·  Case Report",
+        "tag_text":         "CONFIDENTIAL",
+        "tag_bg":           "rgba(239,68,68,0.15)",
+        "tag_border":       "rgba(239,68,68,0.35)",
+        "tag_color":        "#ef4444",
+        "cover_desc_suffix": "",
+        "footer_right":     "This document contains sensitive investigative information. Handle accordingly.",
+        "sec1_title":       "Case Intelligence Brief",
+        "sec1_sub":         "AI-synthesized case summary",
+        "sec2_title":       "Investigation Log",
+        "sec2_sub":         "Chronological entry record",
+        "sec3_title":       "Wire Briefings",
+        "sec3_sub":         "Full intelligence briefing history",
+        "sec4_title":       "Photo Evidence",
+        "sec4_sub":         "Gallery uploads with AI analysis",
+        "appendix_title":   "Appendix: Full Evidence Photos",
+        "stat_entries":     "Log Entries",
+        "stat_photos":      "Evidence Photos",
+        "stat_wires":       "Wire Drops",
+        "show_badges":      True,
+    }
+
+
+# ── AI Narrative generation ───────────────────────────────────────────────────
+
+def _generate_ai_narrative(case: dict, entries: list, wires: list, intel: dict, user_id: int, tone: str) -> str:
+    """
+    Call the AI to synthesize case data into a tone-appropriate narrative.
+    Returns plain text. Falls back to empty string on any failure.
+    """
+    try:
+        from src.api.ai_client import create_message
+
+        # Resolve investigator name dynamically — never hardcoded
+        investigator_name = "the author"
+        try:
+            conn = _db()
+            row = conn.execute(
+                "SELECT investigator_name FROM detective_settings WHERE user_id = ?",
+                (user_id,)
+            ).fetchone()
+            if row and row["investigator_name"]:
+                investigator_name = row["investigator_name"]
+            else:
+                # fallback to username
+                urow = conn.execute(
+                    "SELECT username FROM users WHERE id = ?", (user_id,)
+                ).fetchone()
+                if urow and urow["username"]:
+                    investigator_name = urow["username"]
+            conn.close()
+        except Exception as name_ex:
+            log.warning(f"[detective_export] could not resolve investigator name: {name_ex}")
+
+        case_name   = case.get("title") or "the subject"
+        entry_count = len(entries)
+
+        # Build a condensed plaintext summary of entries (cap at 12000 chars to stay in context)
+        entry_lines = []
+        for e in entries:
+            date_str = (e.get("created_at") or "")[:10]
+            content  = (e.get("content") or "").strip()
+            etype    = e.get("entry_type") or "note"
+            if content:
+                entry_lines.append(f"[{date_str}] ({etype}) {content}")
+        entries_text = "\n".join(entry_lines)[:12000]
+
+        # Latest wire brief if available
+        wire_text = ""
+        if wires:
+            latest = sorted(wires, key=lambda w: w.get("created_at") or "")[-1]
+            wire_text = (latest.get("briefing") or "").strip()[:3000]
+
+        intel_text = ""
+        if intel and intel.get("summary"):
+            intel_text = intel["summary"].strip()[:2000]
+
+        # ── Conversation tone ──────────────────────────────────────────────────
+        if tone == "conversation":
+            system = (
+                "You are writing a deeply personal statement about a relationship. "
+                "Write entirely in first person — only use I, me, my, mine. Never use any proper name for the narrator. "
+                "The journal entries contain many names — ignore all of them when referring to the narrator. "
+                "The narrator is always 'I'. No exceptions. "
+                "No bullet points, no forensic labels, no detective language. "
+                "Write like a person speaking from the heart, not like a report. "
+                "Use plain conversational language. Short paragraphs. "
+                "Do not use the word 'navigate' or 'delve' or any corporate-speak."
+            )
+
+            user_prompt = f"""
+Based on the following documented evidence, write a deeply personal statement entirely in first person.
+CRITICAL: Never use any proper name for the narrator. Only use I, me, my, mine.
+
+Structure it as three sections with these exact headings:
+## What I Saw
+What I noticed, what I found, how it felt discovering it. Personal and honest. Around 200-300 words.
+
+## What This Told Me
+What the evidence meant to me. The conclusions I reached. The moment I knew. Around 150-200 words.
+
+## Where I Stand
+My decision. Clear and final, written as if speaking directly to the other person. Not angry, not pleading — just honest. Around 150-200 words.
+
+---
+DOCUMENTED ENTRIES ({entry_count} total):
+{entries_text}
+
+LATEST AI ANALYSIS:
+{wire_text or intel_text or "No AI analysis available."}
+
+Write only the three sections. No preamble. No postscript. Never name the narrator.
+"""
+
+        # ── Personal record tone ───────────────────────────────────────────────
+        elif tone == "personal_record":
+            system = (
+                "You are helping someone document their personal experiences in a clear, factual, neutral tone. "
+                "This document may be shared with a therapist, counselor, or attorney. "
+                "Rewrite the provided journal entries as a clean chronological narrative. "
+                "Use third-person perspective referring to 'the author' or 'I' consistently. "
+                "Remove emotional outbursts and investigative language. Keep facts. "
+                "Be specific about dates, behaviors, and observations. "
+                "No bullet points — write in flowing paragraphs. "
+                "This should read like a calm, organized account of events."
+            )
+
+            user_prompt = f"""
+The following are journal entries documenting a personal situation. Rewrite them as a clean, factual, chronological narrative suitable for sharing with a therapist or attorney.
+
+Structure as three sections with these exact headings:
+## Overview
+A brief summary of the situation and timeframe covered. 2-3 sentences.
+
+## Chronological Account
+A flowing, chronological narrative of the key events documented. Group related events together. Write in calm, factual language. Around 400-600 words.
+
+## Summary of Observed Patterns
+A clear, neutral summary of the behavioral patterns documented across the timeframe. Around 150-200 words.
+
+---
+JOURNAL ENTRIES ({entry_count} entries, {(entries_text[:100] + "...")[:50]}...):
+{entries_text}
+
+AI ANALYSIS SUMMARY:
+{intel_text or wire_text or "No summary available."}
+
+Write only the three sections. No preamble. No postscript.
+"""
+        else:
+            return ""
+
+        result = create_message(
+            user_id=user_id,
+            system=system,
+            user_prompt=user_prompt,
+            max_tokens=1800,
+            call_type="detective_export_narrative",
+        )
+        return result.strip()
+
+    except Exception as ex:
+        log.warning(f"[detective_export] AI narrative generation failed: {ex}")
+        return ""
+
+
+def _section_ai_narrative(narrative_text: str, cfg: dict, case: dict) -> str:
+    """
+    Render AI-generated narrative as a clean PDF section.
+    Parses ## headings into subsection blocks.
+    """
+    if not narrative_text:
+        return ""
+
+    import re
+    accent = "#a855f7" if cfg.get("tag_color") == "#a855f7" else "#38bdf8"
+
+    # Split on ## headings
+    parts = re.split(r'^##\s+(.+)$', narrative_text, flags=re.MULTILINE)
+    # parts = [pre_text, heading1, body1, heading2, body2, ...]
+
+    blocks_html = ""
+    if len(parts) >= 3:
+        i = 1
+        while i < len(parts) - 1:
+            heading = parts[i].strip()
+            body    = parts[i + 1].strip() if i + 1 < len(parts) else ""
+            # Convert body paragraphs
+            paras = [p.strip() for p in body.split("\n\n") if p.strip()]
+            para_html = "".join(
+                f'<p style="margin:0 0 10px 0; font-size:11px; line-height:1.75; color:rgba(232,234,246,0.88);">'
+                f'{_esc(p).replace(chr(10), "<br>")}</p>'
+                for p in paras
+            )
+            blocks_html += f"""
+    <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-left:3px solid {accent}; border-radius:0 7px 7px 0; padding:14px 18px; margin-bottom:14px; page-break-inside:avoid;">
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:0.15em; text-transform:uppercase; color:{accent}; margin-bottom:10px;">{_esc(heading)}</div>
+      {para_html}
+    </div>"""
+            i += 2
+    else:
+        # No headings parsed — render as single block
+        paras = [p.strip() for p in narrative_text.split("\n\n") if p.strip()]
+        para_html = "".join(
+            f'<p style="margin:0 0 10px 0; font-size:11px; line-height:1.75; color:rgba(232,234,246,0.88);">'
+            f'{_esc(p).replace(chr(10), "<br>")}</p>'
+            for p in paras
+        )
+        blocks_html = f"""
+    <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); border-left:3px solid {accent}; border-radius:0 7px 7px 0; padding:14px 18px; margin-bottom:14px;">
+      {para_html}
+    </div>"""
+
+    sec_title = cfg.get("sec2_title", "Statement")
+
+    return f"""
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">02</span>
+    <div>
+      <div class="section-title">{_esc(sec_title)}</div>
+      <div class="section-subtitle">AI-synthesized personal narrative</div>
+    </div>
+  </div>
+  {blocks_html}
+</div>"""
+
+
 # ── CSS ────────────────────────────────────────────────────────────────────────
 
 _CSS = """
@@ -663,12 +941,28 @@ p:last-child { margin-bottom: 0; }
 
 # ── HTML builder ───────────────────────────────────────────────────────────────
 
-def _cover_page(case: dict, stats: dict, generated: str) -> str:
+def _cover_page(case: dict, stats: dict, generated: str, cfg: dict) -> str:
     status = case.get("status") or "active"
-    desc   = _esc(case.get("description") or "No description provided.")
+    raw_desc = case.get("description") or "No description provided."
+    suffix   = cfg.get("cover_desc_suffix", "")
+    if suffix:
+        raw_desc = raw_desc.rstrip(".") + ". " + suffix
+    desc   = _esc(raw_desc)
     title  = _esc(case.get("title") or "Untitled Case")
     created = (case.get("created_at") or "")[:10]
     updated = (case.get("updated_at") or "")[:10]
+
+    eyebrow      = cfg["eyebrow"]
+    tag_text     = cfg["tag_text"]
+    tag_bg       = cfg["tag_bg"]
+    tag_border   = cfg["tag_border"]
+    tag_color    = cfg["tag_color"]
+    footer_right = cfg["footer_right"]
+    lbl_entries  = cfg["stat_entries"]
+    lbl_photos   = cfg["stat_photos"]
+    lbl_wires    = cfg["stat_wires"]
+
+    status_color = "var(--green)" if status == "active" else "var(--text-muted)"
 
     return f"""
 <div class="cover">
@@ -676,27 +970,27 @@ def _cover_page(case: dict, stats: dict, generated: str) -> str:
   <div class="cover-glow2"></div>
   <div class="cover-accent-bar"></div>
   <div class="cover-inner">
-    <div class="cover-eyebrow">Journal Intelligence &nbsp;&middot;&nbsp; Detective Mode &nbsp;&middot;&nbsp; Case Report</div>
-    <div class="cover-tag">CONFIDENTIAL</div>
+    <div class="cover-eyebrow">{eyebrow}</div>
+    <div class="cover-tag" style="background:{tag_bg}; border-color:{tag_border}; color:{tag_color};">{tag_text}</div>
     <h1 class="cover-title">{title}</h1>
     <p class="cover-desc">{desc}</p>
 
     <div class="cover-stats">
       <div class="cover-stat">
         <span class="cover-stat-value">{stats['entry_count']}</span>
-        <span class="cover-stat-label">Log Entries</span>
+        <span class="cover-stat-label">{lbl_entries}</span>
       </div>
       <div class="cover-stat">
         <span class="cover-stat-value">{stats['photo_count']}</span>
-        <span class="cover-stat-label">Evidence Photos</span>
+        <span class="cover-stat-label">{lbl_photos}</span>
       </div>
       <div class="cover-stat">
         <span class="cover-stat-value">{stats['wire_count']}</span>
-        <span class="cover-stat-label">Wire Drops</span>
+        <span class="cover-stat-label">{lbl_wires}</span>
       </div>
       <div class="cover-stat">
-        <span class="cover-stat-value" style="color: {'var(--green)' if status=='active' else 'var(--text-muted)'}">{status.upper()}</span>
-        <span class="cover-stat-label">Case Status</span>
+        <span class="cover-stat-value" style="color:{status_color}">{status.upper()}</span>
+        <span class="cover-stat-label">Status</span>
       </div>
     </div>
 
@@ -704,7 +998,7 @@ def _cover_page(case: dict, stats: dict, generated: str) -> str:
 
     <div class="cover-meta">
       <div class="cover-meta-row">
-        <span class="cover-meta-label">Case ID</span>
+        <span class="cover-meta-label">Document ID</span>
         <span class="cover-meta-val">#{case['id']}</span>
       </div>
       <div class="cover-meta-row">
@@ -722,24 +1016,26 @@ def _cover_page(case: dict, stats: dict, generated: str) -> str:
     </div>
   </div>
   <div class="cover-footer">
-    <span class="cover-footer-left">Journal Intelligence &mdash; Detective Mode</span>
-    <span class="cover-footer-right">This document contains sensitive investigative information. Handle accordingly.</span>
+    <span class="cover-footer-left">Journal Intelligence</span>
+    <span class="cover-footer-right">{footer_right}</span>
   </div>
 </div>"""
 
 
-def _section_intelligence(intel: dict) -> str:
+def _section_intelligence(intel: dict, cfg: dict) -> str:
+    title = cfg["sec1_title"]
+    sub   = cfg["sec1_sub"]
     if not intel or not intel.get("summary"):
-        return """
+        return f"""
 <div class="section">
   <div class="section-header">
     <span class="section-number">01</span>
     <div>
-      <div class="section-title">Case Intelligence Brief</div>
-      <div class="section-subtitle">AI-synthesized case summary</div>
+      <div class="section-title">{title}</div>
+      <div class="section-subtitle">{sub}</div>
     </div>
   </div>
-  <div class="empty-state">No intelligence brief generated yet. Drop a Wire from the workspace to generate one.</div>
+  <div class="empty-state">No analysis generated yet.</div>
 </div>"""
 
     summary = intel["summary"]
@@ -787,26 +1083,29 @@ def _section_intelligence(intel: dict) -> str:
   <div class="section-header">
     <span class="section-number">01</span>
     <div>
-      <div class="section-title">Case Intelligence Brief</div>
-      <div class="section-subtitle">{ec} entries &nbsp;·&nbsp; {wc} wire drop{'s' if wc != 1 else ''} incorporated &nbsp;·&nbsp; last updated {upd}</div>
+      <div class="section-title">{title}</div>
+      <div class="section-subtitle">{ec} entries \u00b7 last updated {upd}</div>
     </div>
   </div>
   {blocks_html}
 </div>"""
 
 
-def _section_log(entries: list) -> str:
+def _section_log(entries: list, cfg: dict) -> str:
+    title = cfg["sec2_title"]
+    sub   = cfg["sec2_sub"]
+    show_badges = cfg.get("show_badges", True)
     if not entries:
-        return """
+        return f"""
 <div class="section">
   <div class="section-header">
     <span class="section-number">02</span>
     <div>
-      <div class="section-title">Investigation Log</div>
-      <div class="section-subtitle">Chronological entry record</div>
+      <div class="section-title">{title}</div>
+      <div class="section-subtitle">{sub}</div>
     </div>
   </div>
-  <div class="empty-state">No investigation log entries recorded for this case.</div>
+  <div class="empty-state">No entries recorded for this case.</div>
 </div>"""
 
     cards = ""
@@ -839,13 +1138,18 @@ def _section_log(entries: list) -> str:
         <img src="{b64}" alt="{fname}">
       </div>"""
 
+        badge_html = ""
+        if show_badges:
+            badge_html = f'''
+        <span class="badge" style="background: {tc}22; border: 1px solid {tc}44; color: {tc};">{etype.upper()}</span>
+        <span class="badge" style="background: {sc}22; border: 1px solid {sc}44; color: {sc};">{sev.upper()}</span>'''
+
         cards += f"""
     <div class="entry-card">
       <div class="entry-card-bar" style="background: linear-gradient(90deg, {tc}, {sc});"></div>
       <div class="entry-header">
         <span class="entry-date">{date_str}</span>
-        <span class="badge" style="background: {tc}22; border: 1px solid {tc}44; color: {tc};">{etype.upper()}</span>
-        <span class="badge" style="background: {sc}22; border: 1px solid {sc}44; color: {sc};">{sev.upper()}</span>
+        {badge_html}
       </div>
       <div class="entry-body">{content}</div>
       {attachment_html}
@@ -856,26 +1160,28 @@ def _section_log(entries: list) -> str:
   <div class="section-header">
     <span class="section-number">02</span>
     <div>
-      <div class="section-title">Investigation Log</div>
-      <div class="section-subtitle">{len(entries)} entr{'ies' if len(entries) != 1 else 'y'} · oldest first</div>
+      <div class="section-title">{title}</div>
+      <div class="section-subtitle">{len(entries)} entr{'ies' if len(entries) != 1 else 'y'} \u00b7 oldest first</div>
     </div>
   </div>
   {cards}
 </div>"""
 
 
-def _section_wires(wires: list) -> str:
+def _section_wires(wires: list, cfg: dict) -> str:
+    title = cfg["sec3_title"]
+    sub   = cfg["sec3_sub"]
     if not wires:
-        return """
+        return f"""
 <div class="section">
   <div class="section-header">
     <span class="section-number">03</span>
     <div>
-      <div class="section-title">Wire Briefings</div>
-      <div class="section-subtitle">Full intelligence briefing history</div>
+      <div class="section-title">{title}</div>
+      <div class="section-subtitle">{sub}</div>
     </div>
   </div>
-  <div class="empty-state">No wire briefings on record for this case.</div>
+  <div class="empty-state">No entries on record for this case.</div>
 </div>"""
 
     cards = ""
@@ -898,7 +1204,7 @@ def _section_wires(wires: list) -> str:
   <div class="section-header">
     <span class="section-number">03</span>
     <div>
-      <div class="section-title">Wire Briefings</div>
+      <div class="section-title">{title}</div>
       <div class="section-subtitle">{len(wires)} briefing{'s' if len(wires) != 1 else ''} on record</div>
     </div>
   </div>
@@ -906,18 +1212,20 @@ def _section_wires(wires: list) -> str:
 </div>"""
 
 
-def _section_photos(uploads: list) -> str:
+def _section_photos(uploads: list, cfg: dict) -> str:
+    title = cfg["sec4_title"]
+    sub   = cfg["sec4_sub"]
     if not uploads:
-        return """
+        return f"""
 <div class="section">
   <div class="section-header">
     <span class="section-number">04</span>
     <div>
-      <div class="section-title">Photo Evidence</div>
-      <div class="section-subtitle">Gallery uploads with AI analysis</div>
+      <div class="section-title">{title}</div>
+      <div class="section-subtitle">{sub}</div>
     </div>
   </div>
-  <div class="empty-state">No evidence photos uploaded for this case.</div>
+  <div class="empty-state">No photos uploaded for this case.</div>
 </div>"""
 
     # Build rows of 2 photos each using HTML table (weasyprint doesn't support CSS grid)
@@ -959,7 +1267,7 @@ def _section_photos(uploads: list) -> str:
   <div class="section-header">
     <span class="section-number">04</span>
     <div>
-      <div class="section-title">Photo Evidence</div>
+      <div class="section-title">{title}</div>
       <div class="section-subtitle">{len(uploads)} photo{'s' if len(uploads) != 1 else ''} on record</div>
     </div>
   </div>
@@ -1032,19 +1340,29 @@ def _appendix_photos(uploads: list) -> str:
 </div>"""
 
 
-def _build_html(case: dict, entries: list, uploads: list, wires: list, intel: Optional[dict]) -> str:
+def _build_html(case: dict, entries: list, uploads: list, wires: list, intel: Optional[dict], tone: str = "case_file", user_id: int = 0) -> str:
     from datetime import timezone, timedelta; _EST = timezone(timedelta(hours=-5)); generated = datetime.now(_EST).strftime("%Y-%m-%d %H:%M EST")
+    cfg = _tone_config(tone)
     stats = {
         "entry_count": len(entries),
         "photo_count": len(uploads),
         "wire_count":  len(wires),
     }
 
-    cover       = _cover_page(case, stats, generated)
-    sec_intel   = _section_intelligence(intel)
-    sec_log     = _section_log(entries)
-    sec_wires   = _section_wires(wires)
-    sec_photos  = _section_photos(uploads)
+    cover = _cover_page(case, stats, generated, cfg)
+
+    if tone in ("conversation", "personal_record"):
+        # Generate AI narrative to replace the raw log + wires
+        narrative_text = _generate_ai_narrative(case, entries, wires, intel, user_id, tone)
+        sec_intel  = _section_intelligence(intel, cfg)
+        sec_log    = _section_ai_narrative(narrative_text, cfg, case)
+        sec_wires  = ""   # folded into narrative
+        sec_photos = _section_photos(uploads, cfg)
+    else:
+        sec_intel  = _section_intelligence(intel, cfg)
+        sec_log    = _section_log(entries, cfg)
+        sec_wires  = _section_wires(wires, cfg)
+        sec_photos = _section_photos(uploads, cfg)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1094,15 +1412,18 @@ def _render_pdf(html: str) -> bytes:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
-def generate_case_pdf(case_id: int, user_id: int) -> dict:
+def generate_case_pdf(case_id: int, user_id: int, tone: str = "case_file") -> dict:
     """
     Generate a full case PDF report.
 
+    Args:
+      tone: "case_file" | "conversation" | "personal_record"
+
     Returns:
       {
-        "path":     str  — absolute path to the PDF file,
-        "filename": str  — suggested download filename,
-        "html":     str  — the rendered HTML (for debugging / HTML export),
+        "path":     str  -- absolute path to the PDF file,
+        "filename": str  -- suggested download filename,
+        "html":     str  -- the rendered HTML (for debugging / HTML export),
       }
     """
     conn = _db()
@@ -1183,7 +1504,7 @@ def generate_case_pdf(case_id: int, user_id: int) -> dict:
         conn.close()
 
     # Build HTML
-    html = _build_html(case, entries, uploads, wires, intel)
+    html = _build_html(case, entries, uploads, wires, intel, tone=tone, user_id=user_id)
 
     # Render PDF
     pdf_bytes = _render_pdf(html)

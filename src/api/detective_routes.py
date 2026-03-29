@@ -2066,10 +2066,14 @@ def register_detective_routes(app, require_any_user, require_owner):
     # ── Case Export ───────────────────────────────────────────────────────────
 
     @app.post("/api/detective/cases/{case_id}/export")
-    async def export_case_pdf(case_id: int, user: dict = Depends(_require_detective)):
+    async def export_case_pdf(case_id: int, tone: str = "case_file", user: dict = Depends(_require_detective)):
         """Generate and return a rich PDF case report for the given case."""
         import io
         from fastapi.responses import StreamingResponse
+
+        VALID_TONES = {"case_file", "conversation", "personal_record"}
+        if tone not in VALID_TONES:
+            tone = "case_file"
 
         conn = _db()
         try:
@@ -2079,7 +2083,7 @@ def register_detective_routes(app, require_any_user, require_owner):
 
         try:
             from src.nlp.detective_case_export import generate_case_pdf
-            result = generate_case_pdf(case_id, user["id"])
+            result = generate_case_pdf(case_id, user["id"], tone=tone)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except RuntimeError as e:
