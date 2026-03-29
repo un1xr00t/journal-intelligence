@@ -150,7 +150,8 @@ function CaseCheckbox({ c, checked, onChange }) {
   return (
     <label style={{
       display: 'flex',
-      alignItems: 'flex-start',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       gap: 10,
       padding: '10px 12px',
       background: checked ? 'var(--accent)11' : 'var(--surface)',
@@ -158,12 +159,6 @@ function CaseCheckbox({ c, checked, onChange }) {
       borderRadius: 8,
       cursor: 'pointer',
     }}>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={e => onChange(c.id, e.target.checked)}
-        style={{ marginTop: 2, accentColor: 'var(--accent)', width: 15, height: 15, flexShrink: 0 }}
-      />
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', fontFamily: 'IBM Plex Mono' }}>
           {c.title}
@@ -177,6 +172,12 @@ function CaseCheckbox({ c, checked, onChange }) {
           {c.entry_count} log {c.entry_count === 1 ? 'entry' : 'entries'} · {c.status}
         </div>
       </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={e => onChange(c.id, e.target.checked)}
+        style={{ accentColor: 'var(--accent)', width: 18, height: 18, flexShrink: 0, cursor: 'pointer' }}
+      />
     </label>
   )
 }
