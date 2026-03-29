@@ -7,50 +7,50 @@ import { useTheme } from '../contexts/ThemeContext'
 const NAV_GROUPS = [
   {
     links: [
-      { to: '/',     icon: '◈', label: 'Timeline'       },
-      { to: '/write', icon: '✎', label: 'Write'          },
-      { to: '/ask',   icon: '⌖', label: 'Ask My Journal' },
-      { to: '/decide', icon: '⊘', label: 'Help Me Choose'  },
-    ]
-  },
-  {
-    label: 'Insights',
-    links: [
-      { to: '/patterns',      icon: '⬡', label: 'Patterns'       },
-      { to: '/early-warning', icon: '◬', label: 'Early Warning'  },
-      { to: '/nervous',       icon: '〜', label: 'Nervous System' },
-    ]
-  },
-  {
-    label: 'People',
-    links: [
-      { to: '/people',       icon: '◎', label: 'People & Topics' },
-      { to: '/people-intel', icon: '◉', label: 'People Map'      },
+      { to: '/decide', icon: '⊘', label: 'Help Me Choose' },
+      { to: '/',       icon: '◈', label: 'Timeline'       },
+      { to: '/write',  icon: '✎', label: 'Write'          },
     ]
   },
   {
     label: 'Case Building',
     links: [
-      { to: '/evidence',       icon: '◷', label: 'Evidence Vault' },
       { to: '/contradictions', icon: '⊕', label: 'Contradictions' },
-      { to: '/exit-plan',      icon: '🗺', label: 'Exit Plan'      },
+      { to: '/evidence',       icon: '◷', label: 'Evidence Vault' },
       { to: '/exports',        icon: '⊞', label: 'Exports'        },
+    ]
+  },
+  {
+    label: 'Insights',
+    links: [
+      { to: '/early-warning', icon: '◬', label: 'Early Warning'  },
+      { to: '/nervous',       icon: '〜', label: 'Nervous System' },
+      { to: '/patterns',      icon: '⬡', label: 'Patterns'       },
+    ]
+  },
+  {
+    label: 'People',
+    links: [
+      { to: '/people-intel', icon: '◉', label: 'People Map'      },
+      { to: '/people',       icon: '◎', label: 'People & Topics' },
     ]
   },
   {
     label: 'Premium Options',
     links: [
-      { to: '/detective',  icon: '🕵', label: 'Detective Mode',    detectiveOnly: true },
-      { to: '/fairness',   icon: '⚖',  label: 'Fairness Ledger'   },
-      { to: '/my-story',   icon: '✦',  label: 'My Story'          },
+      { to: '/ask',        icon: '⌖', label: 'Ask My Journal'                        },
+      { to: '/detective',  icon: '🕵', label: 'Detective Mode', detectiveOnly: true  },
+      { to: '/exit-plan',  icon: '🗺', label: 'Exit Plan'                             },
+      { to: '/fairness',   icon: '⚖',  label: 'Fairness Ledger'                      },
+      { to: '/my-story',   icon: '✦',  label: 'My Story'                             },
     ]
   },
   {
     label: 'System',
     links: [
-      { to: '/resources', icon: '✦', label: 'Resources' },
-      { to: '/settings',  icon: '⚙', label: 'Settings'  },
-      { to: '/admin',     icon: '⊙', label: 'Admin', ownerOnly: true },
+      { to: '/admin',     icon: '⊙', label: 'Admin',     ownerOnly: true },
+      { to: '/resources', icon: '✦', label: 'Resources'                  },
+      { to: '/settings',  icon: '⚙', label: 'Settings'                   },
     ]
   },
 ]
