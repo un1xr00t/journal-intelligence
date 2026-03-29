@@ -120,10 +120,10 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
       <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', height: '100%', padding: '20px 0', paddingTop: 'calc(20px + env(safe-area-inset-top))', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {/* Brand + close button row */}
         <div style={{ padding: '0 20px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
+          <NavLink to="/" style={{ textDecoration: 'none' }}>
             <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 13, letterSpacing: '0.15em', color: 'var(--accent)', textTransform: 'uppercase' }}>✦ Journal</div>
             <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 13, letterSpacing: '0.15em', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Intelligence</div>
-          </div>
+          </NavLink>
           {/* Close button — mobile only */}
           {isMobile && (
             <button
