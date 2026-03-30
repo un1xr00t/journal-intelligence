@@ -27,7 +27,7 @@ That's what this is. A privacy-first, self-hosted journal intelligence system. B
 
 You write. The system listens - and thinks.
 
-Journal entries come in as plain text files, straight from your iPhone via Shortcuts, or written directly in the browser. From there, AI extracts mood, emotional severity, key events, people mentioned, and recurring topics. But it doesn't stop at data. It builds a living picture of you over time.
+Journal entries come in as plain text files, straight from your iPhone via Shortcuts, via SMS text message, or written directly in the browser. From there, AI extracts mood, emotional severity, key events, people mentioned, and recurring topics. But it doesn't stop at data. It builds a living picture of you over time.
 
 ---
 
@@ -134,6 +134,22 @@ Mood and severity charts over time. Volatility scores. Stability metrics. A visu
 
 ---
 
+### 🧬 My Mental Health Dashboard
+
+A dedicated mental health intelligence view built on your entire journal history.
+
+- **8-metric stats row** — total entries, average mood, average severity, mood volatility, peak severity, days journaled, entry streak, and trend direction
+- **84-day mood heatmap** — GitHub-style calendar showing mood intensity per day over the last 12 weeks
+- **Trigger map** — the topics and people most correlated with your highest-severity days
+- **Day-of-week severity patterns** — which days of the week are genuinely harder for you, visualized across your full history
+- **Emotional keyword shifts** — words that have appeared more or less frequently in your entries over time
+- **People impact rankings** — the people most correlated with your worst days, sorted by severity impact
+- **Weekly AI narrative** — a synthesized AI summary of the past week's mental health picture with notable quotes pulled directly from your entries
+
+Two-layer caching keeps it fast. Available from the sidebar under Personal Intelligence.
+
+---
+
 ### ⬡ Pattern Detection
 <img alt="Patterns" src="Screenshots/patterns.PNG" width="600"/>
 
@@ -163,6 +179,50 @@ The system doesn't editorialize. It just shows you the data. What you do with it
 
 ### ◎ People & Topics
 Every person and topic that shows up in your entries, tracked over time. See who or what is correlated with your worst days. See what actually makes things better. Frequency charts, timelines, relationship dynamics.
+
+---
+
+### ⚖ Fairness Ledger
+
+A household contribution tracker for when you need to stop wondering and start knowing.
+
+Log who handles what — from daily routines to one-off tasks to financial contributions. The system tracks task frequency, category breakdowns, and running score per person. A living AI summary regenerates as your data accumulates, naming the actual people and giving a plain-language assessment of what the record shows.
+
+**Task library** — 45+ seeded tasks covering morning routines, childcare, pet care, housework, transportation, finances, and emotional labor. Add your own or log freeform contributions that don't fit a template.
+
+**Multi-person support** — configure up to three household members with relationship labels (Partner, Co-parent, Spouse, Child, Roommate, Sibling, or Other). Dynamic setup screen with per-person relationship pickers — no hardcoded slots.
+
+**AI Assessment** — generates a 3-5 paragraph plain-language verdict using real names and actual contribution data. Regenerate anytime as new data comes in.
+
+**My Story integration** — Fairness Ledger data feeds directly into My Story narratives so your story can reflect the full picture, not just journal entries.
+
+Available under Premium Options in the sidebar.
+
+---
+
+### ✦ My Story — AI Advocate Narrative Generator
+
+Sometimes you need to tell your story to someone else — a therapist, a lawyer, a family member, a judge. My Story takes everything the system knows about you and writes it in your corner.
+
+**Data sources** — choose what to include: journal entries (5 to 50, your pick), detective case logs and wire drops, fairness ledger data with AI summary, and freeform manual context you add directly.
+
+**Six output purposes:**
+- **General** — a clear human account of your situation
+- **Therapist** — context-rich framing for a clinical conversation
+- **Lawyer / Legal** — factual, chronological, admission-forward
+- **Family** — emotionally honest, relationship-focused
+- **Friend** — natural language, first-person warmth
+- **Court** — structured, evidence-cited, behavioral documentation
+
+**Four writing styles:**
+- **Advocate** — third-person, written firmly in your corner
+- **Personal** — first-person, your voice
+- **Clinical** — structured sections with objective framing
+- **Timeline** — chronological narrative arc
+
+Narratives auto-save as drafts immediately after generation. Load, copy, or delete any saved draft. Rendered in Georgia serif — built to be read, not skimmed.
+
+Available under Premium Options in the sidebar.
 
 ---
 
@@ -230,12 +290,14 @@ A full onboarding flow that builds a memory profile - your situation, relationsh
 
 Per-user AI provider settings. Bring your own Anthropic key, use OpenAI, or run it completely locally with Ollama or LM Studio - zero data leaving your machine.
 
-Change your password, manage active sessions, configure 2FA, and manage passkeys directly from Settings.
+Change your password, manage active sessions, configure 2FA, manage passkeys, and set up security questions for offline recovery directly from Settings.
 
 ---
 
 ### 📱 PWA — Install on Your Home Screen
 The dashboard is a Progressive Web App. On iPhone, tap the share button in Safari and choose "Add to Home Screen" — it installs like a native app, runs full-screen, and works gracefully offline.
+
+---
 
 ### ⊘ Decision Assistant — Help Me Choose
 
@@ -259,7 +321,7 @@ A premium investigation workspace. Built for when journaling becomes documentati
 
 **Investigation log** — Timestamped entries tagged by type (note / observation / statement / admission / contradiction / timeline) and severity (critical / high / medium / low / info). Color-coded left borders. Every entry feeds into the AI.
 
-**Photo evidence** — Upload photos directly to cases or individual log entries. Anthropic vision analysis runs automatically — the AI describes what it sees in the context of your investigation. Full gallery view with lightbox and analysis panel.
+**Photo evidence** — Upload photos directly to cases or individual log entries. Anthropic vision analysis runs automatically — the AI describes what it sees in forensic, clinical language in the context of your investigation. Full gallery view with lightbox and analysis panel. Batched multi-photo synthesis groups up to 4 photos together for cross-image pattern recognition.
 
 **Case Partner AI** — A persistent, context-aware AI chat that knows your full case: all log entries, all photo analyses, your journal history, all previous Wire drops. Conversation compresses at 20 messages to stay efficient. New chats digest prior sessions into the intelligence brief before clearing.
 
@@ -354,6 +416,7 @@ The service is enabled on boot and auto-restarts on crash.
 | Auth | JWT (HttpOnly cookie refresh) + bcrypt + TOTP + WebAuthn + per-user API keys |
 | PDF | WeasyPrint |
 | Email | Resend |
+| SMS | Twilio (optional — bring your own credentials) |
 | Proxy | nginx (VPS) or localhost (local) |
 
 ---
@@ -380,7 +443,7 @@ Your `config.yaml` is gitignored and never committed. The install scripts auto-g
   </tr>
 </table>
 
-There are three ways to add journal entries. All three run the exact same AI pipeline — mood extraction, severity scoring, key events, master summary update, pattern detection, semantic indexing.
+There are four ways to add journal entries. All of them run the exact same AI pipeline — mood extraction, severity scoring, key events, master summary update, pattern detection, semantic indexing.
 
 ### Option 1 — Write or Import Directly in the Browser
 
@@ -486,6 +549,92 @@ Name the shortcut something like **"Upload to Journal Intelligence"** and save i
 
 ---
 
+### Option 4 — Text Message (SMS)
+
+Send a journal entry as a text message and have it land on your Timeline automatically — no app, no file picker, no shortcut.
+
+This uses Twilio to receive your inbound SMS and forward it to your server. You'll need a Twilio account and a phone number. The setup takes about 15 minutes.
+
+#### Step 1 — Get a Twilio Number
+
+1. Sign up at [twilio.com](https://www.twilio.com) if you don't have an account
+2. Go to **Phone Numbers → Manage → Buy a number**
+3. Choose a number with SMS capability
+4. **Toll-free numbers** (e.g. +1-800-xxx-xxxx) require A2P 10DLC verification before they can send/receive SMS — Twilio's process typically takes 1–3 business days. **Local numbers** work immediately but have lower throughput limits
+5. After purchase, note your phone number — you'll need it in the config
+
+#### Step 2 — Get Your Twilio Credentials
+
+From the [Twilio Console](https://console.twilio.com):
+
+1. Copy your **Account SID** — starts with `AC`
+2. Copy your **Auth Token** — shown under the Account SID on the dashboard
+3. Keep these private — anyone with these can send SMS from your number
+
+#### Step 3 — Add Twilio to Your config.yaml
+
+Open `config/config.yaml` and add the following block. If you copied `config.example.yaml`, look for the `twilio:` section — it's already there, just fill it in.
+
+```yaml
+twilio:
+  account_sid: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  auth_token: "your_auth_token_here"
+  from_number: "+18005550100"   # Your Twilio number in E.164 format
+```
+
+Save the file and restart the backend:
+
+```bash
+systemctl restart journal-dashboard
+```
+
+#### Step 4 — Point Twilio at Your Server
+
+1. Go to **Phone Numbers → Manage → Active Numbers** in the Twilio Console
+2. Click your number
+3. Scroll to **Messaging Configuration**
+4. Under **"A message comes in"**, set it to **Webhook** and enter:
+   ```
+   https://your-domain.com/api/sms/inbound
+   ```
+   *(Replace `your-domain.com` with your actual domain)*
+5. Set the HTTP method to **POST**
+6. Click **Save**
+
+#### Step 5 — Link Your Phone Number to Your Account
+
+Your SMS number needs to be associated with your Journal Intelligence account so the system knows which user to create the entry for.
+
+1. Log into your dashboard
+2. Go to **Settings → Account**
+3. Find the **SMS Journal** section
+4. Enter the phone number you'll be texting *from* (your personal cell number, in E.164 format: `+15555550100`)
+5. Hit **Save**
+
+From now on, any text you send to your Twilio number from that phone will land as a journal entry on your Timeline.
+
+#### How It Works
+
+Text your Twilio number from your registered cell phone. That's it. The entry processes through the full AI pipeline — mood, severity, events, master summary — exactly like any other entry method. The text body becomes the entry content. Date and time are pulled from the SMS timestamp.
+
+**Privacy note:** SMS messages travel through Twilio's infrastructure before reaching your server. If that's a concern, use one of the other entry methods — they all stay on your server end-to-end.
+
+#### Using a Different SMS Provider
+
+The inbound webhook endpoint is at `POST /api/sms/inbound`. Any SMS provider that supports inbound webhooks can be wired up by pointing their webhook at that URL and adjusting the request parsing in `sms_routes.py` to match their payload format. Twilio is the tested default.
+
+#### Local Testing
+
+If you're developing locally and want to test SMS without a real Twilio number, set this environment variable before starting the server to skip Twilio signature validation:
+
+```bash
+export SKIP_TWILIO_VALIDATION=1
+```
+
+Then use a tool like `curl` to POST a fake SMS payload directly to `http://localhost:8000/api/sms/inbound`.
+
+---
+
 ## Backup & Restore
 
 The app includes two scripts for database and derived data backups: `backup_journal.sh` and `restore_journal.sh`. Make them executable after cloning:
@@ -567,10 +716,9 @@ This is early. But the roadmap is ambitious - and I'm not slowing down.
 - **Therapist viewer mode** - let your therapist see patterns, timeline, and leave timestamped notes — without ever reading your raw entries.
 - **Weekly intelligence briefing** - every week, a personal briefing: what improved, what got worse, which topics disappeared, which people showed up more. "Your average distress is up 18% over the last 7 days." Closes the loop between daily writing and actual self-awareness.
 - **Life Cases / Threads** - persistent storylines that auto-aggregate related entries into a named case. "Relationship Conflict." "Custody Stress." "Burnout at Work." Each case gathers related entries, people, contradictions, attachments, key quotes, and a chronological event timeline.
-- **Moments extraction** - auto-pull the most emotionally significant lines from your entries. "I can't do this anymore." "Today was the first calm day in weeks." Organized into a curated feed — turning points, first appearances, most repeated promises.
-- **Safe evidence locker upgrade** - structured tagging, chain-of-context links to timeline entries, evidence bundles exportable as ZIP or PDF, OCR on uploaded images and documents.
-- **Truth Layer** - a view that surfaces patterns you may not consciously recognize. Recurring gaslighting indicators, memory invalidation patterns, broken promises cross-referenced against behavior, rewritten history. Grounded entirely in your own words. Observational, never diagnostic. The sentence that describes it: *"There's a view that shows you what the data actually says."*
+- **Truth Layer** - a view that surfaces patterns you may not consciously recognize. Recurring gaslighting indicators, memory invalidation patterns, broken promises cross-referenced against behavior, rewritten history. Grounded entirely in your own words. Observational, never diagnostic.
 - **Promise tracker** - every "I'll change," "I won't do that again," "I promise" your journal records, cross-referenced against what happened next. Outcome badges: honored, broken, unknown, ongoing. Exportable as part of a legal documentation packet.
+- **Voice-to-journal** - record from your phone, transcribe via Whisper, upload as an entry. Removes typing friction entirely for mobile users.
 - **Deeper pattern intelligence** - longer lookback windows, cross-pattern correlations, predictive mood modeling
 - **Community resources** - user-contributed topic configs, prompt packs, theme presets
 
