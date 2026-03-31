@@ -29,6 +29,7 @@ import AskMyJournal from './pages/AskMyJournal'
 import EarlyWarning from './pages/EarlyWarning'
 import DayOneImport from './pages/DayOneImport'
 import DecisionAssistant from './pages/DecisionAssistant'
+import WarRoom from './pages/WarRoom'
 import Detective from './pages/Detective'
 import DetectiveFull from './pages/DetectiveFull'
 import MentalHealth from './pages/MentalHealth'
@@ -52,6 +53,7 @@ const DRAWER_GROUPS = [
       { to: '/',             icon: '◈', label: 'Timeline'       },
       { to: '/write',        icon: '✎', label: 'Write'          },
       { to: '/ask',          icon: '⌖', label: 'Ask My Journal' },
+      { to: '/war-room',     icon: '⚔', label: 'War Room'      },
       { to: '/decide',       icon: '⊘', label: 'Help Me Choose' },
     ]
   },
@@ -80,11 +82,12 @@ const DRAWER_GROUPS = [
     ]
   },
   {
-    label: 'Premium',
+        label: 'Premium',
     links: [
-      { to: '/detective', icon: '🕵', label: 'Detective Mode', detectiveOnly: true },
-      { to: '/my-story',  icon: '✦',  label: 'My Story'                         },
-      { to: '/mental-health', icon: '♥', label: 'My Mental Health'               },
+      { to: '/detective',    icon: '🕵', label: 'Detective Mode', detectiveOnly: true },
+      { to: '/mental-health',icon: '♥', label: 'My Mental Health'                   },
+      { to: '/my-story',     icon: '✦',  label: 'My Story'                          },
+      { to: '/war-room',     icon: '⚔',  label: 'War Room'                          },
     ]
   },
   {
@@ -102,6 +105,7 @@ const PAGE_TITLES = {
   '/':               'Timeline',
   '/write':          'Write',
   '/ask':            'Ask My Journal',
+  '/war-room':       'War Room',
   '/decide':         'Help Me Choose',
   '/patterns':       'Patterns',
   '/early-warning':  'Early Warning',
@@ -456,6 +460,7 @@ export default function MobileShell() {
             <Route path="/early-warning"          element={<ProtectedRoute><EarlyWarning /></ProtectedRoute>} />
             <Route path="/import/dayone"          element={<ProtectedRoute><DayOneImport /></ProtectedRoute>} />
             <Route path="/decide"                 element={<ProtectedRoute><DecisionAssistant /></ProtectedRoute>} />
+            <Route path="/war-room"               element={<ProtectedRoute><WarRoom /></ProtectedRoute>} />
             <Route path="/detective"              element={<ProtectedRoute><Detective /></ProtectedRoute>} />
             <Route path="/detective/full"         element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
             <Route path="/mental-health"          element={<ProtectedRoute><MentalHealth /></ProtectedRoute>} />

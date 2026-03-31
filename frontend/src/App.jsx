@@ -28,6 +28,7 @@ import AskMyJournal from './pages/AskMyJournal'
 import EarlyWarning from './pages/EarlyWarning'
 import DayOneImport from './pages/DayOneImport'
 import DecisionAssistant from './pages/DecisionAssistant'
+import WarRoom from './pages/WarRoom'
 import Detective from './pages/Detective'
 import FairnessLedger from './pages/FairnessLedger'
 import MentalHealth from './pages/MentalHealth'
@@ -234,6 +235,7 @@ function Shell() {
             <Route path="/early-warning" element={<ProtectedRoute><EarlyWarning /></ProtectedRoute>} />
             <Route path="/import/dayone" element={<ProtectedRoute><DayOneImport /></ProtectedRoute>} />
             <Route path="/decide" element={<ProtectedRoute><DecisionAssistant /></ProtectedRoute>} />
+            <Route path="/war-room" element={<ProtectedRoute><WarRoom /></ProtectedRoute>} />
             <Route path="/detective" element={<ProtectedRoute><Detective /></ProtectedRoute>} />
             <Route path="/fairness" element={<ProtectedRoute><FairnessLedger /></ProtectedRoute>} />
             <Route path="/detective/full" element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />

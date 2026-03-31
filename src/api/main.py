@@ -2212,6 +2212,9 @@ register_research_agent_routes(app, require_any_user, require_owner)
 from src.api.sms_routes import register_sms_routes
 register_sms_routes(app, require_any_user)
 
+from src.api.war_room_routes import register_war_room_routes
+register_war_room_routes(app, require_any_user)
+
 from src.api.fairness_routes import register_fairness_routes
 from src.auth.auth_db import get_db as _fairness_get_db
 from src.api.ai_client import create_message as _fairness_create_message
