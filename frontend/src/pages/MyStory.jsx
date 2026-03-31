@@ -182,7 +182,7 @@ function CaseCheckbox({ c, checked, onChange }) {
   )
 }
 
-function NarrativeResult({ narrative, onSave, onCopy, saved, copying, saving }) {
+function NarrativeResult({ narrative, onSave, onCopy, onExport, saved, copying, saving, exporting }) {
   const accentColor = '#6366f1'
   return (
     <div style={{
@@ -228,6 +228,23 @@ function NarrativeResult({ narrative, onSave, onCopy, saved, copying, saving }) 
             }}
           >
             {copying ? '✓ Copied' : 'Copy'}
+          </button>
+          <button
+            onClick={onExport}
+            disabled={exporting}
+            style={{
+              padding: '5px 14px',
+              background: exporting ? 'rgba(99,102,241,0.5)' : '#6366f1',
+              border: '1px solid transparent',
+              borderRadius: 6,
+              fontSize: 12,
+              color: '#fff',
+              cursor: exporting ? 'not-allowed' : 'pointer',
+              fontFamily: 'IBM Plex Mono',
+              fontWeight: 600,
+            }}
+          >
+            {exporting ? '...' : 'Export'}
           </button>
           <span style={{
             padding: '5px 14px',
@@ -363,6 +380,8 @@ export default function MyStory() {
   const [copied, setCopied]           = useState(false)
   const [saved, setSaved]             = useState(false)
   const [saving, setSaving]           = useState(false)
+  const [exporting, setExporting]     = useState(false)
+  const [exportError, setExportError] = useState('')
   const [drafts, setDrafts]           = useState([])
   const [draftsLoading, setDraftsLoading] = useState(true)
   const [draftTitle, setDraftTitle]   = useState('')
@@ -473,6 +492,40 @@ export default function MyStory() {
     copyToClipboard(narrative)
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
+  }
+
+  async function handleExport() {
+    if (!narrative || exporting) return
+    setExporting(true)
+    setExportError('')
+    try {
+      const sources = {
+        journal_entries: includeJournal,
+        case_ids: selectedCases,
+        has_manual_context: !!manualContext.trim(),
+        include_fairness: includeFairness,
+      }
+      const resp = await api.post('/api/my-story/export-pdf', {
+        narrative,
+        display_name: narrative.split(' ')[0] || 'Author',
+        purpose,
+        style,
+        sources,
+      }, { responseType: 'blob' })
+
+      const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `my_story_${purpose}_${new Date().toISOString().slice(0,10)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setExportError('Export failed. Please try again.')
+    } finally {
+      setExporting(false)
+    }
   }
 
   function loadDraft(draft) {
@@ -788,9 +841,11 @@ export default function MyStory() {
                 narrative={narrative}
                 onSave={handleSave}
                 onCopy={handleCopy}
+                onExport={handleExport}
                 saved={saved}
                 copying={copied}
                 saving={saving}
+                exporting={exporting}
               />
             </div>
           )}

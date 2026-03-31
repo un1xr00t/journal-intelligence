@@ -459,6 +459,63 @@ Now write {display_name}'s story based on everything above. Remember: you are th
         finally:
             conn.close()
 
+
+    # ── PDF Export ────────────────────────────────────────────────────────────
+
+    @app.post("/api/my-story/export-pdf")
+    async def export_story_pdf(body: dict, user: dict = Depends(require_any_user)):
+        """
+        Generate a PDF for a My Story narrative.
+
+        Body:
+          narrative     str   — the generated narrative text
+          display_name  str   — author display name
+          purpose       str   — general | therapist | lawyer | family | friend | court
+          style         str   — advocate | personal | clinical | timeline
+          sources       dict  — {journal_entries, case_ids, has_manual_context, include_fairness}
+        """
+        import io
+        from fastapi.responses import StreamingResponse
+        from pydantic import BaseModel
+
+        narrative    = (body.get("narrative") or "").strip()
+        display_name = (body.get("display_name") or "Author").strip()
+        purpose      = body.get("purpose", "general")
+        style        = body.get("style", "advocate")
+        sources      = body.get("sources", {})
+
+        if not narrative:
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(status_code=400, detail="narrative is required")
+
+        try:
+            from src.nlp.my_story_pdf_export import generate_story_pdf
+            result = generate_story_pdf(
+                narrative=narrative,
+                display_name=display_name,
+                user_id=user["id"],
+                purpose=purpose,
+                style=style,
+                sources=sources,
+            )
+        except Exception as ex:
+            logger.error(f"[my_story] PDF export failed: {ex}", exc_info=True)
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(status_code=500, detail=f"PDF export failed: {ex}")
+
+        pdf_path = result["path"]
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{result["filename"]}"',
+                "Content-Length": str(len(pdf_bytes)),
+            },
+        )
+
     @app.delete("/api/my-story/drafts/{draft_id}")
     async def delete_draft(draft_id: int, user: dict = Depends(require_any_user)):
         conn = _db()

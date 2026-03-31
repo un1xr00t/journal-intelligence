@@ -22,6 +22,7 @@ const STEPS = [
   { id: 'ai_key',    icon: '⊙', label: 'AI Setup'  },
   { id: 'memory',    icon: '◷', label: 'Memory'    },
   { id: 'dayone',   icon: '⬆', label: 'Import'    },
+  { id: 'sms',      icon: '◉', label: 'Text Journal' },
   { id: 'done',      icon: '〇', label: 'All Set'   },
 ]
 const SITUATION_OPTS = [
@@ -1203,6 +1204,156 @@ function Done({ formData, onDone }) {
   )
 }
 
+
+// ─── SMS Step ─────────────────────────────────────────────────────────────────
+function SmsStep({ next, back }) {
+  const [phase, setPhase]   = useState('enter')   // 'enter' | 'verify' | 'done'
+  const [phone, setPhone]   = useState('')
+  const [code, setCode]     = useState('')
+  const [loading, setLoading] = useState(false)
+  const [err, setErr]       = useState('')
+
+  const inputSx = {
+    width: '100%', padding: '11px 14px', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 8, color: 'rgba(255,255,255,0.88)', fontSize: 14, outline: 'none',
+    fontFamily: "'DM Sans',sans-serif",
+  }
+
+  const sendCode = async () => {
+    setLoading(true); setErr('')
+    try {
+      await api.post('/api/sms/request-verification', { phone_number: phone })
+      setPhase('verify')
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Failed to send verification code')
+    }
+    setLoading(false)
+  }
+
+  const verify = async () => {
+    setLoading(true); setErr('')
+    try {
+      await api.post('/api/sms/verify', { phone_number: phone, code })
+      setPhase('done')
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Invalid or expired code')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 12, color: 'var(--accent,#6366f1)', fontFamily: "'IBM Plex Mono',monospace", letterSpacing: '0.1em', marginBottom: 6 }}>◉ TEXT YOUR JOURNAL</div>
+        <h2 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: 20, color: 'rgba(255,255,255,0.88)', margin: '0 0 6px' }}>Journal by SMS</h2>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', lineHeight: 1.6, margin: 0 }}>
+          Link a phone number to text journal entries anytime — no app needed. Only your verified number can submit entries.
+        </p>
+      </div>
+
+      {phase === 'enter' && (
+        <>
+          <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", letterSpacing: '0.12em', color: 'rgba(255,255,255,0.22)', textTransform: 'uppercase', marginBottom: 6 }}>Your Mobile Number</div>
+          <input
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="+1 555 000 0000"
+            style={inputSx}
+            onKeyDown={e => e.key === 'Enter' && phone && !loading && sendCode()}
+          />
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 5, fontFamily: "'IBM Plex Mono',monospace" }}>
+            US format: 10 digits. International: include + country code.
+          </div>
+          {err && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <GhostBtn onClick={back}>← Back</GhostBtn>
+            <button
+              onClick={sendCode}
+              disabled={!phone.trim() || loading}
+              style={{
+                flex: 1, padding: '11px 0', border: 'none', borderRadius: 8,
+                fontSize: 13, fontWeight: 700, fontFamily: 'Syne,sans-serif', letterSpacing: '0.04em',
+                cursor: !phone.trim() || loading ? 'not-allowed' : 'pointer',
+                background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))',
+                color: '#fff', opacity: !phone.trim() || loading ? 0.5 : 1,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {loading ? <Spin /> : 'Send Code →'}
+            </button>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button onClick={next} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.25)', fontFamily: "'IBM Plex Mono',monospace" }}>
+              skip for now →
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === 'verify' && (
+        <>
+          <div style={{ padding: '10px 14px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, marginBottom: 16, fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>
+            Code sent to <span style={{ color: 'rgba(255,255,255,0.7)', fontFamily: "'IBM Plex Mono',monospace" }}>{phone}</span> — expires in 10 minutes
+          </div>
+          <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", letterSpacing: '0.12em', color: 'rgba(255,255,255,0.22)', textTransform: 'uppercase', marginBottom: 6 }}>6-Digit Code</div>
+          <input
+            value={code}
+            onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="000000"
+            maxLength={6}
+            style={{ ...inputSx, fontSize: 22, letterSpacing: '0.3em', textAlign: 'center', fontFamily: "'IBM Plex Mono',monospace" }}
+            autoFocus
+            onKeyDown={e => e.key === 'Enter' && code.length === 6 && !loading && verify()}
+          />
+          {err && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <GhostBtn onClick={() => { setPhase('enter'); setErr(''); setCode('') }}>Resend</GhostBtn>
+            <button
+              onClick={verify}
+              disabled={code.length !== 6 || loading}
+              style={{
+                flex: 1, padding: '11px 0', border: 'none', borderRadius: 8,
+                fontSize: 13, fontWeight: 700, fontFamily: 'Syne,sans-serif', letterSpacing: '0.04em',
+                cursor: code.length !== 6 || loading ? 'not-allowed' : 'pointer',
+                background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))',
+                color: '#fff', opacity: code.length !== 6 || loading ? 0.5 : 1,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {loading ? <Spin /> : 'Verify Number →'}
+            </button>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button onClick={next} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.25)', fontFamily: "'IBM Plex Mono',monospace" }}>
+              skip for now →
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === 'done' && (
+        <div style={{ textAlign: 'center', padding: '12px 0' }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px',
+            background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#10b981',
+          }}>✓</div>
+          <h3 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 800, fontSize: 18, color: 'rgba(255,255,255,0.88)', margin: '0 0 8px' }}>Phone verified!</h3>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', lineHeight: 1.6, marginBottom: 8 }}>
+            Text any message to your journal number to save it as an entry. You'll receive an AI-generated summary back.
+          </p>
+          <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, marginBottom: 20, fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: "'IBM Plex Mono',monospace" }}>
+            {phone}
+          </div>
+          <PrimaryBtn onClick={next} full style={{ padding: '12px 0' }}>Continue Setup →</PrimaryBtn>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function Onboarding() {
   const navigate = useNavigate()
@@ -1234,6 +1385,7 @@ export default function Onboarding() {
     <AIProviderStep next={next} back={back} />,
     <Memory  formData={form} next={next} back={back} />,
     <DayOneStep next={next} back={back} />,
+    <SmsStep  next={next} back={back} />,
     <Done    formData={form} onDone={handleDone} />,
   ]
 

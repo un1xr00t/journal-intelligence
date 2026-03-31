@@ -1821,6 +1821,208 @@ function AppearanceSection() {
   )
 }
 
+
+// ─── SMS / Text Journal Section ───────────────────────────────────────────────
+function SmsSection() {
+  const [status, setStatus]   = useState(null)   // { phone_number, verified }
+  const [loading, setLoading] = useState(true)
+  const [phase, setPhase]     = useState('idle') // 'idle' | 'enter' | 'verify' | 'removing'
+  const [phone, setPhone]     = useState('')
+  const [code, setCode]       = useState('')
+  const [sending, setSending] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [err, setErr]         = useState('')
+  const [msg, setMsg]         = useState('')
+
+  const inputSx = {
+    width: '100%', padding: '10px 13px', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 8, color: 'rgba(255,255,255,0.88)', fontSize: 14, outline: 'none',
+    fontFamily: "'DM Sans',sans-serif",
+  }
+
+  const load = () => {
+    setLoading(true)
+    api.get('/api/sms/status')
+      .then(r => { setStatus(r.data); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const sendCode = async () => {
+    setSending(true); setErr('')
+    try {
+      await api.post('/api/sms/request-verification', { phone_number: phone })
+      setPhase('verify')
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Failed to send code')
+    }
+    setSending(false)
+  }
+
+  const verify = async () => {
+    setVerifying(true); setErr('')
+    try {
+      await api.post('/api/sms/verify', { phone_number: phone, code })
+      setMsg('Phone verified! You can now text journal entries.')
+      setPhase('idle')
+      setPhone(''); setCode('')
+      load()
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Invalid or expired code')
+    }
+    setVerifying(false)
+  }
+
+  const remove = async () => {
+    if (!window.confirm('Remove your verified phone number? You will no longer be able to text journal entries.')) return
+    try {
+      await api.delete('/api/sms/phone')
+      setMsg('Phone number removed.')
+      load()
+    } catch {
+      setErr('Failed to remove phone number.')
+    }
+  }
+
+  if (loading) return (
+    <Card><div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Loading SMS status…</div></Card>
+  )
+
+  return (
+    <>
+      {msg && (
+        <div style={{ padding: '10px 14px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#10b981' }}>
+          {msg}
+        </div>
+      )}
+
+      {/* Current verified number */}
+      {status?.verified ? (
+        <Card>
+          <Label>Verified Phone Number</Label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 16, fontFamily: "'IBM Plex Mono',monospace", color: 'rgba(255,255,255,0.85)', letterSpacing: '0.08em' }}>
+                {status.phone_number}
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontFamily: "'IBM Plex Mono',monospace", marginTop: 3 }}>
+                Verified · Active since {status.created_at?.slice(0, 10)}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button
+                onClick={() => { setPhase('enter'); setMsg(''); setErr('') }}
+                style={{ padding: '7px 14px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 7, fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontFamily: 'Syne,sans-serif' }}
+              >Change</button>
+              <button
+                onClick={remove}
+                style={{ padding: '7px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 7, fontSize: 11, fontWeight: 600, color: 'rgba(239,68,68,0.7)', cursor: 'pointer', fontFamily: 'Syne,sans-serif' }}
+              >Remove</button>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <Label>No Phone Linked</Label>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 14, lineHeight: 1.6 }}>
+            Link a verified mobile number to text journal entries anytime — no app needed. Only your registered number can submit entries.
+          </p>
+          {phase === 'idle' && (
+            <button
+              onClick={() => { setPhase('enter'); setErr(''); setMsg('') }}
+              style={{ padding: '9px 18px', background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'Syne,sans-serif' }}
+            >+ Add Phone Number</button>
+          )}
+        </Card>
+      )}
+
+      {/* Enter phone phase */}
+      {phase === 'enter' && (
+        <Card>
+          <Label>Enter Your Mobile Number</Label>
+          <input
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="+1 555 000 0000"
+            style={inputSx}
+            onKeyDown={e => e.key === 'Enter' && phone && !sending && sendCode()}
+          />
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', marginTop: 5, fontFamily: "'IBM Plex Mono',monospace" }}>
+            US: 10 digits. International: include + country code.
+          </div>
+          {err && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button
+              onClick={() => { setPhase('idle'); setErr('') }}
+              style={{ padding: '9px 16px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12, color: 'rgba(255,255,255,0.35)', cursor: 'pointer', fontFamily: 'Syne,sans-serif' }}
+            >Cancel</button>
+            <button
+              onClick={sendCode}
+              disabled={!phone.trim() || sending}
+              style={{ flex: 1, padding: '9px 0', background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#fff', cursor: !phone.trim() || sending ? 'not-allowed' : 'pointer', opacity: !phone.trim() || sending ? 0.5 : 1, fontFamily: 'Syne,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              {sending ? <Spin s={12} /> : 'Send Code'}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {/* Verify phase */}
+      {phase === 'verify' && (
+        <Card>
+          <Label>Enter Verification Code</Label>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10, fontFamily: "'IBM Plex Mono',monospace" }}>
+            Sent to {phone} · expires in 10 min
+          </div>
+          <input
+            value={code}
+            onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="000000"
+            maxLength={6}
+            autoFocus
+            style={{ ...inputSx, fontSize: 22, letterSpacing: '0.3em', textAlign: 'center', fontFamily: "'IBM Plex Mono',monospace" }}
+            onKeyDown={e => e.key === 'Enter' && code.length === 6 && !verifying && verify()}
+          />
+          {err && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button
+              onClick={() => { setPhase('enter'); setErr(''); setCode('') }}
+              style={{ padding: '9px 16px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12, color: 'rgba(255,255,255,0.35)', cursor: 'pointer', fontFamily: 'Syne,sans-serif' }}
+            >Resend</button>
+            <button
+              onClick={verify}
+              disabled={code.length !== 6 || verifying}
+              style={{ flex: 1, padding: '9px 0', background: 'linear-gradient(135deg, var(--accent,#6366f1), var(--accent-2,#8b5cf6))', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#fff', cursor: code.length !== 6 || verifying ? 'not-allowed' : 'pointer', opacity: code.length !== 6 || verifying ? 0.5 : 1, fontFamily: 'Syne,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              {verifying ? <Spin s={12} /> : 'Verify Number'}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {/* How it works info */}
+      <Card style={{ marginTop: 4 }}>
+        <Label>How It Works</Label>
+        <div style={{ display: 'grid', gap: 10 }}>
+          {[
+            { icon: '◉', text: 'Verify your number once — only your number can submit entries' },
+            { icon: '〜', text: 'Text any message to your journal Twilio number to save it as an entry' },
+            { icon: '◷', text: "You'll receive an AI-generated summary reply within seconds" },
+            { icon: '⊕', text: 'Entries run through the same full AI pipeline as any other entry' },
+          ].map((row, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 11, color: 'var(--accent,#6366f1)', flexShrink: 0, marginTop: 1 }}>{row.icon}</span>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>{row.text}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </>
+  )
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'memory',   icon: '◷', label: 'Memory Profile' },
@@ -1829,6 +2031,7 @@ const TABS = [
   { id: 'sessions', icon: '◎', label: 'Sessions'        },
   { id: 'data',     icon: '◈', label: 'Data'            },
   { id: 'appearance', icon: '◉', label: 'Appearance'   },
+  { id: 'sms',        icon: '◉', label: 'Text Journal' },
 ]
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
@@ -1916,6 +2119,12 @@ export default function Settings() {
         <>
           <SectionTitle icon="◉" title="Appearance" subtitle="Global UI theme — colors, palette, and typography" />
           <AppearanceSection />
+        </>
+      )}
+      {tab === 'sms' && (
+        <>
+          <SectionTitle icon="◉" title="Text Journal" subtitle="Journal via SMS — verify your number to text entries" />
+          <SmsSection />
         </>
       )}
 
