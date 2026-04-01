@@ -3,6 +3,8 @@
  * Personalized, task-based exit plan engine.
  */
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
+import WarRoomContextBanner from '../components/WarRoomContextBanner'
 import api from '../services/api'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1336,6 +1338,7 @@ export default function ExitPlan() {
 
   return (
     <div>
+      <WarRoomContextBanner />
       {/* Full Workspace Banner */}
       <div
         onClick={() => window.open('/exitplan-full', '_blank')}

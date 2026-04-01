@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
+import WarRoomContextBanner from '../components/WarRoomContextBanner'
 import api from '../services/api'
 
 const GOALS = [
@@ -485,6 +487,17 @@ export default function DecisionAssistant() {
   const [expandedSaved, setExpandedSaved] = useState(null)   // { opt, id } for saved modal
   const [deletingId, setDeletingId] = useState(null)
 
+  // War Room pre-fill
+  useEffect(() => {
+    const warRoomPrefill = window.history.state?.usr?.warRoomItem
+    if (warRoomPrefill) {
+      const hint = warRoomPrefill.why
+        ? warRoomPrefill.title + ': ' + warRoomPrefill.why
+        : warRoomPrefill.title
+      setContextHint(hint)
+    }
+  }, [])
+
   const run = async () => {
     setStep('loading')
     setError(null)
@@ -561,6 +574,7 @@ export default function DecisionAssistant() {
   if (viewSaved) {
     return (
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      <WarRoomContextBanner />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
           <button onClick={() => setViewSaved(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, cursor: 'pointer', padding: 0 }}>←</button>
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 22, color: 'var(--text-primary)', margin: 0 }}>Saved Decisions</h1>

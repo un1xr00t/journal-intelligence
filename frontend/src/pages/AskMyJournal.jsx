@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
+import WarRoomContextBanner from '../components/WarRoomContextBanner'
 import api from '../services/api'
 
 const ALL_SUGGESTED = [
@@ -55,6 +57,16 @@ export default function AskMyJournal() {
       .catch(() => {})
   }, [])
 
+  // War Room auto-ask: pre-fill and fire query if navigated here from War Room
+  useEffect(() => {
+    const warRoomAutoAsk = window.history.state?.usr?.warRoomItem
+    if (warRoomAutoAsk) {
+      const q = warRoomAutoAsk.title
+      setQuery(q)
+      setTimeout(() => ask(q), 200)
+    }
+  }, [])
+
   const ask = async (q) => {
     const finalQ = (q || query).trim()
     if (!finalQ) return
@@ -86,6 +98,7 @@ export default function AskMyJournal() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      <WarRoomContextBanner />
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 24, color: 'var(--text-primary)', marginBottom: 6 }}>

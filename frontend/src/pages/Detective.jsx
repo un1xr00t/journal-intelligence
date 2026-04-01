@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
+import WarRoomContextBanner from '../components/WarRoomContextBanner'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import PageHeader from '../components/PageHeader'
@@ -110,8 +112,8 @@ export function CaseList({ cases, selected, onSelect, onCreate, creating }) {
   )
 }
 
-export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmentUpdate, onPhotosUpdate, loading }) {
-  const [content, setContent] = useState('')
+export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmentUpdate, onPhotosUpdate, loading, initialContent }) {
+  const [content, setContent] = useState(initialContent || '')
   const [type, setType] = useState('note')
   const [severity, setSeverity] = useState('medium')
   const [adding, setAdding] = useState(false)
@@ -1631,6 +1633,7 @@ export default function Detective() {
   const [casesOpen, setCasesOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   const [casePartnerOpen, setCasePartnerOpen] = useState(false)
+  const [warRoomContent, setWarRoomContent] = useState('')
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
@@ -1653,6 +1656,17 @@ export default function Detective() {
   useEffect(() => {
     if (access) loadCases()
   }, [access])
+
+  // ── War Room: match existing case + pre-fill log entry ──
+  useEffect(() => {
+    if (!access || cases.length === 0) return
+    const item = window.history.state?.usr?.warRoomItem
+    if (!item) return
+    const haystack = ((item.why || '') + ' ' + (item.title || '')).toLowerCase()
+    const match = cases.find(c => haystack.includes(c.title.toLowerCase()))
+    if (match) selectCase(match)
+    setWarRoomContent(item.why || item.title || '')
+  }, [access, cases])
 
   const loadCases = async () => {
     try {
@@ -1817,6 +1831,7 @@ export default function Detective() {
           </div>
         }
       />
+      <WarRoomContextBanner />
 
       {adminTab ? (
         <AdminPanel />
@@ -1965,6 +1980,7 @@ export default function Detective() {
                     onAttachmentUpdate={updateEntryAttachment}
                     onPhotosUpdate={updateEntryPhotos}
                     loading={loadingEntries}
+                    initialContent={warRoomContent}
                   />
                 )}
                 {activeTab === 'photos' && (

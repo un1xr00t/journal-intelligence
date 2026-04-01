@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
+import WarRoomContextBanner from '../components/WarRoomContextBanner'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
@@ -375,6 +377,7 @@ export default function MentalHealth() {
           </span>
         }
       />
+      <WarRoomContextBanner />
 
       <StatsRow stats={[
         { label: 'Wellbeing', value: fmt1(stats.avg_mood), color: '#22c55e', sub: '30-day avg mood' },

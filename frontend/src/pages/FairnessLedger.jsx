@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
+import WarRoomContextBanner from '../components/WarRoomContextBanner'
 import api from '../services/api'
 
 const CATEGORIES = [
@@ -272,10 +274,10 @@ function LogTaskModal({ myName, partnerName, member3Name, tasks, onClose, onLogg
 }
 
 // ── Contribution modal ────────────────────────────────────────────────────────
-function ContributionModal({ myName, partnerName, member3Name, onClose, onSaved }) {
+function ContributionModal({ myName, partnerName, member3Name, onClose, onSaved, initialDescription }) {
   const [who, setWho]           = useState('me')
   const [category, setCategory] = useState('childcare')
-  const [description, setDesc]  = useState('')
+  const [description, setDesc]  = useState(initialDescription || '')
   const [date, setDate]         = useState(new Date().toISOString().slice(0, 10))
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState('')
@@ -402,6 +404,7 @@ export default function FairnessLedger() {
   const [showContribModal, setShowContribModal] = useState(false)
   const [generating, setGenerating]       = useState(false)
   const [activeTab, setActiveTab]         = useState('overview')
+  const [warRoomPrefillFairness, setWarRoomPrefillFairness] = useState(null)
 
   const loadAll = useCallback(async () => {
     try {
@@ -426,6 +429,12 @@ export default function FairnessLedger() {
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // War Room: auto-open contribution modal with pre-filled context
+  useEffect(() => {
+    const item = window.history.state?.usr?.warRoomItem
+    if (item) setWarRoomPrefillFairness(item.why || item.title)
+  }, [])
 
   async function handleGenerate() {
     setGenerating(true)
@@ -455,6 +464,7 @@ export default function FairnessLedger() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      <WarRoomContextBanner />
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 22, color: 'var(--text-primary)', marginBottom: 4 }}>⚖ Fairness Ledger</div>
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -502,7 +512,7 @@ export default function FairnessLedger() {
       )}
 
       {showLogModal && <LogTaskModal myName={myName} partnerName={partnerName} member3Name={member3Name} tasks={tasks} onClose={() => setShowLogModal(false)} onLogged={loadAll} />}
-      {showContribModal && <ContributionModal myName={myName} partnerName={partnerName} member3Name={member3Name} onClose={() => setShowContribModal(false)} onSaved={loadAll} />}
+      {(showContribModal || !!warRoomPrefillFairness) && <ContributionModal myName={myName} partnerName={partnerName} member3Name={member3Name} onClose={() => { setShowContribModal(false); setWarRoomPrefillFairness(null) }} onSaved={loadAll} initialDescription={warRoomPrefillFairness || ''} />}
     </div>
   )
 }

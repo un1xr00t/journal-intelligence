@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import WarRoomContextBanner from "../components/WarRoomContextBanner";
 import {
   AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -209,7 +211,15 @@ export default function PeopleIntelligence() {
       .then(r => {
         const p = r.data.people || [];
         setPeople(p);
-        if (p.length > 0) setSelected(p[0]);
+        // War Room: auto-select person whose name appears in item.why
+        const warRoomPersonMatch = window.history.state?.usr?.warRoomItem
+        if (warRoomPersonMatch && p.length > 0) {
+          const haystack = (warRoomPersonMatch.why + ' ' + warRoomPersonMatch.title).toLowerCase()
+          const match = p.find(person => haystack.includes(person.name.toLowerCase()))
+          setSelected(match || p[0])
+        } else if (p.length > 0) {
+          setSelected(p[0]);
+        }
       })
       .catch(() => setError("Failed to load people intelligence data."))
       .finally(() => setLoading(false));
@@ -224,6 +234,7 @@ export default function PeopleIntelligence() {
   if (!people.length) return (
     <div>
       <PageHeader title="People Intelligence" subtitle="Relationship and conflict pattern map" />
+      <WarRoomContextBanner />
       <div style={{ textAlign: "center", padding: 64, color: "var(--text-muted)", fontSize: 13 }}>
         No people detected yet. Add journal entries and let the AI extract entities first.
       </div>

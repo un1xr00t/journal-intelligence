@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 
@@ -103,7 +103,7 @@ function ActionCard({ item, bucketKey, onNavigate }) {
 
       {item.tool_route && item.tool !== 'none' && (
         <button
-          onClick={() => onNavigate(item.tool_route)}
+          onClick={() => onNavigate(item.tool_route, { state: { warRoomItem: { ...item, bucket: bucketKey } } })}
           style={{
             marginTop: 4,
             background: 'transparent',
@@ -186,6 +186,14 @@ export default function WarRoom() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
+  // Restore last triage from localStorage so results survive navigation
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('war_room_last_result')
+      if (saved) setResult(JSON.parse(saved))
+    } catch { /* ignore */ }
+  }, [])
+
   const handleTriage = async () => {
     if (!brainDump.trim() || brainDump.trim().length < 10) {
       setError('Write at least a sentence. Just dump it — no structure needed.')
@@ -200,6 +208,7 @@ export default function WarRoom() {
         include_journal_context: true,
       })
       setResult(data)
+      try { localStorage.setItem('war_room_last_result', JSON.stringify(data)) } catch { /* ignore */ }
     } catch (e) {
       setError(e?.response?.data?.detail || 'Triage failed. Try again.')
     } finally {
@@ -211,6 +220,7 @@ export default function WarRoom() {
     setResult(null)
     setError(null)
     setBrainDump('')
+    try { localStorage.removeItem('war_room_last_result') } catch { /* ignore */ }
   }
 
   return (

@@ -443,10 +443,10 @@ function RuleLines() {
 }
 
 // ── Mode: Write ─────────────────────────────────────────────────────────────────
-function WriteMode({ entryDate }) {
+function WriteMode({ entryDate, initialText }) {
   const navigate = useNavigate()
   const textareaRef = useRef(null)
-  const [text, setText] = useState('')
+  const [text, setText] = useState(initialText || '')
   const [focused, setFocused] = useState(false)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState(null)  // {type, message}
@@ -840,6 +840,8 @@ export default function JournalWrite() {
   const navigate = useNavigate()
   const [mode, setMode] = useState('write')  // 'write' | 'upload'
   const [entryDate, setEntryDate] = useState(today())
+  // War Room: pre-fill textarea with item.why if navigated here from War Room
+  const warRoomInitialText = window.history.state?.usr?.warRoomItem?.why || ''
 
   return (
     <div className="jw-root">
@@ -894,7 +896,7 @@ export default function JournalWrite() {
         {/* Workspace */}
         <div className="jw-workspace">
           {mode === 'write' ? (
-            <WriteMode entryDate={entryDate} />
+            <WriteMode entryDate={entryDate} initialText={warRoomInitialText} />
           ) : (
             <UploadMode />
           )}
