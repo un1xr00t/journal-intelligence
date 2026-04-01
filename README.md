@@ -59,6 +59,10 @@ These are the features that make this different from a notes app with an API key
 
 **⊘ Decision Assistant** — When you're stuck, the system reads your journal and helps you choose. Pick a goal (protect peace, get clarity, reduce conflict, stay safe, preserve relationship, prepare before acting), add optional context, and get three grounded options — lowest-risk, balanced, and decisive — each with a risk level, emotional cost, reversibility score, next 48 hours, and specific citations from your journal history. Generate a real conversation script for the option you choose. Save decisions for later review.
 
+**◈ War Room** — Dump everything in your head into one field. The system reads your brain dump against your journal history, memory profile, and active alerts, then sorts it into Act Now, Plan This Week, and Let Go For Now — with direct links to the right tool for each item, pre-loaded with your context. Triage results persist across navigation.
+
+**◈ War Room — Brain Dump Triage** — When everything is swirling and you can't think straight, dump it all in one place. The system reads your brain dump alongside your journal history, active alerts, and memory profile — then sorts everything into three buckets: **Act Now** (do today), **Plan This Week** (schedule before Friday), and **Let Go For Now** (outside your control — stop burning energy here). Each item links directly to the right tool in the app with your context pre-loaded. Results persist across navigation so you can work through the plan without losing it.
+
 **🔒 Fully self-hosted, fully private** — Your data lives in a SQLite database on infrastructure you control. Bring your own Anthropic key, use OpenAI, or run completely locally with Ollama or LM Studio. Zero telemetry. No analytics. No third-party servers touching your journal.
 
 ---
@@ -310,6 +314,24 @@ Each option includes: a plain-language summary, why it fits your specific situat
 Choose an option and generate a **real conversation script** — an actual message or conversation opener, editable and copyable. Save decisions to review later.
 
 Available at `/decide` from the sidebar.
+
+---
+
+### ◈ War Room — Brain Dump Triage
+
+When everything is swirling and you can't think clearly, you don't need another tool to navigate — you need something to untangle it all first.
+
+The War Room is a single text field. Just write everything that's in your head — problems, decisions, fears, logistics, whatever. The system reads your brain dump alongside your journal history, memory profile, and active pattern alerts, and sorts everything into three buckets:
+
+- **◈ Act Now** (red) — things you can do *today* that reduce chaos or provide immediate relief
+- **◷ Plan This Week** (amber) — decisions, conversations, and logistics to schedule before Friday
+- **〜 Let Go For Now** (indigo) — things genuinely outside your control right now, with a one-sentence reframe for each
+
+Each item in Act Now and Plan This Week identifies the best tool for that specific thing and links directly to it — Exit Plan, Decision Assistant, Detective, Fairness Ledger, People Intelligence, Ask My Journal, Write, or Mental Health. When you navigate to that tool, your context is pre-loaded: Ask My Journal auto-fires a search, Decision Assistant pre-fills the context field, Detective highlights a matching case and pre-fills the log entry, Fairness Ledger opens a contribution modal with the item pre-filled, Write pre-fills the editor.
+
+**Persistent results** — triage results survive navigation. Go work through an item in Detective, come back, and your full plan is still there. Start a new triage when you're ready.
+
+Available from **War Room** in the sidebar.
 
 ---
 
