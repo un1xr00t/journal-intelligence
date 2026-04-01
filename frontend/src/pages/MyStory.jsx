@@ -9,7 +9,8 @@ const PURPOSES = [
   { key: 'lawyer',    label: 'Lawyer',     icon: '⊞', desc: 'Evidence-grounded, factual brief' },
   { key: 'family',    label: 'Family',     icon: '◉', desc: 'Warm, accessible, honest' },
   { key: 'friend',    label: 'Friend',     icon: '◌', desc: 'Real and direct, no softening' },
-  { key: 'court',     label: 'Court',      icon: '◈', desc: 'Documented facts & conduct patterns' },
+  { key: 'court',         label: 'Court',          icon: '◈', desc: 'Documented facts & conduct patterns' },
+  { key: 'quick_rundown', label: 'Quick Rundown',  icon: '⚡', desc: "What's wrong — in your own words, fast" },
 ]
 
 const STYLES = [
@@ -30,7 +31,8 @@ function purposeColor(key) {
     lawyer:    '#f59e0b',
     family:    '#ec4899',
     friend:    '#06b6d4',
-    court:     '#ef4444',
+    court:         '#ef4444',
+    quick_rundown: '#f97316',
   }
   return map[key] || '#6366f1'
 }

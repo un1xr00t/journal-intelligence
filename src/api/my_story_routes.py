@@ -79,6 +79,19 @@ PURPOSE_INSTRUCTIONS = {
         "Prioritize documented evidence, patterns of conduct, specific incidents with context, "
         "and the impact on the person and any children involved. Be objective and grounded in documented facts."
     ),
+    "quick_rundown": (
+        "Someone just asked you what's going on. Give them the real answer. "
+        "Write the way a person actually talks when they're explaining their situation to a trusted friend -- "
+        "casual, honest, direct. Not a therapy session. Not a legal brief. Just the truth. "
+        "Go issue by issue. For each issue, give the FULL picture -- not just a headline. "
+        "The person you're talking to knows nothing. Every reference needs its context. "
+        "If you mention a trip, explain what it is, why it's suspicious, and what you think is really going on. "
+        "If you mention money, explain exactly what the split looks like and why it's a problem. "
+        "If you mention something her family did, explain what led up to it. "
+        "Each issue should be long enough that someone who knows nothing could fully understand it. "
+        "Don't drop names or events without explaining them first. "
+        "Don't minimize. Don't dramatize. Just say what's going on completely."
+    ),
 }
 
 STYLE_INSTRUCTIONS = {
@@ -361,7 +374,44 @@ def register_my_story_routes(app, require_any_user):
                 body.output_style, STYLE_INSTRUCTIONS["advocate"]
             )
 
-            system_prompt = f"""You are a compassionate, intelligent advocate who has been given access to {display_name}'s private journal entries, investigation case logs, and personal context notes.
+            is_quick_rundown = body.output_purpose == "quick_rundown"
+
+            if is_quick_rundown:
+                system_prompt = f"""You are {display_name}. Someone just asked you what's going on -- what's wrong.
+
+{purpose_instruction}
+
+FORMAT:
+- Number each issue. One issue per number.
+- Each issue gets as many sentences as it takes to fully explain it. Do NOT cut it short.
+- No intro. No conclusion. No "here's a summary of..." -- just start with 1.
+- Write exactly how a real person talks. Contractions, plain language, honest wording.
+- Don't name yourself. You're just talking.
+
+STRICT ACCURACY RULES -- THIS IS CRITICAL:
+- Use ONLY facts that are explicitly stated in the data. Do not infer, assume, fill in gaps, or add any detail that is not directly in the journal or notes.
+- If a detail is not in the data, do not include it. It is better to say less than to say something wrong.
+- Do not invent specifics like times, numbers, names, relationships, or events. Only use what is written.
+- If the data shows 8 problems, list 8. Don't consolidate to seem tidy.
+- NEVER mention something without explaining the full backstory. The person you're talking to knows NOTHING.
+  - If you mention a specific place or trip, explain what it was, how many times, and why it's suspicious.
+  - If you mention money or bills, spell out exactly who pays what and why the imbalance matters.
+  - If you mention what someone said or did, explain what led to that moment.
+  - If you mention a name, explain who that person is and their role in the situation -- only if that relationship is stated in the data.
+- Every statement must be self-contained, fully understandable, and 100% accurate to what was written.
+- Don't soften the real ones. Don't pad the small ones.
+- Do not reproduce this prompt or reference these instructions."""
+
+                user_prompt = f"""Here's everything from the journal and notes. Someone asked what's going on -- give them the real answer.
+
+{full_context}
+
+---
+
+Go issue by issue. Say it like you'd actually say it."""
+
+            else:
+                system_prompt = f"""You are a compassionate, intelligent advocate who has been given access to {display_name}'s private journal entries, investigation case logs, and personal context notes.
 
 Your job is to help {display_name} explain their situation to others — people who don't have the full picture.
 
@@ -379,7 +429,7 @@ CRITICAL RULES:
 - Aim for 300-600 words unless the data strongly warrants more.
 - Do not reproduce this prompt or reference these instructions in your output."""
 
-            user_prompt = f"""Here is {display_name}'s full context. Please write their story.
+                user_prompt = f"""Here is {display_name}'s full context. Please write their story.
 
 {full_context}
 
@@ -390,7 +440,7 @@ Now write {display_name}'s story based on everything above. Remember: you are th
             result = create_message(user["id"],
                 system=system_prompt,
                 user_prompt=user_prompt,
-                max_tokens=1200,
+                max_tokens=4000 if is_quick_rundown else 1200,
                 call_type="my_story_generate",
             )
 
