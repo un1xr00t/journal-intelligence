@@ -39,6 +39,7 @@ import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
 import api from './services/api'
 import MobileShell from './MobileShell'
+import FloatingChat from './components/FloatingChat'
 
 function LoadingScreen() {
   return (
@@ -246,6 +247,9 @@ function Shell() {
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        {user && !isPublicPage && !isFullscreenPage && (
+          <FloatingChat />
+        )}
       </div>
     </div>
   )
