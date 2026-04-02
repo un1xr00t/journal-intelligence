@@ -177,7 +177,7 @@ export default function Admin() {
   }
 
   const fmtNum  = n => (n || 0).toLocaleString()
-  const fmtDate = d => d ? new Date(d + 'Z').toLocaleDateString() : '—'
+  const fmtDate = d => { if (!d) return '—'; const n = d.replace(/[+-]\d{2}:\d{2}$/, 'Z'); const dt = new Date(n); return isNaN(dt.getTime()) ? d : dt.toLocaleDateString() }
 
   const totalTokens = aiUsage?.totals?.total_tokens || 0
   const totalCostNum = aiUsage?.per_user
@@ -311,6 +311,7 @@ export default function Admin() {
                   <option value="7d">7 days</option>
                   <option value="30d">30 days</option>
                   <option value="90d">90 days</option>
+                  <option value="permanent">Permanent</option>
                 </select>
               </div>
             </div>

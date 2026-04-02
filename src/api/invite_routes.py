@@ -36,10 +36,11 @@ logger  = logging.getLogger("journal")
 DB_PATH = Path(__file__).parent.parent.parent / "db" / "journal.db"
 
 ALLOWED_DURATIONS = {
-    "24h": timedelta(hours=24),
-    "7d":  timedelta(days=7),
-    "30d": timedelta(days=30),
-    "90d": timedelta(days=90),
+    "24h":       timedelta(hours=24),
+    "7d":        timedelta(days=7),
+    "30d":       timedelta(days=30),
+    "90d":       timedelta(days=90),
+    "permanent": timedelta(days=36500),   # ~100 years
 }
 DEFAULT_DURATION = "30d"
 
