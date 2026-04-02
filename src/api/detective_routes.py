@@ -747,13 +747,18 @@ def register_detective_routes(app, require_any_user, require_owner):
 
     def _bg_intelligence_refresh(case_id: int, user_id: int):
         """Background task: refresh intelligence brief. Called via FastAPI BackgroundTasks."""
+        bg_conn = None
         try:
+            logger.info(f"[detective] bg_refresh START case={case_id} user={user_id}")
             bg_conn = _db()
+            logger.info(f"[detective] bg_refresh DB connection opened")
             _update_intelligence(case_id, user_id, bg_conn)
-            bg_conn.close()
             logger.info(f"[detective] bg intelligence refresh complete for case {case_id}")
         except Exception as be:
-            logger.info(f"[detective] bg intelligence refresh failed: {be}")
+            logger.error(f"[detective] bg intelligence refresh FAILED for case {case_id}: {be}", exc_info=True)
+        finally:
+            if bg_conn:
+                bg_conn.close()
 
     @app.post("/api/detective/cases/{case_id}/entries")
     async def create_entry(case_id: int, body: EntryCreate, background_tasks: BackgroundTasks, user: dict = Depends(_require_detective)):
