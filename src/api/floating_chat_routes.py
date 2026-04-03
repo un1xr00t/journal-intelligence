@@ -172,30 +172,58 @@ def register_floating_chat_routes(app, require_any_user):
                     lines.append(f"  [{c['status']}] {c['title']}{desc}")
                 parts.append("=== DETECTIVE CASES ===\n" + "\n".join(lines))
 
-            # ── Exit plan ─────────────────────────────────────────────────────
+            # ── Exit plan (corrected schema) ──────────────────────────────────
             try:
-                exit_plan = conn.execute(
-                    """
-                    SELECT ep.summary, ep.status,
-                           COUNT(ept.id) as task_count,
-                           SUM(CASE WHEN ept.completed = 1 THEN 1 ELSE 0 END) as done_count
-                    FROM exit_plans ep
-                    LEFT JOIN exit_plan_tasks ept ON ept.plan_id = ep.id
-                    WHERE ep.user_id = ?
-                    GROUP BY ep.id
-                    ORDER BY ep.created_at DESC LIMIT 1
-                    """,
+                plan = conn.execute(
+                    "SELECT id, plan_type, branches, status FROM exit_plans WHERE user_id = ?",
                     (user_id,)
                 ).fetchone()
 
-                if exit_plan and exit_plan["summary"]:
-                    progress = ""
-                    if exit_plan["task_count"]:
-                        done = exit_plan["done_count"] or 0
-                        progress = f" ({done}/{exit_plan['task_count']} tasks done)"
-                    parts.append(f"=== EXIT PLAN ===\nStatus: {exit_plan['status']}{progress}\n{exit_plan['summary'][:400]}")
-            except Exception:
-                pass  # exit plan table may not exist for all users
+                if plan:
+                    plan_id = plan["id"]
+                    try:
+                        branches = json.loads(plan["branches"]) if plan["branches"] else []
+                    except Exception:
+                        branches = []
+
+                    phases = conn.execute(
+                        "SELECT phase_order, title, status FROM exit_plan_phases WHERE plan_id = ? ORDER BY phase_order",
+                        (plan_id,)
+                    ).fetchall()
+
+                    tasks = conn.execute(
+                        """SELECT t.title, t.status, t.priority, p.title as phase_title
+                           FROM exit_plan_tasks t
+                           JOIN exit_plan_phases p ON p.id = t.phase_id
+                           WHERE t.plan_id = ?
+                           ORDER BY p.phase_order, t.priority DESC""",
+                        (plan_id,)
+                    ).fetchall()
+
+                    doing   = [t for t in tasks if t["status"] == "doing"]
+                    next_up = [t for t in tasks if t["status"] == "next"]
+                    done    = [t for t in tasks if t["status"] == "done"]
+                    backlog = [t for t in tasks if t["status"] == "backlog"]
+
+                    ep_lines = [f"Plan type: {plan['plan_type']} | Branches: {', '.join(branches) if branches else 'general'} | Status: {plan['status']}"]
+
+                    if phases:
+                        phase_strs = []
+                        for ph in phases:
+                            emoji = {"active": "▶", "completed": "✓", "locked": "🔒"}.get(ph["status"], "○")
+                            phase_strs.append(f"{emoji} Phase {ph['phase_order']}: {ph['title']} [{ph['status']}]")
+                        ep_lines.append("Phases:\n" + "\n".join(f"  {p}" for p in phase_strs))
+
+                    if doing:
+                        ep_lines.append("Currently working on: " + "; ".join(t["title"] for t in doing[:3]))
+                    if next_up:
+                        ep_lines.append("Up next: " + "; ".join(t["title"] for t in next_up[:3]))
+                    ep_lines.append(f"Progress: {len(done)} tasks done, {len(backlog)} in backlog")
+
+                    parts.append("=== EXIT PLAN ===\n" + "\n".join(ep_lines))
+
+            except Exception as ep_err:
+                logger.warning(f"[floatchat/context] exit plan fetch failed: {ep_err}")
 
             # ── Contradiction count ───────────────────────────────────────────
             contra = conn.execute(
@@ -223,7 +251,7 @@ def register_floating_chat_routes(app, require_any_user):
     async def chat_message(body: ChatRequest, current_user: dict = Depends(require_any_user)):
         """
         AI chat using pre-cached context string from the frontend.
-        Only the new user message triggers an AI call — context never re-fetched.
+        Returns structured JSON with reply + optional action buttons.
         """
         if not body.messages:
             raise HTTPException(status_code=400, detail="No messages provided.")
@@ -231,23 +259,36 @@ def register_floating_chat_routes(app, require_any_user):
         user_id = current_user["id"]
 
         system_prompt = (
-            "You are a personal AI assistant embedded in a private journal dashboard. "
-            "You have full context from this person's journal entries, patterns, detective cases, exit plan, and evidence vault. "
-            "Answer their questions directly and specifically — reference real dates, names, and events from the context. "
-            "Be warm but direct. Keep responses under 200 words unless they explicitly ask for more. "
-            "Never make things up — if you don't see it in context, say so honestly.\n\n"
+            "You are a deeply perceptive AI embedded inside someone's private journal dashboard. "
+            "You have read everything they've written — their entries, patterns, exit plan, evidence, detective cases. "
+            "You are not a generic chatbot. You speak like a trusted advisor who knows their full story.\n\n"
+            "RESPONSE FORMAT:\n"
+            "Write your reply as normal text (markdown ok: **bold**, bullet lists with -).\n"
+            "If and ONLY IF a specific tool would genuinely help right now, append an ACTIONS block at the very end:\n"
+            "---ACTIONS---\n"
+            "/route 🔎 Label for button\n"
+            "/route2 ⚔ Another button\n"
+            "---END---\n\n"
+            "Max 3 action lines. Valid routes: /exit-plan /evidence /detective /war-room /write /patterns /mental-health /people-intel /contradictions /nervous\n"
+            "Do NOT include the ACTIONS block if no specific action is needed — most replies won't need it.\n\n"
+            "Rules:\n"
+            "- Reference specific dates, names, events from context. Be specific, not vague.\n"
+            "- Never fabricate. If you don't see it in context, say so.\n"
+            "- Speak directly. Like a trusted friend who has read everything.\n"
+            "- Keep responses under 200 words unless depth is clearly needed.\n"
+            "- If they seem in crisis or danger, acknowledge it directly and include /war-room or /exit-plan action.\n\n"
             "=== YOUR CONTEXT ===\n"
             f"{body.context_string}\n"
             "=== END CONTEXT ==="
         )
 
-        # Cap at last 20 messages to avoid runaway token growth
+        # Cap at last 20 messages
         history = body.messages[-20:]
         messages_payload = [{"role": m.role, "content": m.content} for m in history]
 
         try:
             from src.api.ai_client import create_message
-            response = create_message(
+            raw_response = create_message(
                 user_id=user_id,
                 system=system_prompt,
                 user_prompt=messages_payload[-1]["content"],
@@ -261,4 +302,24 @@ def register_floating_chat_routes(app, require_any_user):
                 detail="AI call failed. Make sure your API key is set in Settings -> AI Preferences."
             )
 
-        return {"reply": (response or "").strip()}
+        # ── Parse delimiter-based response (reliable, no JSON fragility) ─────
+        raw = (raw_response or "").strip()
+        actions = []
+
+        if "---ACTIONS---" in raw:
+            parts_split = raw.split("---ACTIONS---", 1)
+            reply = parts_split[0].strip()
+            actions_block = parts_split[1].split("---END---")[0].strip()
+            for line in actions_block.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                tokens = line.split(" ", 2)   # route, icon, label
+                if len(tokens) >= 3:
+                    actions.append({"route": tokens[0], "icon": tokens[1], "label": tokens[2]})
+                elif len(tokens) == 2:
+                    actions.append({"route": tokens[0], "icon": "→", "label": tokens[1]})
+        else:
+            reply = raw
+
+        return {"reply": reply, "actions": actions}
