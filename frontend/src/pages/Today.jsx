@@ -15,7 +15,6 @@ function sevColor(sev) {
 }
 
 function trendIcon(trend, invert = false) {
-  // invert=true means rising is good (mood), invert=false means rising is bad (stress/conflict)
   if (trend === 'rising')  return { icon: '↑', color: invert ? '#22c55e' : '#ef4444' }
   if (trend === 'falling') return { icon: '↓', color: invert ? '#ef4444' : '#22c55e' }
   return { icon: '→', color: 'var(--text-muted)' }
@@ -25,6 +24,25 @@ function overallColor(overall) {
   if (overall === 'positive') return '#22c55e'
   if (overall === 'negative') return '#ef4444'
   return '#eab308'
+}
+
+function delta(a, b, invert = false) {
+  if (a == null || b == null) return { symbol: '→', color: 'var(--text-muted)' }
+  const diff = a - b
+  if (Math.abs(diff) < 0.3 && typeof a === 'number') return { symbol: '→', color: 'var(--text-muted)' }
+  const rising = diff > 0
+  const good = invert ? !rising : rising
+  if (rising) return { symbol: '↑', color: good ? '#22c55e' : '#ef4444' }
+  return { symbol: '↓', color: good ? '#22c55e' : '#ef4444' }
+}
+
+function intDelta(a, b, invert = false) {
+  if (a == null || b == null) return { symbol: '→', color: 'var(--text-muted)' }
+  const diff = a - b
+  if (diff === 0) return { symbol: '→', color: 'var(--text-muted)' }
+  const rising = diff > 0
+  const good = invert ? !rising : rising
+  return { symbol: rising ? '↑' : '↓', color: good ? '#22c55e' : '#ef4444' }
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -63,7 +81,7 @@ function ProgressBar({ pct, color }) {
   )
 }
 
-// ── Brief card with "Why AI thinks this" ─────────────────────────────────────
+// ── Brief card ────────────────────────────────────────────────────────────────
 
 function BriefCard({ icon, label, content, accentColor, linkLabel, linkTo, reasoning }) {
   const navigate = useNavigate()
@@ -146,6 +164,183 @@ function BriefCard({ icon, label, content, accentColor, linkLabel, linkTo, reaso
   )
 }
 
+// ── Trend Comparison Table ────────────────────────────────────────────────────
+
+function TrendTable({ stats }) {
+  if (!stats || !stats.avg_mood_7d) return null
+
+  const rows = [
+    {
+      label:   'Mood score',
+      recent:  stats.avg_mood_7d,
+      prev:    stats.avg_mood_prev,
+      format:  v => v != null ? v.toFixed(1) : '—',
+      delta:   delta(stats.avg_mood_7d, stats.avg_mood_prev, true),
+    },
+    {
+      label:   'Severity / stress',
+      recent:  stats.avg_sev_7d,
+      prev:    stats.avg_sev_prev,
+      format:  v => v != null ? v.toFixed(1) : '—',
+      delta:   delta(stats.avg_sev_7d, stats.avg_sev_prev, false),
+    },
+    {
+      label:   'Conflict mentions',
+      recent:  stats.conflict_recent,
+      prev:    stats.conflict_older,
+      format:  v => v != null ? String(v) : '—',
+      delta:   intDelta(stats.conflict_recent, stats.conflict_older, false),
+    },
+    {
+      label:   'Stress mentions',
+      recent:  stats.stress_recent,
+      prev:    stats.stress_older,
+      format:  v => v != null ? String(v) : '—',
+      delta:   intDelta(stats.stress_recent, stats.stress_older, false),
+    },
+    {
+      label:   'Positive mentions',
+      recent:  stats.positive_recent,
+      prev:    stats.positive_older,
+      format:  v => v != null ? String(v) : '—',
+      delta:   intDelta(stats.positive_recent, stats.positive_older, true),
+    },
+  ]
+
+  const cell = { padding: '10px 14px', fontSize: 13, fontFamily: 'IBM Plex Mono' }
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      <div style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>7-day trend comparison</div>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 60px', borderBottom: '1px solid var(--border)', background: 'var(--bg-base)' }}>
+          {['Metric', 'Last 7 days', 'Prior 7 days', ''].map((h, i) => (
+            <div key={i} style={{ ...cell, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', fontWeight: 600 }}>{h}</div>
+          ))}
+        </div>
+        {rows.map((row, i) => (
+          <div key={i} style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 60px',
+            borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
+          }}>
+            <div style={{ ...cell, color: 'var(--text-secondary)', fontSize: 12 }}>{row.label}</div>
+            <div style={{ ...cell, color: 'var(--text-primary)', fontWeight: 600 }}>{row.format(row.recent)}</div>
+            <div style={{ ...cell, color: 'var(--text-muted)' }}>{row.format(row.prev)}</div>
+            <div style={{ ...cell, color: row.delta.color, fontWeight: 700, fontSize: 16 }}>{row.delta.symbol}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Where Should I Go Next? ───────────────────────────────────────────────────
+
+function computeMode(stats, brief) {
+  const sev        = stats.avg_sev_7d
+  const conflict   = stats.conflict_trend
+  const epPct      = stats.exit_plan_pct
+  const epIdle     = stats.exit_plan_idle_days
+
+  // Priority order
+  if (sev != null && sev >= 7) {
+    return {
+      mode:  'Reflection Mode',
+      why:   `Severity averaging ${sev}/10 this week — writing helps process high-stress periods`,
+      label: 'Write',
+      path:  '/write',
+      color: '#ef4444',
+      icon:  '✎',
+    }
+  }
+  if (conflict === 'rising') {
+    return {
+      mode:  'Documentation Mode',
+      why:   'Conflict keyword frequency is rising — this is the time to document patterns as evidence',
+      label: 'Detective Mode',
+      path:  '/detective',
+      color: '#f97316',
+      icon:  '◎',
+    }
+  }
+  if (epPct != null && (epPct < 25 || (epIdle != null && epIdle > 14))) {
+    const reason = epIdle > 14
+      ? `Exit plan has been idle for ${epIdle} days`
+      : `Exit plan is only ${epPct}% complete`
+    return {
+      mode:  'Planning Mode',
+      why:   `${reason} — momentum matters here`,
+      label: 'Exit Plan',
+      path:  '/exit-plan',
+      color: '#a78bfa',
+      icon:  '◈',
+    }
+  }
+  if (brief.most_important_decision) {
+    return {
+      mode:  'Decision Mode',
+      why:   'Journal data shows an unresolved decision pattern that needs structured thinking',
+      label: 'Help Me Choose',
+      path:  '/decide',
+      color: '#3b82f6',
+      icon:  '⊘',
+    }
+  }
+  return {
+    mode:  'Analysis Mode',
+    why:   'No urgent signal — best time to explore patterns and ask questions of your journal',
+    label: 'Ask My Journal',
+    path:  '/ask',
+    color: '#22c55e',
+    icon:  '◉',
+  }
+}
+
+function WhereNext({ stats, brief }) {
+  const navigate = useNavigate()
+  if (!stats || !brief) return null
+
+  const rec = computeMode(stats, brief)
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      <div style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Where should I go next?</div>
+      <div style={{
+        background: 'var(--bg-card)',
+        border: `1px solid ${rec.color}44`,
+        borderRadius: 12, padding: '22px 24px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 16,
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18, color: rec.color }}>{rec.icon}</span>
+            <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: rec.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              {rec.mode}
+            </span>
+          </div>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, maxWidth: 520 }}>
+            {rec.why}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate(rec.path)}
+          style={{
+            background: rec.color, border: 'none',
+            borderRadius: 8, padding: '10px 22px',
+            fontSize: 13, fontFamily: 'IBM Plex Mono',
+            color: '#000', fontWeight: 700, cursor: 'pointer',
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}
+        >
+          {rec.label} →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Time Horizons section ─────────────────────────────────────────────────────
 
 function TimeHorizons({ horizons }) {
@@ -186,47 +381,39 @@ function TrajectoryCard({ trajectory }) {
   if (!trajectory) return null
 
   const dims = [
-    { label: 'Mood',         key: 'mood',          invert: true  },
-    { label: 'Stress',       key: 'stress',         invert: false },
-    { label: 'Conflict',     key: 'conflict',       invert: false },
-    { label: 'Independence', key: 'independence',   invert: true  },
+    { label: 'Mood',         key: 'mood',         invert: true  },
+    { label: 'Stress',       key: 'stress',        invert: false },
+    { label: 'Conflict',     key: 'conflict',      invert: false },
+    { label: 'Independence', key: 'independence',  invert: true  },
   ]
-
-  const overall   = trajectory.overall || 'neutral'
-  const oColor    = overallColor(overall)
 
   return (
     <div style={{ marginTop: 32 }}>
-      <div style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>If nothing changes</div>
+      <div style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Trajectory</div>
       <div style={{
         background: 'var(--bg-card)',
-        border: `1px solid ${oColor}44`,
-        borderRadius: 12, padding: '20px 24px',
+        border: `1px solid ${overallColor(trajectory.overall)}33`,
+        borderRadius: 12, padding: '22px 24px',
       }}>
-        {/* Overall badge */}
+        {/* Overall label */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-          <span style={{
-            fontSize: 11, fontFamily: 'IBM Plex Mono', fontWeight: 700,
-            textTransform: 'uppercase', letterSpacing: '0.1em',
-            color: oColor, background: oColor + '22',
-            padding: '4px 12px', borderRadius: 20, border: `1px solid ${oColor}44`,
-          }}>
-            Overall trajectory: {overall}
+          <span style={{ fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Overall direction</span>
+          <span style={{ fontSize: 13, fontFamily: 'IBM Plex Mono', fontWeight: 700, color: overallColor(trajectory.overall), textTransform: 'uppercase' }}>
+            {trajectory.overall}
           </span>
         </div>
 
-        {/* Dimension grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, marginBottom: 18 }}>
+        {/* Dimension arrows */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
           {dims.map(({ label, key, invert }) => {
-            const t = trajectory[key] || 'stable'
-            const { icon, color } = trendIcon(t, invert)
+            const t = trendIcon(trajectory[key], invert)
             return (
               <div key={key} style={{
-                background: 'var(--bg-base)', borderRadius: 8, padding: '10px 14px',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: 'var(--bg-base)', borderRadius: 8,
+                padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 80,
               }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'IBM Plex Mono' }}>{label}</span>
-                <span style={{ fontSize: 16, color, fontWeight: 700 }}>{icon}</span>
+                <span style={{ fontSize: 16, color: t.color, fontWeight: 700 }}>{t.icon}</span>
               </div>
             )
           })}
@@ -261,10 +448,10 @@ function TrajectoryCard({ trajectory }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Today() {
-  const [data, setData]           = useState(null)
-  const [loading, setLoading]     = useState(true)
+  const [data, setData]             = useState(null)
+  const [loading, setLoading]       = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError]         = useState(null)
+  const [error, setError]           = useState(null)
 
   const load = useCallback(async (force = false) => {
     try {
@@ -284,27 +471,28 @@ export default function Today() {
 
   useEffect(() => { load() }, [load])
 
-  const brief      = data?.brief   || {}
-  const stats      = data?.stats   || {}
-  const reasoning  = data?.reasoning || {}
-  const noData     = data?.no_data
+  const brief     = data?.brief    || {}
+  const stats     = data?.stats    || {}
+  const reasoning = data?.reasoning || {}
+  const noData    = data?.no_data
 
   const moodT     = trendIcon(stats.mood_trend,     true)
   const stressT   = trendIcon(stats.stress_trend,   false)
   const conflictT = trendIcon(stats.conflict_trend, false)
   const epPct     = stats.exit_plan_pct
 
-  // Card order per spec: State → Risk → Decision → Action → Direction
+  // Card order: State → Risk → Decision → Action → Direction
+  // All cards now have routing links
   const cards = [
-    { icon: '◉', label: 'Emotional state',          key: 'emotional_state',       accentColor: '#8b5cf6' },
-    { icon: '↑', label: "What's getting worse",     key: 'getting_worse',          accentColor: '#ef4444' },
-    { icon: '↓', label: "What's getting better",    key: 'getting_better',         accentColor: '#22c55e' },
-    { icon: '⚠', label: 'Biggest risk right now',   key: 'biggest_risk',           accentColor: '#ef4444', linkLabel: 'War Room',       linkTo: '/war-room'    },
-    { icon: '⊘', label: 'Most important decision',  key: 'most_important_decision',accentColor: '#3b82f6', linkLabel: 'Help Me Choose', linkTo: '/decide'      },
-    { icon: '◷', label: "What you're avoiding",     key: 'avoiding',               accentColor: '#f97316', linkLabel: 'Ask My Journal', linkTo: '/ask'         },
-    { icon: '✓', label: 'One thing to do today',    key: 'do_today',               accentColor: '#22c55e', linkLabel: 'Write',          linkTo: '/write'       },
-    { icon: '✕', label: 'One thing to stop doing',  key: 'stop_doing',             accentColor: '#f97316' },
-    { icon: '◈', label: 'Progress toward independence', key: 'independence_note',  accentColor: '#a78bfa', linkLabel: 'Exit Plan',      linkTo: '/exit-plan'   },
+    { icon: '◉', label: 'Emotional state',           key: 'emotional_state',        accentColor: '#8b5cf6', linkLabel: 'Patterns',       linkTo: '/patterns'    },
+    { icon: '↑', label: "What's getting worse",      key: 'getting_worse',           accentColor: '#ef4444', linkLabel: 'Timeline',       linkTo: '/timeline'    },
+    { icon: '↓', label: "What's getting better",     key: 'getting_better',          accentColor: '#22c55e', linkLabel: 'Timeline',       linkTo: '/timeline'    },
+    { icon: '⚠', label: 'Biggest risk right now',    key: 'biggest_risk',            accentColor: '#ef4444', linkLabel: 'War Room',       linkTo: '/war-room'    },
+    { icon: '⊘', label: 'Most important decision',   key: 'most_important_decision', accentColor: '#3b82f6', linkLabel: 'Help Me Choose', linkTo: '/decide'      },
+    { icon: '◷', label: "What you're avoiding",      key: 'avoiding',                accentColor: '#f97316', linkLabel: 'Ask My Journal', linkTo: '/ask'         },
+    { icon: '✓', label: 'One thing to do today',     key: 'do_today',                accentColor: '#22c55e', linkLabel: 'Write',          linkTo: '/write'       },
+    { icon: '✕', label: 'One thing to stop doing',   key: 'stop_doing',              accentColor: '#f97316', linkLabel: 'Patterns',       linkTo: '/patterns'    },
+    { icon: '◈', label: 'Progress toward independence', key: 'independence_note',    accentColor: '#a78bfa', linkLabel: 'Exit Plan',      linkTo: '/exit-plan'   },
   ]
 
   return (
@@ -355,10 +543,10 @@ export default function Today() {
               Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} h={80} w={120} />)
             ) : (
               <>
-                <StatChip label="Mood 7d"   value={stats.avg_mood_7d ?? '—'} color="#22c55e"              sub={`trend ${moodT.icon}`} />
+                <StatChip label="Mood 7d"     value={stats.avg_mood_7d ?? '—'} color="#22c55e"              sub={`trend ${moodT.icon}`} />
                 <StatChip label="Severity 7d" value={stats.avg_sev_7d ?? '—'} color={sevColor(stats.avg_sev_7d)} sub={`stress ${stressT.icon}`} />
-                <StatChip label="Conflict"  value={stats.conflict_trend || '—'} color={conflictT.color}   sub="keyword trend" />
-                <StatChip label="Entries"   value={stats.total_entries_30d ?? '—'} color="var(--accent)" sub="last 30 days" />
+                <StatChip label="Conflict"    value={stats.conflict_trend || '—'} color={conflictT.color}   sub="keyword trend" />
+                <StatChip label="Entries"     value={stats.total_entries_30d ?? '—'} color="var(--accent)" sub="last 30 days" />
                 {epPct !== null && epPct !== undefined && (
                   <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', flex: '1 1 150px', minWidth: 140 }}>
                     <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Exit plan</div>
@@ -389,6 +577,12 @@ export default function Today() {
             }
           </div>
 
+          {/* ── Trend Comparison ──────────────────────────────────────────── */}
+          {loading
+            ? <Skeleton h={200} w="100%" />
+            : <TrendTable stats={stats} />
+          }
+
           {/* ── Time Horizons ──────────────────────────────────────────────── */}
           {loading
             ? <Skeleton h={160} w="100%" />
@@ -399,6 +593,12 @@ export default function Today() {
           {loading
             ? <Skeleton h={200} w="100%" />
             : <TrajectoryCard trajectory={brief.trajectory} />
+          }
+
+          {/* ── Where Should I Go Next? ────────────────────────────────────── */}
+          {loading
+            ? <Skeleton h={100} w="100%" />
+            : <WhereNext stats={stats} brief={brief} />
           }
 
           {/* ── Footer ───────────────────────────────────────────────────── */}
