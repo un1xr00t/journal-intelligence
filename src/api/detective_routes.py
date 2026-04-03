@@ -1056,47 +1056,23 @@ def register_detective_routes(app, require_any_user, require_owner):
             with open(fpath, "wb") as fh:
                 fh.write(data)
 
-            # Insert DB record
+            # Insert DB record — skip per-photo vision; synthesis handles all at once
             cur = conn.execute(
                 "INSERT INTO detective_entry_photos "
                 "(entry_id, case_id, user_id, original_filename, stored_filename, "
                 " file_path, mime_type, file_size, analysis_status) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'analyzing')",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
                 (entry_id, case_id, user["id"], file.filename,
                  stored, fpath, mime_out, len(data))
             )
             conn.commit()
             photo_id = cur.lastrowid
 
-            # Run individual vision analysis (so gallery shows per-photo AI text)
-            analysis = None
-            try:
-                b64 = base64.standard_b64encode(data).decode()
-                analysis = _call_vision(
-                    user["id"], b64, mime_out,
-                    "Analyze this image as forensic evidence. "
-                    "Note: device/platform details visible in the status bar or UI — carrier, WiFi-only, SOS, timestamp, battery; "
-                    "verbatim transcription of the most significant messages; "
-                    "behavioral observations — who initiated, emotional tone, admissions, contradictions. "
-                    "Be specific and observational. Plain prose only."
-                )
-                conn.execute(
-                    "UPDATE detective_entry_photos SET ai_analysis=?, analysis_status='done' WHERE id=?",
-                    (analysis, photo_id)
-                )
-            except Exception as _ae:
-                logger.warning(f"[detective] entry photo vision failed: {_ae}")
-                conn.execute(
-                    "UPDATE detective_entry_photos SET analysis_status='failed' WHERE id=?",
-                    (photo_id,)
-                )
-            conn.commit()
-
             return {
                 "id": photo_id,
                 "original_filename": file.filename,
-                "ai_analysis": analysis,
-                "analysis_status": "done" if analysis else "failed",
+                "ai_analysis": None,
+                "analysis_status": "pending",
                 "image_url": (
                     f"/api/detective/cases/{case_id}"
                     f"/entries/{entry_id}/photos/{photo_id}/image"
@@ -1300,6 +1276,11 @@ def register_detective_routes(app, require_any_user, require_owner):
             conn.execute(
                 "UPDATE detective_entries SET multi_photo_analysis=? WHERE id=?",
                 (synthesis, entry_id)
+            )
+            # Mark all pending entry photos as done (analysis lives on the entry)
+            conn.execute(
+                "UPDATE detective_entry_photos SET analysis_status='done' WHERE entry_id=? AND analysis_status='pending'",
+                (entry_id,)
             )
             conn.commit()
             return {"synthesis": synthesis, "photo_count": len(images)}

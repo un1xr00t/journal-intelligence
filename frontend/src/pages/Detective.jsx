@@ -771,7 +771,7 @@ export function GalleryView({ caseId, uploads, onDelete }) {
                 fontFamily: 'IBM Plex Mono', fontSize: 9, textTransform: 'uppercase',
                 color: u.analysis_status === 'done' ? '#22c55e' : u.analysis_status === 'failed' ? '#ef4444' : '#f59e0b',
               }}>
-                {u.analysis_status === 'done' ? '✓ analyzed' : u.analysis_status === 'failed' ? '✕ failed' : '… analyzing'}
+                {u.analysis_status === 'done' ? '✓ analyzed' : u.analysis_status === 'failed' ? '✕ failed' : u.analysis_status === 'pending' ? '⏳ pending' : '… analyzing'}
               </div>
               {/* Zoom overlay */}
               <div style={{
@@ -1023,7 +1023,7 @@ export function PhotoEvidence({ caseId, uploads, onUpload, onDelete, uploading }
                   fontFamily: 'IBM Plex Mono', fontSize: 9, textTransform: 'uppercase',
                   color: u.analysis_status === 'done' ? '#22c55e' : u.analysis_status === 'failed' ? '#ef4444' : '#f59e0b',
                 }}>
-                  {u.analysis_status === 'done' ? '✓ analyzed' : u.analysis_status === 'failed' ? '✕ failed' : '… analyzing'}
+                  {u.analysis_status === 'done' ? '✓ analyzed' : u.analysis_status === 'failed' ? '✕ failed' : u.analysis_status === 'pending' ? '⏳ pending' : '… analyzing'}
                 </div>
               </div>
 
