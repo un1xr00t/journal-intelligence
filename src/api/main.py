@@ -2218,6 +2218,9 @@ register_war_room_routes(app, require_any_user)
 from src.api.floating_chat_routes import register_floating_chat_routes
 register_floating_chat_routes(app, require_any_user)
 
+from src.api.today_routes import register_today_routes
+register_today_routes(app, require_any_user)
+
 from src.api.fairness_routes import register_fairness_routes
 from src.auth.auth_db import get_db as _fairness_get_db
 from src.api.ai_client import create_message as _fairness_create_message

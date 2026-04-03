@@ -34,6 +34,7 @@ import FairnessLedger from './pages/FairnessLedger'
 import MentalHealth from './pages/MentalHealth'
 import DetectiveFull from './pages/DetectiveFull'
 import MyStory from './pages/MyStory'
+import Today from './pages/Today'
 import InviteAccess from './pages/InviteAccess'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
@@ -218,7 +219,8 @@ function Shell() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/recover-via-questions" element={<RecoverViaQuestions />} />
             <Route path="/onboarding"      element={<Onboarding />} />
-            <Route path="/"                element={<ProtectedRoute><Timeline filters={filters} /></ProtectedRoute>} />
+            <Route path="/"                element={<ProtectedRoute><Today /></ProtectedRoute>} />
+            <Route path="/timeline"          element={<ProtectedRoute><Timeline filters={filters} /></ProtectedRoute>} />
             <Route path="/patterns"        element={<ProtectedRoute><Patterns /></ProtectedRoute>} />
             <Route path="/people"          element={<ProtectedRoute><PeopleTopics /></ProtectedRoute>} />
             <Route path="/people-intel"   element={<ProtectedRoute><PeopleIntelligence /></ProtectedRoute>} />
@@ -242,6 +244,7 @@ function Shell() {
             <Route path="/detective/full" element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
             <Route path="/mental-health" element={<ProtectedRoute><MentalHealth /></ProtectedRoute>} />
             <Route path="/my-story" element={<ProtectedRoute><MyStory /></ProtectedRoute>} />
+            <Route path="/today" element={<ProtectedRoute><Today /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="/invite/:token" element={<InviteAccess />} />
             <Route path="*"               element={<Navigate to="/" replace />} />

@@ -7,8 +7,9 @@ import { useTheme } from '../contexts/ThemeContext'
 const NAV_GROUPS = [
   {
     links: [
+      { to: '/today',  icon: '◆', label: 'Today'          },
       { to: '/decide', icon: '⊘', label: 'Help Me Choose' },
-      { to: '/',       icon: '◈', label: 'Timeline'       },
+      { to: '/timeline', icon: '◈', label: 'Timeline'    },
       { to: '/write',  icon: '✎', label: 'Write'          },
     ]
   },
@@ -121,7 +122,7 @@ export default function Sidebar({ filters, onFilterChange, alerts = [], onRefres
       <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', height: '100%', padding: '20px 0', paddingTop: 'calc(20px + env(safe-area-inset-top))', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {/* Brand + close button row */}
         <div style={{ padding: '0 20px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <NavLink to="/" style={{ textDecoration: 'none' }}>
+          <NavLink to="/today" style={{ textDecoration: 'none' }}>
             <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 13, letterSpacing: '0.15em', color: 'var(--accent)', textTransform: 'uppercase' }}>✦ Journal</div>
             <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 13, letterSpacing: '0.15em', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Intelligence</div>
           </NavLink>
