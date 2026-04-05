@@ -56,7 +56,7 @@ DEFAULT_DURATION = "90d"
 ALLOWED_CIDRS = [
     "73.174.44.217/32",   # home
     "163.114.130.0/24",   # work
-    "172.59.140.0/24",    # mobile
+    "172.59.0.0/16",      # mobile T-Mobile
 ]
 
 # Wordlist for passphrase generation (3 words + 4-digit PIN)
@@ -303,6 +303,19 @@ def register_exit_plan_share_routes(app, require_any_user, require_owner):
 
     @app.get("/internal/ip-check")
     def internal_ip_check(request: Request):
+        # ── Check valid JWT first (IP-independent) ───────────────────────────
+        # If the user already has a valid session token, let them through
+        # regardless of IP. Bots/scanners never have a valid JWT.
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                from src.auth.auth_service import decode_access_token
+                payload = decode_access_token(auth_header[7:])
+                if payload:
+                    return Response(status_code=200)
+            except Exception:
+                pass
+
         # ── Check invite access token first (IP-independent) ─────────────────
         # Browser sends X-Invite-Token on every request after claiming an invite.
         # This is an HMAC over (token_id:expires_at) — validated without a DB hit.

@@ -74,7 +74,7 @@ function ActionBtn({ action, onClick }) {
   )
 }
 
-export default function FloatingChat({ hidden = false }) {
+export default function FloatingChat({ hidden = false, bottomOffset = 24 }) {
   const [open, setOpen]              = useState(false)
   const [minimized, setMinimized]    = useState(false)
   const [messages, setMessages]      = useState([])
@@ -181,7 +181,7 @@ export default function FloatingChat({ hidden = false }) {
   const s = {
     wrap: {
       position:      'fixed',
-      bottom:        24,
+      bottom:        bottomOffset,
       right:         24,
       zIndex:        9999,
       display:       'flex',
