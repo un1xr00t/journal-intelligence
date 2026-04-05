@@ -33,6 +33,7 @@ import Detective from './pages/Detective'
 import FairnessLedger from './pages/FairnessLedger'
 import MentalHealth from './pages/MentalHealth'
 import DetectiveFull from './pages/DetectiveFull'
+import ProofVault from './pages/ProofVault'
 import MyStory from './pages/MyStory'
 import Today from './pages/Today'
 import InviteAccess from './pages/InviteAccess'
@@ -242,6 +243,7 @@ function Shell() {
             <Route path="/detective" element={<ProtectedRoute><Detective /></ProtectedRoute>} />
             <Route path="/fairness" element={<ProtectedRoute><FairnessLedger /></ProtectedRoute>} />
             <Route path="/detective/full" element={<ProtectedRoute><DetectiveFull /></ProtectedRoute>} />
+            <Route path="/proof-vault" element={<ProtectedRoute><ProofVault /></ProtectedRoute>} />
             <Route path="/mental-health" element={<ProtectedRoute><MentalHealth /></ProtectedRoute>} />
             <Route path="/my-story" element={<ProtectedRoute><MyStory /></ProtectedRoute>} />
             <Route path="/today" element={<ProtectedRoute><Today /></ProtectedRoute>} />

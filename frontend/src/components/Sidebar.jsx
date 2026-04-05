@@ -17,7 +17,7 @@ const NAV_GROUPS = [
     label: 'Case Building',
     links: [
       { to: '/contradictions', icon: '⊕', label: 'Contradictions' },
-      { to: '/evidence',       icon: '◷', label: 'Evidence Vault' },
+      { to: '/proof-vault',    icon: '🗂', label: 'Proof Vault'    },
       { to: '/exports',        icon: '⊞', label: 'Exports'        },
     ]
   },

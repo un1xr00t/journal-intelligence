@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
+import DetectiveGraph from './DetectiveGraph'
 import {
   card, mono, SEVERITY_COLORS, ENTRY_TYPES,
   CaseList, InvestigationLog, PhotoEvidence, GalleryView,
@@ -1374,12 +1375,13 @@ export default function DetectiveFull() {
     { key: 'export',       label: '📄 Export Report' },
     { key: 'research',     label: '🔍 Research'       },
     { key: 'settings',     label: '⚙️ Settings'      },
+    { key: 'graph',        label: '🕸 Graph'         },
   ]
 
   // Column widths based on open/collapsed state
   const leftW   = casesOpen   ? PANEL_W  : ICON_W
   const rightW  = partnerOpen ? PARTNER_W : ICON_W
-  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires' && activeTab !== 'export' && activeTab !== 'research' && activeTab !== 'settings'
+  const showPartner = activeTab !== 'gallery' && activeTab !== 'intelligence' && activeTab !== 'wires' && activeTab !== 'export' && activeTab !== 'research' && activeTab !== 'settings' && activeTab !== 'graph'
   const effectiveRightW = showPartner ? rightW : 0
 
   return (
@@ -1542,7 +1544,7 @@ export default function DetectiveFull() {
           </div>
 
           {/* Tab content */}
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          <div style={{ flex: 1, overflowY: activeTab === 'graph' ? 'hidden' : 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {!selectedCase ? (
               <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>🕵</div>
@@ -1615,6 +1617,9 @@ export default function DetectiveFull() {
                 )}
                 {activeTab === 'settings' && (
                   <DetectiveSettings />
+                )}
+                {activeTab === 'graph' && (
+                  <DetectiveGraph caseId={selectedCase.id} />
                 )}
               </>
             )}

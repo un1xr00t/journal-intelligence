@@ -2205,6 +2205,12 @@ from src.api.my_story_routes import register_my_story_routes
 from src.api.mental_health_routes import register_mental_health_routes
 from src.api.research_agent_route import register_research_agent_routes
 register_detective_routes(app, require_any_user, require_owner)
+
+from src.api.detective_graph_routes import register_detective_graph_routes
+register_detective_graph_routes(app, require_any_user, require_owner)
+
+from src.api.proof_vault_routes import register_proof_vault_routes
+register_proof_vault_routes(app, require_any_user)
 register_my_story_routes(app, require_any_user)
 register_mental_health_routes(app, require_any_user)
 register_research_agent_routes(app, require_any_user, require_owner)
