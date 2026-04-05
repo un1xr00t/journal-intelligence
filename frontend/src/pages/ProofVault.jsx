@@ -23,6 +23,22 @@ const SUGGESTED_FOLDERS = [
   { name: 'Communications',     icon: '📞', color: '#06b6d4' },
 ]
 
+const QUICK_ENTRIES = [
+  { label: 'Morning meds',    icon: '💊', title: 'Gave Wyatt his morning medication (mixed in yogurt)',            folder_hint: 'Daily Care'         },
+  { label: 'Pull-up change',  icon: '🔄', title: 'Changed Wyatt\'s pull-up',                                       folder_hint: 'Daily Care'         },
+  { label: 'Got him ready',   icon: '🎒', title: 'Got Wyatt dressed and ready for the day',                        folder_hint: 'Daily Care'         },
+  { label: 'Put on bus',      icon: '🚌', title: 'Put Wyatt on school bus',                                        folder_hint: 'School & Education' },
+  { label: 'Got off bus',     icon: '🏠', title: 'Got Wyatt off bus and gave him after-school snacks',             folder_hint: 'Daily Care'         },
+  { label: 'Fed Wyatt',       icon: '🍽️', title: 'Fed Wyatt dinner',                                              folder_hint: 'Daily Care'         },
+  { label: 'Bath time',       icon: '🛁', title: 'Gave Wyatt his bath',                                            folder_hint: 'Daily Care'         },
+  { label: 'Brushed teeth',   icon: '🦷', title: "Brushed Wyatt's teeth",                                         folder_hint: 'Daily Care'         },
+  { label: 'Bedtime routine', icon: '🌙', title: 'Put Wyatt to bed with stuffed animals and made sure he had enough water in his sippy cup', folder_hint: 'Daily Care' },
+  { label: 'Nighttime meds', icon: '💊', title: 'Gave Wyatt his nighttime medication',                                                       folder_hint: 'Daily Care' },
+  { label: 'Evening walk',    icon: '🐕', title: 'Took Wyatt and Dasher on evening walk',                          folder_hint: 'Activities'         },
+  { label: 'Park trip',       icon: '🌳', title: 'Took Wyatt to the park',                                         folder_hint: 'Activities'         },
+  { label: 'Store outing',    icon: '🛒', title: 'Took Wyatt on store/errand outing',                              folder_hint: 'Activities'         },
+]
+
 // ── Shared styles ──────────────────────────────────────────────────────────────
 
 const mono  = { fontFamily: 'IBM Plex Mono' }
@@ -206,6 +222,104 @@ function NewItemModal({ onSave, onClose }) {
   )
 }
 
+// ── Quick Entry Modal ──────────────────────────────────────────────────────────
+
+function QuickEntryModal({ preset, folders, onSave, onClose }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const guessFolder = folders.find(f => f.name === preset.folder_hint) || folders[0] || null
+  const [folderId,  setFolderId]  = useState(guessFolder?.id ?? '')
+  const [title,     setTitle]     = useState(preset.title)
+  const [notes,     setNotes]     = useState('')
+  const [itemDate,  setItemDate]  = useState(today)
+  const [saving,    setSaving]    = useState(false)
+
+  const submit = async () => {
+    if (!title.trim() || !folderId) return
+    setSaving(true)
+    await onSave(Number(folderId), { title: title.trim(), notes: notes || null, item_date: itemDate })
+    setSaving(false)
+  }
+
+  return (
+    <Modal title={`${preset.icon} Quick Log`} onClose={onClose}>
+      <div>
+        <label style={lbl}>Folder</label>
+        <select value={folderId} onChange={e => setFolderId(e.target.value)}
+          style={{ ...fieldSty, cursor: 'pointer' }}>
+          {folders.length === 0 && <option value="">No folders yet — create one first</option>}
+          {folders.map(f => <option key={f.id} value={f.id}>{f.icon} {f.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={lbl}>Entry title</label>
+        <input value={title} onChange={e => setTitle(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+          style={fieldSty} />
+      </div>
+      <div>
+        <label style={lbl}>Date</label>
+        <input type="date" value={itemDate} onChange={e => setItemDate(e.target.value)}
+          style={{ ...fieldSty, maxWidth: 200 }} />
+      </div>
+      <div>
+        <label style={lbl}>Notes (optional)</label>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)}
+          rows={2} placeholder="Any extra detail…"
+          style={{ ...fieldSty, resize: 'vertical', lineHeight: 1.6 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button onClick={onClose} style={btn()}>Cancel</button>
+        <button onClick={submit} disabled={saving || !title.trim() || !folderId}
+          style={btn('primary', saving || !title.trim() || !folderId)}>
+          {saving ? 'Logging…' : 'Log It'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Edit Item Modal ────────────────────────────────────────────────────────────
+
+function EditItemModal({ item, onSave, onClose }) {
+  const [form, setForm]     = useState({ title: item.title || '', notes: item.notes || '', item_date: item.item_date || new Date().toISOString().slice(0, 10) })
+  const [saving, setSaving] = useState(false)
+
+  const submit = async () => {
+    if (!form.title.trim()) return
+    setSaving(true)
+    await onSave(item.id, form)
+    setSaving(false)
+  }
+
+  return (
+    <Modal title="Edit Entry" onClose={onClose}>
+      <div>
+        <label style={lbl}>What did you do?</label>
+        <input autoFocus value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+          placeholder="e.g. Took to pediatrician, Picked up from school, Made dinner"
+          style={fieldSty} />
+      </div>
+      <div>
+        <label style={lbl}>Date</label>
+        <input type="date" value={form.item_date} onChange={e => setForm(f => ({ ...f, item_date: e.target.value }))} style={{ ...fieldSty, maxWidth: 200 }} />
+      </div>
+      <div>
+        <label style={lbl}>Notes (optional)</label>
+        <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+          rows={3} style={{ ...fieldSty, resize: 'vertical', lineHeight: 1.6 }}
+          placeholder="Any details worth documenting…" />
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button onClick={onClose} style={btn()}>Cancel</button>
+        <button onClick={submit} disabled={saving || !form.title.trim()} style={btn('primary', saving || !form.title.trim())}>
+          {saving ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── AI Summary Modal ───────────────────────────────────────────────────────────
 
 function SummaryModal({ summary, meta, onClose }) {
@@ -284,7 +398,7 @@ function PhotoThumb({ itemId, photo, onDelete }) {
 
 // ── Item card ──────────────────────────────────────────────────────────────────
 
-function ItemCard({ item, onDelete, onPhotoUpload, onPhotoDelete }) {
+function ItemCard({ item, onDelete, onEdit, onPhotoUpload, onPhotoDelete }) {
   const fileRef      = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [expanded, setExpanded]   = useState(false)
@@ -322,6 +436,9 @@ function ItemCard({ item, onDelete, onPhotoUpload, onPhotoDelete }) {
             title="Upload photo"
             style={{ ...btn('default', uploading), padding: '5px 10px', fontSize: 12 }}>
             {uploading ? '…' : '📷'}
+          </button>
+          <button onClick={() => onEdit(item)} style={{ ...btn(), padding: '5px 10px', fontSize: 12 }} title="Edit entry">
+            ✏️
           </button>
           <button onClick={() => onDelete(item.id)} style={{ ...btn('danger'), padding: '5px 10px', fontSize: 12 }} title="Delete entry">
             🗑
@@ -367,6 +484,7 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
   const [items,        setItems]        = useState([])
   const [loading,      setLoading]      = useState(true)
   const [addOpen,      setAddOpen]      = useState(false)
+  const [editItem,     setEditItem]     = useState(null)
   const [summarizing,  setSummarizing]  = useState(false)
   const [summary,      setSummary]      = useState(null)
   const [summaryMeta,  setSummaryMeta]  = useState(null)
@@ -389,6 +507,14 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
       setItems(is => { const updated = [r.data, ...is]; onItemCountChange?.(folder.id, updated.length); return updated })
       setAddOpen(false)
     } catch (e) { alert(e.response?.data?.detail || 'Failed to add entry.') }
+  }
+
+  const handleEditItem = async (id, form) => {
+    try {
+      const r = await api.put(`/api/vault/items/${id}`, form)
+      setItems(is => is.map(i => i.id === id ? { ...r.data, photos: i.photos } : i))
+      setEditItem(null)
+    } catch (e) { alert(e.response?.data?.detail || 'Failed to save changes.') }
   }
 
   const handleDeleteItem = async (id) => {
@@ -432,6 +558,7 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {addOpen && <NewItemModal onSave={handleAddItem} onClose={() => setAddOpen(false)} />}
+      {editItem && <EditItemModal item={editItem} onSave={handleEditItem} onClose={() => setEditItem(null)} />}
       {summary && <SummaryModal summary={summary} meta={summaryMeta} onClose={() => setSummary(null)} />}
 
       {/* Folder header */}
@@ -476,10 +603,85 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
               key={item.id}
               item={item}
               onDelete={handleDeleteItem}
+              onEdit={setEditItem}
               onPhotoUpload={handlePhotoUpload}
               onPhotoDelete={handlePhotoDelete}
             />
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Vault Summary Panel ────────────────────────────────────────────────────────
+
+const SUMMARY_KEY = 'vault_summary_cache'
+const SUMMARY_TTL = 24 * 60 * 60 * 1000   // 24 hours in ms
+
+function VaultSummaryPanel({ totalItems }) {
+  const [cached,      setCached]      = useState(() => {
+    try { return JSON.parse(localStorage.getItem(SUMMARY_KEY)) } catch { return null }
+  })
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState(null)
+  const [expanded,    setExpanded]    = useState(false)
+
+  const isStale = !cached || (Date.now() - cached.ts > SUMMARY_TTL)
+  const age     = cached ? Math.round((Date.now() - cached.ts) / (1000 * 60 * 60)) : null
+
+  const refresh = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const r = await api.post('/api/vault/summary')
+      const next = { ...r.data, ts: Date.now() }
+      localStorage.setItem(SUMMARY_KEY, JSON.stringify(next))
+      setCached(next)
+      setExpanded(true)
+    } catch (e) { setError(e.response?.data?.detail || 'Summary failed.') }
+    setLoading(false)
+  }
+
+  // Auto-refresh if stale and there are entries
+  useEffect(() => {
+    if (isStale && totalItems > 0 && !loading) refresh()
+  }, [totalItems])
+
+  if (!cached && !loading && !error) return null
+
+  return (
+    <div style={{ ...card, marginBottom: 20, overflow: 'hidden' }}>
+      {/* Header bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: expanded ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
+        onClick={() => setExpanded(x => !x)}>
+        <div style={{ fontSize: 18 }}>🧠</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ ...syne, fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>Your Vault Summary</div>
+          {cached && (
+            <div style={{ ...mono, fontSize: 10, color: isStale ? '#f59e0b' : 'var(--text-muted)', marginTop: 2 }}>
+              {age === 0 ? 'Updated just now' : age != null ? `Updated ${age}h ago${isStale ? ' · outdated' : ''}` : ''}
+              {cached.folder_count != null && ` · ${cached.folder_count} folders, ${cached.item_count} entries, ${cached.photo_count} photos`}
+            </div>
+          )}
+        </div>
+        <button onClick={e => { e.stopPropagation(); refresh() }} disabled={loading}
+          style={{ ...btn('success', loading), padding: '5px 12px', fontSize: 11 }}>
+          {loading ? '🧠 Generating…' : '↺ Refresh'}
+        </button>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 4 }}>{expanded ? '▲' : '▼'}</div>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '16px 18px' }}>
+          {error && (
+            <div style={{ ...mono, fontSize: 11, color: '#f87171', marginBottom: 10 }}>{error}</div>
+          )}
+          {cached?.summary && (
+            <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.85, whiteSpace: 'pre-wrap', background: 'rgba(0,0,0,0.15)', borderRadius: 8, padding: '14px 16px' }}>
+              {cached.summary}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -493,6 +695,7 @@ export default function ProofVault() {
   const [loading,         setLoading]         = useState(true)
   const [selectedFolder,  setSelectedFolder]  = useState(null)
   const [newFolderOpen,   setNewFolderOpen]   = useState(false)
+  const [quickEntry,      setQuickEntry]      = useState(null)
   const [fullSummarizing, setFullSummarizing] = useState(false)
   const [fullSummary,     setFullSummary]     = useState(null)
   const [fullMeta,        setFullMeta]        = useState(null)
@@ -508,6 +711,16 @@ export default function ProofVault() {
   }
 
   useEffect(() => { loadFolders() }, [])
+
+  const handleQuickEntry = async (folderId, form) => {
+    try {
+      const r = await api.post(`/api/vault/folders/${folderId}/items`, form)
+      setFolders(fs => fs.map(f => f.id === folderId ? { ...f, item_count: (f.item_count || 0) + 1 } : f))
+      setQuickEntry(null)
+      // Invalidate summary cache so it regenerates on next view
+      localStorage.removeItem(SUMMARY_KEY)
+    } catch (e) { alert(e.response?.data?.detail || 'Failed to log entry.') }
+  }
 
   const handleCreateFolder = async (form) => {
     try {
@@ -543,7 +756,8 @@ export default function ProofVault() {
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
       {newFolderOpen && <NewFolderModal onSave={handleCreateFolder} onClose={() => setNewFolderOpen(false)} />}
-      {fullSummary && <SummaryModal summary={fullSummary} meta={fullMeta} onClose={() => setFullSummary(null)} />}
+      {quickEntry    && <QuickEntryModal preset={quickEntry} folders={folders} onSave={handleQuickEntry} onClose={() => setQuickEntry(null)} />}
+      {fullSummary   && <SummaryModal summary={fullSummary} meta={fullMeta} onClose={() => setFullSummary(null)} />}
 
       <PageHeader
         title="Proof Vault"
@@ -559,6 +773,26 @@ export default function ProofVault() {
         />
       ) : (
         <>
+          {/* Vault Summary */}
+          {totalItems > 0 && <VaultSummaryPanel totalItems={totalItems} />}
+
+          {/* Quick Log */}
+          {folders.length > 0 && (
+            <div style={{ ...card, padding: '16px 18px', marginBottom: 20 }}>
+              <div style={{ ...mono, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 12 }}>
+                ⚡ Quick Log
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {QUICK_ENTRIES.map(q => (
+                  <button key={q.label} onClick={() => setQuickEntry(q)}
+                    style={{ ...btn(), padding: '7px 13px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span>{q.icon}</span>
+                    <span>{q.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Action bar */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
