@@ -485,6 +485,7 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
   const [loading,      setLoading]      = useState(true)
   const [addOpen,      setAddOpen]      = useState(false)
   const [editItem,     setEditItem]     = useState(null)
+  const [cachedMeta,   setCachedMeta]   = useState(null)
   const [summarizing,  setSummarizing]  = useState(false)
   const [summary,      setSummary]      = useState(null)
   const [summaryMeta,  setSummaryMeta]  = useState(null)
@@ -499,7 +500,15 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [folder.id])
+
+  const loadCached = async () => {
+    try {
+      const r = await api.get(`/api/vault/folders/${folder.id}/summary/cached`)
+      if (r.data.cached) setCachedMeta(r.data)
+    } catch {}
+  }
+
+  useEffect(() => { load(); loadCached() }, [folder.id])
 
   const handleAddItem = async (form) => {
     try {
@@ -541,13 +550,15 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
     } catch {}
   }
 
-  const handleSummary = async () => {
+  const handleSummary = async (force = false) => {
     setSummarizing(true)
     setError(null)
     try {
-      const r = await api.post(`/api/vault/folders/${folder.id}/summary`)
+      const r = await api.post(`/api/vault/folders/${folder.id}/summary?force=${force}`)
+      const meta = { summary: r.data.summary, item_count: r.data.item_count ?? items.length, photo_count: r.data.photo_count, generated_at: r.data.generated_at }
       setSummary(r.data.summary)
-      setSummaryMeta({ item_count: items.length, photo_count: r.data.photo_count })
+      setSummaryMeta(meta)
+      setCachedMeta(meta)
     } catch (e) { setError(e.response?.data?.detail || 'Summary failed.') }
     setSummarizing(false)
   }
@@ -575,9 +586,20 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ ...mono, fontSize: 10, color: 'var(--text-muted)' }}>{items.length} entries · {totalPhotos} photos</span>
-            <button onClick={handleSummary} disabled={summarizing || items.length === 0} style={btn('success', summarizing || items.length === 0)}>
-              {summarizing ? '🧠 Generating…' : '🧠 AI Summary'}
-            </button>
+            {cachedMeta ? (
+              <>
+                <button onClick={() => { setSummary(cachedMeta.summary); setSummaryMeta(cachedMeta) }} style={btn('success')}>
+                  View Summary
+                </button>
+                <button onClick={() => handleSummary(true)} disabled={summarizing} style={{ ...btn('default', summarizing), padding: '7px 10px' }} title="Regenerate">
+                  {summarizing ? '...' : 'Regen'}
+                </button>
+              </>
+            ) : (
+              <button onClick={() => handleSummary(false)} disabled={summarizing || items.length === 0} style={btn('success', summarizing || items.length === 0)}>
+                {summarizing ? '🧠 Generating…' : '🧠 AI Summary'}
+              </button>
+            )}
             <button onClick={() => setAddOpen(true)} style={btn('primary')}>+ Add Entry</button>
           </div>
         </div>
@@ -634,7 +656,7 @@ function VaultSummaryPanel({ totalItems }) {
     setLoading(true)
     setError(null)
     try {
-      const r = await api.post('/api/vault/summary')
+      const r = await api.post(`/api/vault/summary?force=${force}`)
       const next = { ...r.data, ts: Date.now() }
       localStorage.setItem(SUMMARY_KEY, JSON.stringify(next))
       setCached(next)
@@ -699,6 +721,7 @@ export default function ProofVault() {
   const [fullSummarizing, setFullSummarizing] = useState(false)
   const [fullSummary,     setFullSummary]     = useState(null)
   const [fullMeta,        setFullMeta]        = useState(null)
+  const [cachedFullMeta,  setCachedFullMeta]  = useState(null)
   const [summaryError,    setSummaryError]    = useState(null)
 
   const loadFolders = async () => {
@@ -710,7 +733,15 @@ export default function ProofVault() {
     setLoading(false)
   }
 
-  useEffect(() => { loadFolders() }, [])
+
+  const loadCachedFull = async () => {
+    try {
+      const r = await api.get('/api/vault/summary/cached')
+      if (r.data.cached) setCachedFullMeta(r.data)
+    } catch {}
+  }
+
+  useEffect(() => { loadFolders(); loadCachedFull() }, [])
 
   const handleQuickEntry = async (folderId, form) => {
     try {
@@ -739,13 +770,14 @@ export default function ProofVault() {
     } catch {}
   }
 
-  const handleFullSummary = async () => {
+  const handleFullSummary = async (force = false) => {
     setFullSummarizing(true)
     setSummaryError(null)
     try {
-      const r = await api.post('/api/vault/summary')
+      const r = await api.post(`/api/vault/summary?force=${force}`)
       setFullSummary(r.data.summary)
       setFullMeta(r.data)
+      setCachedFullMeta(r.data)
     } catch (e) { setSummaryError(e.response?.data?.detail || 'Summary failed.') }
     setFullSummarizing(false)
   }
@@ -799,9 +831,20 @@ export default function ProofVault() {
               {folders.length > 0 && (
                 <>
                   <span style={{ ...mono, fontSize: 11, color: 'var(--text-muted)' }}>{folders.length} folders · {totalItems} entries</span>
-                  <button onClick={handleFullSummary} disabled={fullSummarizing || totalItems === 0} style={btn('success', fullSummarizing || totalItems === 0)}>
-                    {fullSummarizing ? '🧠 Generating…' : '🧠 Full Summary'}
-                  </button>
+                  {cachedFullMeta ? (
+                    <>
+                      <button onClick={() => { setFullSummary(cachedFullMeta.summary); setFullMeta(cachedFullMeta) }} style={btn('success')}>
+                        Full Summary
+                      </button>
+                      <button onClick={() => handleFullSummary(true)} disabled={fullSummarizing} style={{ ...btn('default', fullSummarizing), padding: '7px 10px' }} title="Regenerate">
+                        {fullSummarizing ? '...' : 'Regen'}
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => handleFullSummary(false)} disabled={fullSummarizing || totalItems === 0} style={btn('success', fullSummarizing || totalItems === 0)}>
+                      {fullSummarizing ? '🧠 Generating…' : '🧠 Full Summary'}
+                    </button>
+                  )}
                 </>
               )}
             </div>

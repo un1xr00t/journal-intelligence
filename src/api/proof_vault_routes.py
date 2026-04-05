@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import hashlib
 import uuid
 from typing import Optional
 
@@ -158,7 +159,69 @@ def register_proof_vault_routes(app, require_any_user):
             lines.append(line)
         return "\n".join(lines)
 
+    def _compute_vault_hash(items_with_photos: list) -> str:
+        """Hash of (item_id, photo_count) pairs — changes whenever content changes."""
+        key = ",".join(f"{r['id']}:{r.get('photo_count', 0)}" for r in items_with_photos)
+        return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+    def _ensure_cache_table(conn):
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pv_summary_cache (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER NOT NULL,
+                scope         TEXT    NOT NULL,
+                scope_id      INTEGER,
+                source_hash   TEXT    NOT NULL,
+                summary_text  TEXT    NOT NULL,
+                item_count    INTEGER,
+                photo_count   INTEGER,
+                generated_at  TEXT    DEFAULT (datetime('now')),
+                UNIQUE(user_id, scope, scope_id, source_hash)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_pv_summary_cache_lookup
+                ON pv_summary_cache (user_id, scope, scope_id)
+        """)
+        conn.commit()
+
+    def _get_cached_summary(conn, user_id: int, scope: str, scope_id):
+        """Return the most recent cached summary row regardless of hash (for display)."""
+        return conn.execute(
+            """SELECT summary_text, item_count, photo_count, generated_at, source_hash
+               FROM pv_summary_cache
+               WHERE user_id = ? AND scope = ? AND COALESCE(scope_id, -1) = COALESCE(?, -1)
+               ORDER BY generated_at DESC LIMIT 1""",
+            (user_id, scope, scope_id)
+        ).fetchone()
+
+    def _check_hash_cache(conn, user_id: int, scope: str, scope_id, source_hash: str):
+        """Return cached row only if hash matches current content."""
+        return conn.execute(
+            """SELECT summary_text, item_count, photo_count, generated_at
+               FROM pv_summary_cache
+               WHERE user_id = ? AND scope = ? AND COALESCE(scope_id, -1) = COALESCE(?, -1)
+                 AND source_hash = ?""",
+            (user_id, scope, scope_id, source_hash)
+        ).fetchone()
+
+    def _write_cache(conn, user_id: int, scope: str, scope_id, source_hash: str,
+                     summary_text: str, item_count: int, photo_count: int):
+        conn.execute(
+            """INSERT INTO pv_summary_cache
+                 (user_id, scope, scope_id, source_hash, summary_text, item_count, photo_count)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(user_id, scope, scope_id, source_hash)
+               DO UPDATE SET summary_text=excluded.summary_text,
+                             item_count=excluded.item_count,
+                             photo_count=excluded.photo_count,
+                             generated_at=datetime('now')""",
+            (user_id, scope, scope_id, source_hash, summary_text, item_count, photo_count)
+        )
+        conn.commit()
+
     # ── Folders ───────────────────────────────────────────────────────────────
+
 
     @app.get("/api/vault/folders")
     async def list_folders(user: dict = Depends(require_any_user)):
@@ -412,22 +475,64 @@ def register_proof_vault_routes(app, require_any_user):
 
     # ── AI Summaries ──────────────────────────────────────────────────────────
 
-    @app.post("/api/vault/folders/{folder_id}/summary")
-    async def folder_summary(folder_id: int, user: dict = Depends(require_any_user)):
-        """AI summary of everything in a single folder."""
+    @app.get("/api/vault/folders/{folder_id}/summary/cached")
+    async def folder_summary_cached(folder_id: int, user: dict = Depends(require_any_user)):
+        """Return the most recently cached summary for a folder (no AI call)."""
         conn = _db()
         try:
+            _ensure_cache_table(conn)
+            _get_folder(folder_id, user["id"], conn)
+            row = _get_cached_summary(conn, user["id"], "folder", folder_id)
+            if not row:
+                return {"cached": False}
+            return {
+                "cached":       True,
+                "summary":      row["summary_text"],
+                "item_count":   row["item_count"],
+                "photo_count":  row["photo_count"],
+                "generated_at": row["generated_at"],
+            }
+        finally:
+            conn.close()
+
+    @app.post("/api/vault/folders/{folder_id}/summary")
+    async def folder_summary(folder_id: int, force: bool = False, user: dict = Depends(require_any_user)):
+        """AI summary of everything in a single folder. Cached by content hash."""
+        conn = _db()
+        try:
+            _ensure_cache_table(conn)
             folder = _get_folder(folder_id, user["id"], conn)
             text   = _folder_summary(folder_id, user["id"], conn)
             if not text:
                 raise HTTPException(status_code=400, detail="No items in this folder yet.")
 
-            photo_count = conn.execute(
-                """SELECT COUNT(*) as c FROM pv_photos ph
-                   JOIN pv_items it ON it.id = ph.item_id
-                   WHERE it.folder_id = ? AND it.user_id = ?""",
+            # Build hash from item IDs + photo counts
+            rows_for_hash = conn.execute(
+                """SELECT i.id, COUNT(p.id) as photo_count
+                   FROM pv_items i
+                   LEFT JOIN pv_photos p ON p.item_id = i.id
+                   WHERE i.folder_id = ? AND i.user_id = ?
+                   GROUP BY i.id ORDER BY i.id""",
                 (folder_id, user["id"])
-            ).fetchone()["c"]
+            ).fetchall()
+            source_hash = _compute_vault_hash([dict(r) for r in rows_for_hash])
+
+            photo_count = sum(r["photo_count"] for r in rows_for_hash)
+            item_count  = len(rows_for_hash)
+
+            # Cache hit
+            if not force:
+                cached = _check_hash_cache(conn, user["id"], "folder", folder_id, source_hash)
+                if cached:
+                    logger.info(f"[vault_cache] hit folder={folder_id} user={user['id']} hash={source_hash}")
+                    return {
+                        "summary":      cached["summary_text"],
+                        "folder_name":  folder["name"],
+                        "photo_count":  photo_count,
+                        "item_count":   item_count,
+                        "cached":       True,
+                        "generated_at": cached["generated_at"],
+                    }
 
             try:
                 from src.api.ai_client import create_message
@@ -448,16 +553,46 @@ def register_proof_vault_routes(app, require_any_user):
             except Exception as ex:
                 raise HTTPException(status_code=503, detail=f"AI summary failed: {ex}. Check your API key in Settings.")
 
-            return {"summary": summary, "folder_name": folder["name"], "photo_count": photo_count}
+            _write_cache(conn, user["id"], "folder", folder_id, source_hash, summary, item_count, photo_count)
+            logger.info(f"[vault_cache] written folder={folder_id} user={user['id']} hash={source_hash}")
+
+            return {
+                "summary":      summary,
+                "folder_name":  folder["name"],
+                "photo_count":  photo_count,
+                "item_count":   item_count,
+                "cached":       False,
+                "generated_at": None,
+            }
+        finally:
+            conn.close()
+
+    @app.get("/api/vault/summary/cached")
+    async def full_summary_cached(user: dict = Depends(require_any_user)):
+        """Return the most recently cached full-vault summary (no AI call)."""
+        conn = _db()
+        try:
+            _ensure_cache_table(conn)
+            row = _get_cached_summary(conn, user["id"], "full", None)
+            if not row:
+                return {"cached": False}
+            return {
+                "cached":       True,
+                "summary":      row["summary_text"],
+                "item_count":   row["item_count"],
+                "photo_count":  row["photo_count"],
+                "generated_at": row["generated_at"],
+            }
         finally:
             conn.close()
 
     @app.post("/api/vault/summary")
-    async def full_summary(user: dict = Depends(require_any_user)):
-        """AI summary across ALL folders."""
+    async def full_summary(force: bool = False, user: dict = Depends(require_any_user)):
+        """AI summary across ALL folders. Cached by content hash."""
         conn = _db()
         try:
             _ensure_tables(conn)
+            _ensure_cache_table(conn)
             folders = conn.execute(
                 "SELECT id, name, icon FROM pv_folders WHERE user_id = ? ORDER BY created_at",
                 (user["id"],)
@@ -465,22 +600,45 @@ def register_proof_vault_routes(app, require_any_user):
             if not folders:
                 raise HTTPException(status_code=400, detail="No folders yet.")
 
-            all_text  = []
+            all_text     = []
             total_items  = 0
             total_photos = 0
+            all_rows_for_hash = []
 
             for f in folders:
                 text = _folder_summary(f["id"], user["id"], conn)
                 if text:
                     all_text.append(text)
-                    total_items  += conn.execute("SELECT COUNT(*) as c FROM pv_items WHERE folder_id = ? AND user_id = ?", (f["id"], user["id"])).fetchone()["c"]
-                    total_photos += conn.execute(
-                        "SELECT COUNT(*) as c FROM pv_photos ph JOIN pv_items it ON it.id = ph.item_id WHERE it.folder_id = ? AND it.user_id = ?",
+                    rows_for_hash = conn.execute(
+                        """SELECT i.id, COUNT(p.id) as photo_count
+                           FROM pv_items i
+                           LEFT JOIN pv_photos p ON p.item_id = i.id
+                           WHERE i.folder_id = ? AND i.user_id = ?
+                           GROUP BY i.id ORDER BY i.id""",
                         (f["id"], user["id"])
-                    ).fetchone()["c"]
+                    ).fetchall()
+                    all_rows_for_hash.extend([dict(r) for r in rows_for_hash])
+                    total_items  += len(rows_for_hash)
+                    total_photos += sum(r["photo_count"] for r in rows_for_hash)
 
             if not all_text:
                 raise HTTPException(status_code=400, detail="No items documented yet.")
+
+            source_hash = _compute_vault_hash(all_rows_for_hash)
+
+            # Cache hit
+            if not force:
+                cached = _check_hash_cache(conn, user["id"], "full", None, source_hash)
+                if cached:
+                    logger.info(f"[vault_cache] hit full user={user['id']} hash={source_hash}")
+                    return {
+                        "summary":      cached["summary_text"],
+                        "folder_count": len(folders),
+                        "item_count":   total_items,
+                        "photo_count":  total_photos,
+                        "cached":       True,
+                        "generated_at": cached["generated_at"],
+                    }
 
             combined = "\n\n".join(all_text)
 
@@ -503,11 +661,16 @@ def register_proof_vault_routes(app, require_any_user):
             except Exception as ex:
                 raise HTTPException(status_code=503, detail=f"AI summary failed: {ex}. Check your API key.")
 
+            _write_cache(conn, user["id"], "full", None, source_hash, summary, total_items, total_photos)
+            logger.info(f"[vault_cache] written full user={user['id']} hash={source_hash}")
+
             return {
                 "summary":      summary,
                 "folder_count": len(folders),
                 "item_count":   total_items,
                 "photo_count":  total_photos,
+                "cached":       False,
+                "generated_at": None,
             }
         finally:
             conn.close()
