@@ -2023,6 +2023,154 @@ function SmsSection() {
   )
 }
 
+
+// ─── Voice Settings Section ───────────────────────────────────────────────────
+function VoiceSettingsSection() {
+  const TONES = [
+    { id: 'best_friend', label: 'Best Friend',  symbol: '✦', voice: 'nova',    desc: 'Warm, casual, hypes you up like a close friend' },
+    { id: 'therapist',   label: 'Therapist',    symbol: '◎', voice: 'shimmer', desc: 'Calm, reflective, asks the right questions' },
+    { id: 'hype_coach',  label: 'Hype Coach',   symbol: '⚡', voice: 'fable',   desc: 'Unhinged energy — celebrates every win loudly' },
+    { id: 'unhinged',    label: 'Unhinged 18+', symbol: '✕', voice: 'onyx',    desc: 'Brutally honest, chaotic, zero filter — adults only' },
+    { id: 'midnight',    label: 'Midnight',     symbol: '〜', voice: 'echo',    desc: 'Slow and poetic — for late-night spiral sessions' },
+  ]
+
+  const [settings, setSettings] = useState(null)
+  const [toneId, setToneId]     = useState('best_friend')
+  const [voiceKey, setVoiceKey] = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [keySaving, setKeySave] = useState(false)
+  const [saved, setSaved]       = useState(false)
+  const [keySaved, setKeySaved] = useState(false)
+  const [err, setErr]           = useState('')
+
+  useEffect(() => {
+    api.get('/api/voice/settings').then(r => {
+      setSettings(r.data)
+      if (r.data.tone_id) setToneId(r.data.tone_id)
+    }).catch(() => setErr('Could not load voice settings'))
+  }, [])
+
+  const saveTone = async () => {
+    setSaving(true); setErr('')
+    try {
+      const t = TONES.find(t => t.id === toneId) || TONES[0]
+      await api.post('/api/voice/settings', { tone_id: toneId, voice_id: t.voice })
+      setSaved(true); setTimeout(() => setSaved(false), 2500)
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Failed to save tone')
+    } finally { setSaving(false) }
+  }
+
+  const saveKey = async () => {
+    setKeySave(true); setErr('')
+    try {
+      await api.post('/api/voice/settings/key', { voice_openai_key: voiceKey || null })
+      setKeySaved(true); setVoiceKey(''); setTimeout(() => setKeySaved(false), 2500)
+      const r = await api.get('/api/voice/settings')
+      setSettings(r.data)
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Failed to save key')
+    } finally { setKeySave(false) }
+  }
+
+  return (
+    <>
+      {/* Key status */}
+      <Card>
+        <Label>OpenAI Key Status</Label>
+        {settings ? (
+          settings.has_voice_key ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ fontSize: 13, color: '#4ade80' }}>✓ Dedicated voice key saved</div>
+              <button
+                onClick={() => api.post('/api/voice/settings/key', { voice_openai_key: null }).then(() => api.get('/api/voice/settings').then(r => setSettings(r.data)))}
+                style={{ padding: '6px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 7, fontSize: 11, fontWeight: 600, color: 'rgba(239,68,68,0.7)', cursor: 'pointer', fontFamily: 'Syne,sans-serif' }}
+              >Clear</button>
+            </div>
+          ) : settings.using_openai ? (
+            <div style={{ fontSize: 12, color: '#4ade80', lineHeight: 1.5 }}>
+              ✓ Using your OpenAI key from AI Preferences — no extra key needed
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', lineHeight: 1.6, marginBottom: 14 }}>
+              Voice uses OpenAI TTS. Your current AI provider is not OpenAI, so you need an OpenAI key specifically for voice. Add one below — or switch your AI provider to OpenAI in the AI Preferences tab.
+            </div>
+          )
+        ) : (
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Loading…</div>
+        )}
+
+        {settings && !settings.has_voice_key && !settings.using_openai && (
+          <div style={{ marginTop: 12 }}>
+            <Label>OpenAI API Key (for voice only)</Label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                value={voiceKey}
+                onChange={e => setVoiceKey(e.target.value)}
+                placeholder="sk-..."
+                style={{ flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, color: 'rgba(255,255,255,0.88)', fontSize: 13, outline: 'none', fontFamily: 'DM Sans, sans-serif' }}
+              />
+              <SaveBtn saving={keySaving} saved={keySaved} onClick={saveKey} label="Save Key" />
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Tone selector */}
+      <Card>
+        <SectionTitle icon="〜" title="Voice Tone" subtitle="Personality of the AI when you use voice mode" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+          {TONES.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setToneId(t.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                background: toneId === t.id ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.025)',
+                border: `1px solid ${toneId === t.id ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.06)'}`,
+                borderRadius: 10, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+              }}
+            >
+              <span style={{ fontSize: 14, color: toneId === t.id ? 'var(--accent,#6366f1)' : 'rgba(255,255,255,0.3)', width: 18, flexShrink: 0 }}>{t.symbol}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: toneId === t.id ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)', fontFamily: 'Syne,sans-serif' }}>{t.label}</span>
+                  {t.id === 'unhinged' && <span style={{ fontSize: 9, background: 'rgba(239,68,68,0.15)', color: '#f87171', borderRadius: 4, padding: '1px 5px' }}>18+</span>}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', fontFamily: "'IBM Plex Mono',monospace" }}>{t.desc}</div>
+              </div>
+              <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>{t.voice}</span>
+              {toneId === t.id && <span style={{ fontSize: 12, color: 'var(--accent,#6366f1)', flexShrink: 0 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+        <SaveBtn saving={saving} saved={saved} onClick={saveTone} />
+      </Card>
+
+      {/* How it works */}
+      <Card>
+        <Label>How Voice Mode Works</Label>
+        <div style={{ display: 'grid', gap: 10 }}>
+          {[
+            { icon: '◉', text: 'Hover the floating chat button — it splits into Voice and Chat pills' },
+            { icon: '〜', text: 'Click Voice — a compact Jarvis overlay appears with a live waveform visualization' },
+            { icon: '●', text: 'Tap the mic button to speak — Web Speech API converts your voice to text instantly' },
+            { icon: '✦', text: 'AI replies using your selected tone personality — OpenAI TTS speaks it back with the waveform animating to the audio' },
+          ].map((row, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 11, color: 'var(--accent,#6366f1)', flexShrink: 0, marginTop: 1 }}>{row.icon}</span>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>{row.text}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {err && <StatusBadge type="error" msg={err} />}
+    </>
+  )
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'memory',   icon: '◷', label: 'Memory Profile' },
@@ -2032,6 +2180,7 @@ const TABS = [
   { id: 'data',     icon: '◈', label: 'Data'            },
   { id: 'appearance', icon: '◉', label: 'Appearance'   },
   { id: 'sms',        icon: '◉', label: 'Text Journal' },
+  { id: 'voice',      icon: '〜', label: 'Voice'       },
 ]
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
@@ -2125,6 +2274,12 @@ export default function Settings() {
         <>
           <SectionTitle icon="◉" title="Text Journal" subtitle="Journal via SMS — verify your number to text entries" />
           <SmsSection />
+        </>
+      )}
+      {tab === 'voice' && (
+        <>
+          <SectionTitle icon="〜" title="Voice Mode" subtitle="Talk to your journal — realistic AI voice with live waveform" />
+          <VoiceSettingsSection />
         </>
       )}
 
