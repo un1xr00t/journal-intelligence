@@ -89,6 +89,11 @@ export default function VoiceMode({ onClose, contextString }) {
   const [continuous, setCont]  = useState(true)
   const [localCtx, setLocalCtx] = useState('')
 
+  const [speakingWords,  setSpeakWords] = useState([])
+  const [currentWordIdx, setWordIdx]    = useState(-1)
+  const wordTimerRef = useRef(null)
+  const scrollRef    = useRef(null)
+
   const canvasRef    = useRef(null)
   const analyserRef  = useRef(null)
   const audioCtxRef  = useRef(null)
@@ -139,6 +144,13 @@ export default function VoiceMode({ onClose, contextString }) {
       try { audioCtxRef.current?.close() } catch {}
     }
   }, [])
+
+  // ── Auto-scroll conversation ─────────────────────────────────────────────
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    }
+  }, [messages, currentWordIdx])
 
   // ── Canvas ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -243,7 +255,6 @@ export default function VoiceMode({ onClose, contextString }) {
       setVs('speaking')
       setStatus('Speaking…')
       isSpeakingRef.current = true
-      // Hard-stop any active recognition so AI voice isn't picked up as input
       try { recogRef.current?.abort() } catch {}
       recogRef.current = null
 
@@ -259,19 +270,69 @@ export default function VoiceMode({ onClose, contextString }) {
       const buf = await ac.decodeAudioData(resp.data)
       try { sourceRef.current?.disconnect() } catch {}
 
+      // ── Karaoke word timing (RAF + audioCtx clock — zero drift) ────────────
+      const words = text.trim().split(/\s+/)
+      setSpeakWords(words)
+      setWordIdx(0)
+
+      // Weight by character length + punctuation pauses.
+      // Trailing comma/semicolon → 1.4x, period/exclamation/question → 1.8x
+      const wordWeights = words.map(w => {
+        const letters = Math.max(w.replace(/[^a-zA-Z0-9]/g, '').length, 1)
+        const last = w[w.length - 1]
+        const pauseMult = /[.!?]/.test(last) ? 1.8 : /[,;:]/.test(last) ? 1.4 : 1.0
+        return letters * pauseMult
+      })
+      const totalWeight = wordWeights.reduce((a, b) => a + b, 0)
+
+      // TTS audio has ~100ms of lead-in silence before speech starts.
+      // Subtract it so highlight doesn't lag behind the actual voice.
+      const LEAD_IN = 0.10
+      const speechDuration = Math.max(buf.duration - LEAD_IN, buf.duration * 0.85)
+
+      // Build cumulative start times for each word within speechDuration
+      const wordStartSecs = []
+      let acc = LEAD_IN
+      for (const w of wordWeights) {
+        wordStartSecs.push(acc)
+        acc += (w / totalWeight) * speechDuration
+      }
+
       const src = ac.createBufferSource()
       src.buffer = buf
-      // TTS → analyser (viz) AND → destination (speakers) separately — mic never touches destination
       src.connect(analyserRef.current)
       src.connect(ac.destination)
+
+      // Record the audioCtx time the moment playback starts.
+      // ac.currentTime is hardware-clocked — it never drifts.
+      const startAcTime = ac.currentTime
       src.start(0)
       sourceRef.current = src
 
+      // RAF loop: always update wordTimerRef.current so cancelAnimationFrame
+      // always cancels the *latest* scheduled frame (fixes the TypeError).
+      if (wordTimerRef.current) cancelAnimationFrame(wordTimerRef.current)
+      const tick = () => {
+        const elapsed = ac.currentTime - startAcTime
+        let lo = 0, hi = wordStartSecs.length - 1, found = 0
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1
+          if (wordStartSecs[mid] <= elapsed) { found = mid; lo = mid + 1 }
+          else hi = mid - 1
+        }
+        setWordIdx(found)
+        // CRITICAL: store every new frame id in the ref so cancel works
+        wordTimerRef.current = requestAnimationFrame(tick)
+      }
+      wordTimerRef.current = requestAnimationFrame(tick)
+
       src.onended = () => {
         try { src.disconnect() } catch {}
+        if (wordTimerRef.current) { cancelAnimationFrame(wordTimerRef.current); wordTimerRef.current = null }
+        setSpeakWords([])
+        setWordIdx(-1)
         isSpeakingRef.current = false
         if (contRef.current) {
-          // Small delay so browser mic buffer clears before we listen again
           setTimeout(() => startListeningInner(), 600)
         } else {
           setVs('idle')
@@ -280,6 +341,9 @@ export default function VoiceMode({ onClose, contextString }) {
       }
     } catch (e) {
       isSpeakingRef.current = false
+      if (wordTimerRef.current) { cancelAnimationFrame(wordTimerRef.current); wordTimerRef.current = null }
+      setSpeakWords([])
+      setWordIdx(-1)
       setError(e?.response?.status === 400 ? 'Check OpenAI key in Settings → Voice' : e?.message || 'Audio playback error')
       setVs('idle')
       setStatus('Tap to speak')
@@ -391,6 +455,9 @@ export default function VoiceMode({ onClose, contextString }) {
     micSourceRef.current = null
     analyserRef.current = null
     dataRef.current = null
+    if (wordTimerRef.current) { clearInterval(wordTimerRef.current); wordTimerRef.current = null }
+    setSpeakWords([])
+    setWordIdx(-1)
     setMsgs([])
     setTx('')
     setReply('')
@@ -459,11 +526,92 @@ export default function VoiceMode({ onClose, contextString }) {
         <canvas ref={canvasRef} width={SZ} height={SZ} style={{ width: SZ, height: SZ, display: 'block' }} />
       </div>
 
-      {/* Transcript + reply */}
-      {(transcript || lastReply) && (
-        <div style={{ margin: '0 14px 10px', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {transcript && <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: 'rgba(255,255,255,0.3)' }}>You: {transcript}</div>}
-          {lastReply && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 1.55 }}>{lastReply.length > 130 ? lastReply.slice(0, 130) + '…' : lastReply}</div>}
+      {/* Scrollable conversation */}
+      {(messages.length > 0 || transcript) && (
+        <div
+          ref={scrollRef}
+          style={{
+            margin: '0 12px 10px',
+            padding: '10px 12px',
+            background: 'rgba(0,0,0,0.25)',
+            borderRadius: 12,
+            maxHeight: 220,
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            scrollbarWidth: 'none',
+          }}
+        >
+          {messages.map((m, i) => {
+            const isUser = m.role === 'user'
+            const isLastAssistant = !isUser && i === messages.length - 1
+            const isCurrentlySpeaking = isLastAssistant && speakingWords.length > 0
+
+            return (
+              <div key={i} style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: isUser ? 'flex-end' : 'flex-start',
+              }}>
+                <div style={{
+                  maxWidth: '90%',
+                  padding: '6px 10px',
+                  borderRadius: isUser ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
+                  background: isUser
+                    ? 'rgba(99,102,241,0.15)'
+                    : 'rgba(255,255,255,0.05)',
+                  border: isUser
+                    ? '1px solid rgba(99,102,241,0.25)'
+                    : '1px solid rgba(255,255,255,0.07)',
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  color: isUser ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.75)',
+                  fontFamily: isUser ? "'IBM Plex Mono',monospace" : 'Syne, sans-serif',
+                }}>
+                  {isCurrentlySpeaking
+                    ? speakingWords.map((word, wi) => (
+                        <span
+                          key={wi}
+                          style={{
+                            transition: 'color 0.1s ease, text-shadow 0.1s ease',
+                            color: wi === currentWordIdx
+                              ? '#93c5fd'
+                              : wi < currentWordIdx
+                              ? 'rgba(255,255,255,0.45)'
+                              : 'rgba(255,255,255,0.75)',
+                            textShadow: wi === currentWordIdx
+                              ? '0 0 12px rgba(147,197,253,0.9), 0 0 24px rgba(96,165,250,0.55)'
+                              : 'none',
+                            fontWeight: wi === currentWordIdx ? 600 : 400,
+                          }}
+                        >
+                          {word}{wi < speakingWords.length - 1 ? ' ' : ''}
+                        </span>
+                      ))
+                    : m.content
+                  }
+                </div>
+              </div>
+            )
+          })}
+          {/* Live transcript bubble */}
+          {transcript && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{
+                padding: '5px 10px',
+                borderRadius: '12px 12px 3px 12px',
+                background: 'rgba(99,102,241,0.08)',
+                border: '1px dashed rgba(99,102,241,0.2)',
+                fontSize: 11,
+                color: 'rgba(255,255,255,0.3)',
+                fontFamily: "'IBM Plex Mono',monospace",
+                fontStyle: 'italic',
+              }}>
+                {transcript}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
