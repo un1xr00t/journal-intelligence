@@ -1083,6 +1083,23 @@ function ComparisonScreen({ budget, onBack }) {
     }
   }
 
+  // ── Computed values for delta summary ──
+  const housingA   = (parseFloat(rentA) || 0) + (parseFloat(utilitiesA) || 0)
+  const expTotalA  = Object.values(expValsA).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+  const spendA     = housingA + expTotalA
+  const leftoverA  = (parseFloat(incomeA) || 0) - spendA
+
+  const housingB   = (parseFloat(rentB) || 0) + (parseFloat(utilitiesB) || 0)
+  const expTotalB  = Object.values(expValsB).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+  const spendB     = housingB + expTotalB
+  const leftoverB  = (parseFloat(incomeB) || 0) - spendB
+
+  const monthlyDelta = leftoverB - leftoverA
+  const annualDelta  = monthlyDelta * 12
+  const fiveYrDelta  = monthlyDelta * 60
+  const winner       = Math.abs(monthlyDelta) < 1 ? null : monthlyDelta > 0 ? labelB : labelA
+  const winnerColor  = monthlyDelta > 0 ? '#f59e0b' : '#6366f1'
+
   const tabBtn = (key, label) => (
     <button
       key={key} onClick={() => setTab(key)}
@@ -1138,29 +1155,116 @@ function ComparisonScreen({ budget, onBack }) {
 
       {/* ── Compare tab ── */}
       {tab === 'compare' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 0, alignItems: 'start' }}>
-          <div style={{ paddingRight: 28 }}>
-            <ScenarioPanel
-              budget={budget}
-              label={labelA}           onLabelChange={setLabelA}
-              income={incomeA}         onIncomeChange={setIncomeA}
-              rent={rentA}             onRentChange={setRentA}
-              utilities={utilitiesA}   onUtilitiesChange={setUtilitiesA}
-              expVals={expValsA}       onExpValsChange={setExpValsA}
-              accentColor="#6366f1"
-            />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+          {/* Panels */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 0, alignItems: 'start' }}>
+            <div style={{ paddingRight: 28 }}>
+              <ScenarioPanel
+                budget={budget}
+                label={labelA}           onLabelChange={setLabelA}
+                income={incomeA}         onIncomeChange={setIncomeA}
+                rent={rentA}             onRentChange={setRentA}
+                utilities={utilitiesA}   onUtilitiesChange={setUtilitiesA}
+                expVals={expValsA}       onExpValsChange={setExpValsA}
+                accentColor="#6366f1"
+              />
+            </div>
+            <div style={{ background: 'var(--border)', alignSelf: 'stretch', minHeight: 200 }} />
+            <div style={{ paddingLeft: 28 }}>
+              <ScenarioPanel
+                budget={budget}
+                label={labelB}           onLabelChange={setLabelB}
+                income={incomeB}         onIncomeChange={setIncomeB}
+                rent={rentB}             onRentChange={setRentB}
+                utilities={utilitiesB}   onUtilitiesChange={setUtilitiesB}
+                expVals={expValsB}       onExpValsChange={setExpValsB}
+                accentColor="#f59e0b"
+              />
+            </div>
           </div>
-          <div style={{ background: 'var(--border)', alignSelf: 'stretch', minHeight: 200 }} />
-          <div style={{ paddingLeft: 28 }}>
-            <ScenarioPanel
-              budget={budget}
-              label={labelB}           onLabelChange={setLabelB}
-              income={incomeB}         onIncomeChange={setIncomeB}
-              rent={rentB}             onRentChange={setRentB}
-              utilities={utilitiesB}   onUtilitiesChange={setUtilitiesB}
-              expVals={expValsB}       onExpValsChange={setExpValsB}
-              accentColor="#f59e0b"
-            />
+
+          {/* ── Delta Summary ── */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+
+            {/* Verdict banner */}
+            <div style={{ background: winner ? `${winnerColor}14` : 'rgba(99,102,241,0.06)', borderBottom: '1px solid var(--border)', padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 10, fontFamily: 'IBM Plex Mono, monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+                  Scenario Breakdown
+                </div>
+                {winner ? (
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 20, color: 'var(--text-primary)' }}>
+                    <span style={{ color: winnerColor }}>{winner}</span> leaves you{' '}
+                    <span style={{ color: winnerColor }}>${Math.abs(Math.round(monthlyDelta)).toLocaleString()}/mo more</span>
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 20, color: 'var(--text-muted)' }}>
+                    Both scenarios are financially identical
+                  </div>
+                )}
+              </div>
+              {winner && (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Monthly',   value: monthlyDelta },
+                    { label: 'Annually',  value: annualDelta  },
+                    { label: '5-Year',    value: fiveYrDelta  },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ textAlign: 'center', background: 'var(--bg-base)', border: `1px solid ${winnerColor}33`, borderRadius: 10, padding: '10px 16px' }}>
+                      <div style={{ fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontWeight: 700, fontSize: 16, color: winnerColor }}>
+                        {value >= 0 ? '+' : '-'}${Math.abs(Math.round(value)).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Line-by-line comparison table */}
+            <div style={{ padding: '0 28px 24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px', gap: 0 }}>
+
+                {/* Table header */}
+                {['', labelA, labelB, 'Difference'].map((h, i) => (
+                  <div key={i} style={{ fontSize: 9, fontFamily: 'IBM Plex Mono, monospace', color: i === 1 ? '#6366f1' : i === 2 ? '#f59e0b' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '16px 8px 8px', textAlign: i > 0 ? 'right' : 'left', borderBottom: '1px solid var(--border)' }}>
+                    {h}
+                  </div>
+                ))}
+
+                {/* Rows */}
+                {[
+                  { label: 'Income',        a: parseFloat(incomeA) || 0,    b: parseFloat(incomeB) || 0    },
+                  { label: 'Rent',          a: parseFloat(rentA) || 0,      b: parseFloat(rentB) || 0,     expense: true },
+                  { label: 'Utilities',     a: parseFloat(utilitiesA) || 0, b: parseFloat(utilitiesB) || 0, expense: true },
+                  ...budget.expenses.map((e, i) => ({
+                    label: e.name,
+                    a: parseFloat(expValsA[i]) || 0,
+                    b: parseFloat(expValsB[i]) || 0,
+                    expense: true,
+                  })),
+                  { label: 'Total Spend',   a: spendA,    b: spendB,    bold: true, expense: true },
+                  { label: 'Left Over',     a: leftoverA, b: leftoverB, bold: true },
+                ].map(({ label, a, b, bold, expense }, idx) => {
+                  const diff     = b - a
+                  // For expenses, positive diff is bad (spending more); for income/leftover, positive is good
+                  const goodDiff = expense ? diff < -0.5 : diff > 0.5
+                  const badDiff  = expense ? diff > 0.5  : diff < -0.5
+                  const diffColor = goodDiff ? '#22c55e' : badDiff ? '#ef4444' : 'var(--text-muted)'
+                  const rowBg    = idx % 2 === 0 ? 'transparent' : 'rgba(99,102,241,0.03)'
+                  return [
+                    <div key={`l${idx}`} style={{ fontSize: 11, color: bold ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: bold ? 700 : 400, fontFamily: bold ? 'IBM Plex Mono, monospace' : 'inherit', padding: '9px 8px', background: rowBg, borderBottom: '1px solid var(--border)' }}>{label}</div>,
+                    <div key={`a${idx}`} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: 'var(--text-primary)', textAlign: 'right', padding: '9px 8px', background: rowBg, borderBottom: '1px solid var(--border)' }}>${Math.round(a).toLocaleString()}</div>,
+                    <div key={`b${idx}`} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: 'var(--text-primary)', textAlign: 'right', padding: '9px 8px', background: rowBg, borderBottom: '1px solid var(--border)' }}>${Math.round(b).toLocaleString()}</div>,
+                    <div key={`d${idx}`} style={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: Math.abs(diff) < 0.5 ? 'var(--text-muted)' : diffColor, textAlign: 'right', padding: '9px 8px', background: rowBg, borderBottom: '1px solid var(--border)', fontWeight: bold ? 700 : 400 }}>
+                      {Math.abs(diff) < 0.5 ? '—' : `${diff > 0 ? '+' : ''}${Math.round(diff).toLocaleString()}`}
+                    </div>,
+                  ]
+                })}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
