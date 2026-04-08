@@ -23,6 +23,45 @@ function getRating(leftover) {
   return                      { label: 'Very Good',  color: '#22c55e' }
 }
 
+// ─── Mini Markdown Renderer ───────────────────────────────────────────────────
+
+function MiniMarkdown({ text }) {
+  if (!text) return null
+  const lines = text.split('\n')
+  return (
+    <div>
+      {lines.map((line, i) => {
+        // ## Heading
+        if (line.startsWith('## ')) {
+          const content = line.slice(3)
+          return (
+            <div key={i} style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', marginTop: i === 0 ? 0 : 20, marginBottom: 6 }}>
+              {renderInline(content)}
+            </div>
+          )
+        }
+        // blank line → spacer
+        if (line.trim() === '') return <div key={i} style={{ height: 6 }} />
+        // normal paragraph line
+        return (
+          <div key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
+            {renderInline(line)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function renderInline(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((p, i) =>
+    p.startsWith('**') && p.endsWith('**')
+      ? <strong key={i} style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{p.slice(2, -2)}</strong>
+      : p
+  )
+}
+
 // ─── Shared style tokens ──────────────────────────────────────────────────────
 
 const inp = {
@@ -551,9 +590,7 @@ Be specific and direct. Use the actual numbers from their budget. Do not give ge
           </div>
         )}
         {!aiLoading && aiError && <div style={{ fontSize: 13, color: '#ef4444' }}>{aiError}</div>}
-        {!aiLoading && analysis && (
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{analysis}</div>
-        )}
+        {!aiLoading && analysis && <MiniMarkdown text={analysis} />}
       </div>
     </div>
   )
