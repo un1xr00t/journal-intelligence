@@ -5,7 +5,7 @@
 > *I built this for myself - while going through it. Maybe it helps you too.*
 <p>
   <img src="Screenshots/dashboard.PNG" width="400"/>
-  <img src="Screenshots/timeline2.png" width="400"/>
+  <img src="Screenshots/timeline2.png" width="480"/>
 </p>
 
 ---
