@@ -3,12 +3,10 @@
 <img width="2752" height="1536" alt="Gemini_Generated_Image_3b56l73b56l73b56-2" src="https://github.com/user-attachments/assets/78969733-d9c0-4a5e-95f7-3cb3cfec9cfb" />
 
 > *I built this for myself - while going through it. Maybe it helps you too.*
-<table border="0">
-  <tr>
-    <td><img src="Screenshots/dashboard.PNG" width="400"/></td>
-    <td><img src="Screenshots/timeline2.png" width="400"/></td>
-  </tr>
-</table>
+<p>
+  <img src="Screenshots/dashboard.PNG" width="400"/>
+  <img src="Screenshots/timeline2.png" width="400"/>
+</p>
 
 ---
 
