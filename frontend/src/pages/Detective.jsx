@@ -539,7 +539,7 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
                 )}
                 {e.multi_photo_analysis && (
                   <div style={{ marginTop: 8, borderTop: '1px dashed rgba(99,102,241,0.2)', paddingTop: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                    <div onClick={() => setExpanded(isExpanded ? null : e.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, cursor: 'pointer' }}>
                       <span style={{ ...mono, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>— Combined Analysis —</span>
                       {(photos.length > 1 || (photos.length >= 1 && e.attachment_status === 'done')) && (
                         <button
@@ -552,9 +552,12 @@ export function InvestigationLog({ caseId, entries, onAdd, onDelete, onAttachmen
                     </div>
                     <div style={{
                       fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6,
-                      overflow: 'hidden', display: '-webkit-box',
-                      WebkitLineClamp: isExpanded ? 'unset' : 5, WebkitBoxOrient: 'vertical',
-                    }}>
+                      ...(isExpanded ? {} : {
+                        overflow: 'hidden', display: '-webkit-box',
+                        WebkitLineClamp: 5, WebkitBoxOrient: 'vertical',
+                      }),
+                      cursor: 'pointer',
+                    }} onClick={() => setExpanded(isExpanded ? null : e.id)}>
                       {e.multi_photo_analysis}
                     </div>
                   </div>

@@ -42,6 +42,59 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger("journal")
+
+# ── Image compression helper ──────────────────────────────────────────────────
+
+_API_IMAGE_LIMIT = 3.7 * 1024 * 1024   # 4.9 MB — stay under Anthropic's 5 MB hard cap
+
+def _compress_for_api(raw: bytes, mime: str) -> tuple[bytes, str]:
+    """Return (possibly compressed) image bytes and corrected mime type.
+    If the image is already under 4.9 MB it is returned unchanged.
+    Otherwise it is re-encoded as JPEG at progressively lower quality until
+    it fits, falling back to a half-resolution rescale if needed."""
+    if len(raw) <= _API_IMAGE_LIMIT:
+        return raw, mime
+
+    try:
+        import io
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(raw))
+        # Convert palette/RGBA modes so JPEG save works
+        if img.mode in ("RGBA", "P", "LA"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "P":
+                img = img.convert("RGBA")
+            bg.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+            img = bg
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+
+        for quality in (85, 75, 60, 45):
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+            compressed = buf.getvalue()
+            if len(compressed) <= _API_IMAGE_LIMIT:
+                logger.info(
+                    f"[detective] compressed image from {len(raw)//1024}KB to "
+                    f"{len(compressed)//1024}KB (q={quality})"
+                )
+                return compressed, "image/jpeg"
+
+        # Last resort: halve the resolution
+        small = img.resize((img.width // 2, img.height // 2), Image.LANCZOS)
+        buf = io.BytesIO()
+        small.save(buf, format="JPEG", quality=70, optimize=True)
+        compressed = buf.getvalue()
+        logger.info(
+            f"[detective] rescaled image from {len(raw)//1024}KB to {len(compressed)//1024}KB"
+        )
+        return compressed, "image/jpeg"
+
+    except Exception as e:
+        logger.warning(f"[detective] image compression failed, sending raw: {e}")
+        return raw, mime
+
 if not logging.root.handlers:
     logging.basicConfig(level=logging.INFO, stream=sys.stdout,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -1191,16 +1244,18 @@ def register_detective_routes(app, require_any_user, require_owner):
             if legacy and legacy["attachment_path"] and os.path.exists(legacy["attachment_path"]):
                 with open(legacy["attachment_path"], "rb") as fh:
                     raw = fh.read()
+                raw, mime_out = _compress_for_api(raw, legacy["attachment_mime"] or "image/jpeg")
                 b64 = base64.standard_b64encode(raw).decode()
-                images.append((b64, legacy["attachment_mime"] or "image/jpeg"))
+                images.append((b64, mime_out))
 
             for p in photos:
                 fp = p["file_path"]
                 if fp and os.path.exists(fp):
                     with open(fp, "rb") as fh:
                         raw = fh.read()
+                    raw, p_mime = _compress_for_api(raw, p["mime_type"] or "image/jpeg")
                     b64 = base64.standard_b64encode(raw).decode()
-                    images.append((b64, p["mime_type"] or "image/jpeg"))
+                    images.append((b64, p_mime))
 
             if not images:
                 raise HTTPException(status_code=400, detail="No photos to synthesize.")
