@@ -2,7 +2,6 @@
 
 <img width="2752" height="1536" alt="Gemini_Generated_Image_3b56l73b56l73b56-2" src="https://github.com/user-attachments/assets/78969733-d9c0-4a5e-95f7-3cb3cfec9cfb" />
 
-
 > *I built this for myself - while going through it. Maybe it helps you too.*
 
 <img alt="Dashboard" src="Screenshots/dashboard.PNG" width="600"/>
@@ -13,21 +12,39 @@
 
 ---
 
-There's a certain kind of pain that's hard to explain to people. The kind where you're not sure if you're overreacting. Where you've been told your memory is wrong so many times you start to believe it. Where you look back at months or years of your life and wonder - was that real? Did that actually happen the way I remember?
+There's a certain kind of pain that's hard to explain to people. The kind where you're not sure if you're overreacting. Where you've been told your memory is wrong so many times you start to believe it. Where you look back at months or years of your life and wonder — was that real? Did that actually happen the way I remember?
 
 I started journaling as a way to hold onto reality. To document things. To have a record that existed outside of my own head, one that couldn't be rewritten by someone else.
 
-And then I thought - what if my journal could actually *talk back*? What if instead of just writing into a void, the things I was processing could be understood, tracked, reflected back at me in ways that helped me see the bigger picture?
+And then I thought — what if my journal could actually *talk back*? What if instead of just writing into a void, the things I was processing could be understood, tracked, reflected back at me in ways that helped me see the bigger picture?
 
-That's what this is. A privacy-first, self-hosted journal intelligence system. Built by someone in the middle of it, for anyone else who needs it.
+That's what this is. A privacy-first, self-hosted journal intelligence system. **Built by someone in the middle of it, for anyone else who needs it.**
+
+I put everything I have into this. Every single feature here either came from something I personally went through, or something I watched someone I care about go through and wished they'd had a tool for. I'm not a company. There's no team. Just me, my journal, and a lot of late nights. If even one of these features helps you navigate something that felt impossible — that's the whole point.
 
 ---
 
-## What It Does
+### What this can actually do for you
 
-You write. The system listens - and thinks.
+**If you've ever been gaslit** — told your memory is wrong, your feelings are too much, that things didn't happen the way you remember — the **Evidence Vault**, **Contradiction Detection**, and **Ask My Journal** features exist entirely because of that. Every statement, event, admission, and contradiction gets extracted from your entries automatically. You can ask "when did they say they'd stop?" and get a grounded answer from your own history. No more doubting yourself.
 
-Journal entries come in as plain text files, straight from your iPhone via Shortcuts, via SMS text message, or written directly in the browser. From there, AI extracts mood, emotional severity, key events, people mentioned, and recurring topics. But it doesn't stop at data. It builds a living picture of you over time.
+**If you're trying to leave a dangerous or controlling situation** — the **Exit Plan Engine** was built for exactly this moment. It generates a private, phased plan based on your journal — what you've said, what resources make sense for your situation, what to do today versus what to plan for next month. It has a scratchpad the AI never reads. You can share it securely with an advocate or attorney via a passphrase-protected link. It's the thing I wish had existed when I needed it most.
+
+**If you can feel yourself getting worse but can't explain why** — the **Early Warning System** learns what your bad weeks looked like before they became bad weeks. It watches the three days before every severity spike in your history and scores your current window against those patterns. It fires an amber banner *before* the crash, not after. Zero AI cost. Pure pattern recognition on your own data.
+
+**If everything feels like it's happening all at once and you can't think straight** — the **War Room** is a single text field. Write everything that's in your head. The system reads your brain dump against your journal history and sorts it into: do today, plan this week, and let go — you can't control this one. Each item links directly to the right tool with your context already loaded.
+
+**If you need to tell your story to someone who can actually help** — a therapist, a lawyer, a judge, a family member who keeps asking why you can't "just leave" — **My Story** generates a complete narrative in your corner. You choose the purpose (therapist session, legal document, court filing, family conversation), the writing style, and what data to include. It writes in your corner. It cites your own journal. You don't have to find the words.
+
+**If you're starting to feel like you're the problem** — the **Multi-Tone Reflections** exist because sometimes you need to hear the same truth from six different voices before it lands. The Therapist will ground you. The Best Friend will cut through the noise. The Inner Critic will surface the voice in your own head so you can actually look at it. The Chaos Agent will say the thing nobody else will.
+
+**If you're quietly keeping track of everything you do while the other person contributes nothing** — the **Fairness Ledger** turns that invisible mental load into a documented record. Who handles what, how often, what the running score looks like. The AI writes a plain-language assessment using real names and real numbers. It doesn't editorialize. It just shows what the data says.
+
+**If you need to document something before someone else gets to rewrite it** — **Detective Mode** is a full investigation workspace with timestamped case logs, photo evidence with AI forensic analysis, and a Research Agent that searches public records, filings, social media, and news. Everything stays on your server. Nothing gets shared unless you choose.
+
+**If you're not sure whether you're in danger or just scared** — the **Decision Assistant** reads your journal and gives you three grounded options for any situation you're facing: lowest risk, balanced, and decisive. Each option includes what to do in the next 48 hours, the emotional cost, the reversibility, and a script you can actually use.
+
+**If you feel completely alone in this** — you're not. I'm going through it too. That's why I built every single one of these features.
 
 ---
 
@@ -55,15 +72,23 @@ These are the features that make this different from a notes app with an API key
 
 **✦ Personalized resources** — Not a generic list of hotlines. The system reads your memory profile, active alerts, and 30-day emotional averages and generates a ranked resource hub with context explaining why this applies to your specific situation.
 
-**🔍 Detective Mode** — A premium investigation workspace for when journaling becomes documentation. Case management, timestamped investigation log (tagged by type: note / observation / statement / admission / contradiction), photo evidence upload with Anthropic vision analysis, a Case Partner AI that knows your full case and journal history, Drop a Wire intelligence briefings, and a Research Agent that searches public records, social media, news, and business filings on any subject. Everything stays on your server. Nothing shared unless you choose.
+**🔍 Detective Mode** — A premium investigation workspace for when journaling becomes documentation. Case management, timestamped investigation log, photo evidence upload with Anthropic vision analysis, a Case Partner AI that knows your full case and journal history, Drop a Wire intelligence briefings, and a Research Agent that searches public records, social media, news, and business filings on any subject. Everything stays on your server. Nothing shared unless you choose.
 
 **⊘ Decision Assistant** — When you're stuck, the system reads your journal and helps you choose. Pick a goal (protect peace, get clarity, reduce conflict, stay safe, preserve relationship, prepare before acting), add optional context, and get three grounded options — lowest-risk, balanced, and decisive — each with a risk level, emotional cost, reversibility score, next 48 hours, and specific citations from your journal history. Generate a real conversation script for the option you choose. Save decisions for later review.
 
-**◈ War Room** — Dump everything in your head into one field. The system reads your brain dump against your journal history, memory profile, and active alerts, then sorts it into Act Now, Plan This Week, and Let Go For Now — with direct links to the right tool for each item, pre-loaded with your context. Triage results persist across navigation.
-
 **◈ War Room — Brain Dump Triage** — When everything is swirling and you can't think straight, dump it all in one place. The system reads your brain dump alongside your journal history, active alerts, and memory profile — then sorts everything into three buckets: **Act Now** (do today), **Plan This Week** (schedule before Friday), and **Let Go For Now** (outside your control — stop burning energy here). Each item links directly to the right tool in the app with your context pre-loaded. Results persist across navigation so you can work through the plan without losing it.
 
+**✦ My Story — AI Advocate Narrative** — Takes everything the system knows about you and writes it in your corner. Choose a purpose (therapist, lawyer, family, court, friend, general), a writing style (advocate, personal, clinical, timeline), and what data to include. Generates a complete narrative from your journal, detective case logs, fairness ledger, and any manual context you add. Saved as drafts. Exportable as PDF.
+
 **🔒 Fully self-hosted, fully private** — Your data lives in a SQLite database on infrastructure you control. Bring your own Anthropic key, use OpenAI, or run completely locally with Ollama or LM Studio. Zero telemetry. No analytics. No third-party servers touching your journal.
+
+---
+
+## What It Does
+
+You write. The system listens - and thinks.
+
+Journal entries come in as plain text files, straight from your iPhone via Shortcuts, via SMS text message, or written directly in the browser. From there, AI extracts mood, emotional severity, key events, people mentioned, and recurring topics. But it doesn't stop at data. It builds a living picture of you over time.
 
 ---
 
@@ -75,6 +100,12 @@ These are the features that make this different from a notes app with an API key
 Your entries, beautifully laid out. Mood scores visualized as a sparkline. Severity tracked over time. A **Living Master Summary** that sits at the top and evolves with every new entry - a constantly updated portrait of where you are and what you've been going through.
 
 If you haven't configured an AI key yet, the Timeline degrades gracefully — raw entry text still displays, empty AI sections are hidden, and a banner guides you to Settings.
+
+---
+
+### ☀ Today — Daily Intelligence Brief
+
+Your home base. A single page that gives you a full situational briefing every time you open the app: your active case status, early warning signals, pattern alerts, recent mood trend, suggested next action, and a daily writing prompt — all synthesized from your journal and pulled into one view. No digging through tabs to know where things stand.
 
 ---
 
@@ -224,7 +255,7 @@ Sometimes you need to tell your story to someone else — a therapist, a lawyer,
 - **Clinical** — structured sections with objective framing
 - **Timeline** — chronological narrative arc
 
-Narratives auto-save as drafts immediately after generation. Load, copy, or delete any saved draft. Rendered in Georgia serif — built to be read, not skimmed.
+Narratives auto-save as drafts immediately after generation. Load, copy, or delete any saved draft. Rendered in Georgia serif — built to be read, not skimmed. Full PDF export available.
 
 Available under Premium Options in the sidebar.
 
@@ -280,6 +311,14 @@ It's the thing I wish had existed when I needed it.
 
 ### ⊞ Clinical Export Packets
 Generate PDF export packets in multiple formats - timeline summaries, evidence packets, nervous system reports, full case files with optional redaction. Built with WeasyPrint. Dark cover page, mood bar chart, color-coded entry cards, AI narrative. Useful for therapy appointments, legal documentation, or just having a record you can hold in your hands.
+
+---
+
+### 💰 Budget Planner
+
+A financial clarity workspace built for the moments when stability feels uncertain.
+
+Plan your income and expenses, track what you control versus what's shared, and get a clear picture of what your financial floor actually looks like. Designed for people who need to know: *can I afford to leave? What would month one actually cost me?* Pairs naturally with the Exit Plan for financial phase planning.
 
 ---
 
@@ -751,7 +790,9 @@ I have a lot more planned that I'm not ready to talk about yet. If this resonate
 ## For Anyone Who Needs This
 
 If you found this project because you're going through something hard - I see you. You're not crazy. Your memory isn't broken. Writing it down matters.
+
 This tool won't fix anything. But it might help you understand what's happening, document what needs documenting, and feel a little less alone in the process.
+
 That's why I built it.
 
 ---
