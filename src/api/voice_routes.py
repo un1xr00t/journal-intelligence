@@ -179,7 +179,7 @@ def register_voice_routes(app, require_any_user):
                 user_id=user_id,
                 system=system_prompt,
                 user_prompt=last_msg,
-                max_tokens=150,
+                max_tokens=600,
                 call_type="voice_chat",
             )
         except Exception as e:

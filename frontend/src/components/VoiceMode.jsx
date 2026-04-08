@@ -93,6 +93,8 @@ export default function VoiceMode({ onClose, contextString }) {
   const [currentWordIdx, setWordIdx]    = useState(-1)
   const wordTimerRef = useRef(null)
   const scrollRef    = useRef(null)
+  const activeWordRef = useRef(null)
+  const lastMsgRef   = useRef(null)
 
   const canvasRef    = useRef(null)
   const analyserRef  = useRef(null)
@@ -145,12 +147,16 @@ export default function VoiceMode({ onClose, contextString }) {
     }
   }, [])
 
-  // ── Auto-scroll conversation ─────────────────────────────────────────────
+
+  // Scroll to bottom when new messages arrive (not during speaking)
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && vsRef.current !== 'speaking') {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
     }
-  }, [messages, currentWordIdx])
+  }, [messages])
+
+
+
 
   // ── Canvas ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -312,6 +318,7 @@ export default function VoiceMode({ onClose, contextString }) {
       // RAF loop: always update wordTimerRef.current so cancelAnimationFrame
       // always cancels the *latest* scheduled frame (fixes the TypeError).
       if (wordTimerRef.current) cancelAnimationFrame(wordTimerRef.current)
+      let lastFound = -1
       const tick = () => {
         const elapsed = ac.currentTime - startAcTime
         let lo = 0, hi = wordStartSecs.length - 1, found = 0
@@ -320,7 +327,20 @@ export default function VoiceMode({ onClose, contextString }) {
           if (wordStartSecs[mid] <= elapsed) { found = mid; lo = mid + 1 }
           else hi = mid - 1
         }
-        setWordIdx(found)
+        if (found !== lastFound) {
+          lastFound = found
+          setWordIdx(found)
+          // Direct DOM scroll — no React effect latency
+          if (scrollRef.current) {
+            const activeSpan = scrollRef.current.querySelector('[data-word-active="1"]')
+            if (activeSpan) {
+              const wordRect = activeSpan.getBoundingClientRect()
+              const containerRect = scrollRef.current.getBoundingClientRect()
+              const relTop = wordRect.top - containerRect.top + scrollRef.current.scrollTop
+              scrollRef.current.scrollTop = relTop - scrollRef.current.clientHeight / 2
+            }
+          }
+        }
         // CRITICAL: store every new frame id in the ref so cancel works
         wordTimerRef.current = requestAnimationFrame(tick)
       }
@@ -549,7 +569,7 @@ export default function VoiceMode({ onClose, contextString }) {
             const isCurrentlySpeaking = isLastAssistant && speakingWords.length > 0
 
             return (
-              <div key={i} style={{
+              <div key={i} ref={isLastAssistant ? lastMsgRef : null} style={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: isUser ? 'flex-end' : 'flex-start',
@@ -573,6 +593,8 @@ export default function VoiceMode({ onClose, contextString }) {
                     ? speakingWords.map((word, wi) => (
                         <span
                           key={wi}
+                          ref={wi === currentWordIdx ? activeWordRef : null}
+                          data-word-active={wi === currentWordIdx ? '1' : undefined}
                           style={{
                             transition: 'color 0.1s ease, text-shadow 0.1s ease',
                             color: wi === currentWordIdx
