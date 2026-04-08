@@ -2235,4 +2235,7 @@ register_fairness_routes(app, _fairness_get_db, require_any_user, _fairness_crea
 from src.api.voice_routes import register_voice_routes
 register_voice_routes(app, require_any_user)
 
+from src.api.budget_routes import register_budget_routes
+register_budget_routes(app, require_any_user)
+
 

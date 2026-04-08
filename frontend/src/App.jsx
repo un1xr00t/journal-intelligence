@@ -37,6 +37,7 @@ import ProofVault from './pages/ProofVault'
 import MyStory from './pages/MyStory'
 import Today from './pages/Today'
 import InviteAccess from './pages/InviteAccess'
+import BudgetPlanner from './pages/BudgetPlanner'
 import EarlyWarningBanner from './components/EarlyWarningBanner'
 import CrisisBanner from './components/CrisisBanner'
 import api from './services/api'
@@ -249,6 +250,7 @@ function Shell() {
             <Route path="/today" element={<ProtectedRoute><Today /></ProtectedRoute>} />
             <Route path="/share/plan/:token" element={<ExitPlanShareView />} />
             <Route path="/invite/:token" element={<InviteAccess />} />
+            <Route path="/budget-planner" element={<ProtectedRoute><BudgetPlanner /></ProtectedRoute>} />
             <Route path="*"               element={<Navigate to="/" replace />} />
           </Routes>
         </main>

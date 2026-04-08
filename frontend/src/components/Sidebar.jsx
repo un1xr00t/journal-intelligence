@@ -49,6 +49,12 @@ const NAV_GROUPS = [
     ]
   },
   {
+    label: 'Tools',
+    links: [
+      { to: '/budget-planner', icon: '◫', label: 'Budget Planner' },
+    ]
+  },
+  {
     label: 'System',
     links: [
       { to: '/admin',     icon: '⊙', label: 'Admin',     ownerOnly: true },
