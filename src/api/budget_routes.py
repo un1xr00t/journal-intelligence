@@ -105,6 +105,18 @@ def register_budget_routes(app, require_any_user):
             conn.close()
 
 
+    @app.delete("/api/budget/plan")
+    async def delete_budget_plan(current_user: dict = Depends(require_any_user)):
+        from src.auth.auth_db import get_db
+        user_id = current_user["id"]
+        conn = get_db()
+        try:
+            conn.execute("DELETE FROM budget_plans WHERE user_id = ?", (user_id,))
+            conn.commit()
+            return {"deleted": True}
+        finally:
+            conn.close()
+
     # ── Create comparisons table ──────────────────────────────────────────────
     def _ensure_comparisons_table():
         from src.auth.auth_db import get_db

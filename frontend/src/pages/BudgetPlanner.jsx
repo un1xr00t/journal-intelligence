@@ -8,6 +8,56 @@ const SEGMENT_COLORS = [
   '#ec4899', '#06b6d4', '#f97316', '#a3e635',
 ]
 
+const QUICK_ADD_TEMPLATES = [
+  { category: 'Streaming', items: [
+    { name: 'Netflix',          amount: '17'  },
+    { name: 'Spotify',          amount: '11'  },
+    { name: 'Hulu',             amount: '18'  },
+    { name: 'Disney+',          amount: '14'  },
+    { name: 'HBO Max',          amount: '16'  },
+    { name: 'Apple TV+',        amount: '10'  },
+    { name: 'YouTube Premium',  amount: '14'  },
+    { name: 'Amazon Prime',     amount: '15'  },
+  ]},
+  { category: 'Food', items: [
+    { name: 'Groceries',          amount: '400' },
+    { name: 'Dining Out',         amount: '200' },
+    { name: 'Coffee',             amount: '60'  },
+    { name: 'Takeout / Delivery', amount: '100' },
+  ]},
+  { category: 'Transport', items: [
+    { name: 'Gas',            amount: '150' },
+    { name: 'Car Insurance',  amount: '120' },
+    { name: 'Car Payment',    amount: '400' },
+    { name: 'Public Transit', amount: '80'  },
+    { name: 'Uber / Lyft',   amount: '60'  },
+    { name: 'Parking',        amount: '50'  },
+  ]},
+  { category: 'Health', items: [
+    { name: 'Gym Membership',   amount: '40'  },
+    { name: 'Health Insurance', amount: '200' },
+    { name: 'Prescriptions',    amount: '50'  },
+    { name: 'Therapy',          amount: '150' },
+  ]},
+  { category: 'Tech', items: [
+    { name: 'Phone Bill',          amount: '70' },
+    { name: 'Internet',            amount: '60' },
+    { name: 'iCloud / Google One', amount: '3'  },
+    { name: 'Adobe CC',            amount: '55' },
+  ]},
+  { category: 'Personal', items: [
+    { name: 'Haircut',       amount: '30'  },
+    { name: 'Clothing',      amount: '100' },
+    { name: 'Personal Care', amount: '50'  },
+  ]},
+  { category: 'Savings & Debt', items: [
+    { name: 'Credit Card Payment', amount: '200' },
+    { name: 'Student Loans',       amount: '300' },
+    { name: 'Emergency Fund',      amount: '100' },
+    { name: 'Retirement (401k)',   amount: '200' },
+  ]},
+]
+
 const TIP_PROMPTS = [
   'Give me one surprising, specific tip about reducing a common household expense that most people overlook. Under 2 sentences. Be concrete, not generic.',
   'What is one counterintuitive money insight that most personal finance advice gets completely wrong? Under 2 sentences. Be specific and bold.',
@@ -209,6 +259,21 @@ function SetupScreen({ onDone, initialData }) {
   const updateRow = (i, field, val) =>
     setExpenses(e => e.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
 
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [templateCat,   setTemplateCat]   = useState(QUICK_ADD_TEMPLATES[0].category)
+
+  const addTemplate = (item) => {
+    const alreadyAdded = expenses.some(e => e.name.trim().toLowerCase() === item.name.toLowerCase())
+    if (alreadyAdded) return
+    setExpenses(prev => {
+      const blankIdx = prev.findIndex(r => !r.name.trim())
+      if (blankIdx !== -1) {
+        return prev.map((r, i) => i === blankIdx ? { name: item.name, amount: item.amount } : r)
+      }
+      return [...prev, { name: item.name, amount: item.amount }]
+    })
+  }
+
   const handleCSV = e => {
     const file = e.target.files[0]
     if (!file) return
@@ -302,6 +367,65 @@ function SetupScreen({ onDone, initialData }) {
             ↑ Import CSV
           </button>
           <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleCSV} style={{ display: 'none' }} />
+        </div>
+
+        {/* Quick-add templates */}
+        <div style={{ marginBottom: 14 }}>
+          <button
+            onClick={() => setShowTemplates(s => !s)}
+            style={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid rgba(99,102,241,0.35)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', marginBottom: showTemplates ? 12 : 0 }}
+          >
+            {showTemplates ? '▾ Hide quick-add' : '▸ Quick-add common expenses'}
+          </button>
+
+          {showTemplates && (
+            <div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {QUICK_ADD_TEMPLATES.map(({ category }) => (
+                  <button
+                    key={category}
+                    onClick={() => setTemplateCat(category)}
+                    style={{
+                      fontSize: 10, fontFamily: 'IBM Plex Mono, monospace',
+                      color: templateCat === category ? '#fff' : 'var(--text-muted)',
+                      background: templateCat === category ? 'var(--accent)' : 'transparent',
+                      border: '1px solid ' + (templateCat === category ? 'var(--accent)' : 'var(--border)'),
+                      borderRadius: 99, padding: '3px 10px', cursor: 'pointer',
+                    }}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(QUICK_ADD_TEMPLATES.find(t => t.category === templateCat)?.items || []).map(item => {
+                  const added = expenses.some(e => e.name.trim().toLowerCase() === item.name.toLowerCase())
+                  return (
+                    <button
+                      key={item.name}
+                      onClick={() => addTemplate(item)}
+                      disabled={added}
+                      title={added ? 'Already added' : 'Add ' + item.name + ' — $' + item.amount + '/mo'}
+                      style={{
+                        fontSize: 11, fontFamily: 'IBM Plex Mono, monospace',
+                        color: added ? 'var(--text-muted)' : 'var(--text-secondary)',
+                        background: 'var(--bg-base)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 8, padding: '5px 10px',
+                        cursor: added ? 'default' : 'pointer',
+                        opacity: added ? 0.4 : 1,
+                        display: 'flex', alignItems: 'center', gap: 5,
+                      }}
+                    >
+                      <span>{item.name}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>${item.amount}</span>
+                      {added && <span style={{ fontSize: 9 }}>✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -457,6 +581,22 @@ function DashboardScreen({ budget, onEdit, onReset, onUpdate, onCompare }) {
     setDraft(d => ({ ...d, expenses: [...d.expenses, { name: '', amount: 0 }] }))
   const draftRemoveExp = (i) =>
     setDraft(d => ({ ...d, expenses: d.expenses.filter((_, idx) => idx !== i) }))
+
+  const [showDashTemplates, setShowDashTemplates] = useState(false)
+  const [dashTemplateCat,   setDashTemplateCat]   = useState(QUICK_ADD_TEMPLATES[0].category)
+
+  const addDraftTemplate = (item) => {
+    setDraft(d => {
+      if (!d) return d
+      const alreadyAdded = d.expenses.some(e => e.name.trim().toLowerCase() === item.name.toLowerCase())
+      if (alreadyAdded) return d
+      const blankIdx = d.expenses.findIndex(e => !e.name.trim())
+      if (blankIdx !== -1) {
+        return { ...d, expenses: d.expenses.map((e, i) => i === blankIdx ? { name: item.name, amount: parseFloat(item.amount) || 0 } : e) }
+      }
+      return { ...d, expenses: [...d.expenses, { name: item.name, amount: parseFloat(item.amount) || 0 }] }
+    })
+  }
 
   // ── What-if simulator ─────────────────────────────────────────────────────
   const [simValues, setSimValues] = useState(() =>
@@ -619,6 +759,64 @@ Be specific and direct. Use the actual numbers from their budget. Do not give ge
           <button onClick={draftAddExp} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>
             <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Add expense
           </button>
+
+          {/* Quick-add templates in edit panel */}
+          <div style={{ marginTop: 10 }}>
+            <button
+              onClick={() => setShowDashTemplates(s => !s)}
+              style={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace', color: 'var(--accent)', background: 'transparent', border: '1px solid rgba(99,102,241,0.35)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', marginBottom: showDashTemplates ? 10 : 0 }}
+            >
+              {showDashTemplates ? '▾ Hide quick-add' : '▸ Quick-add common expenses'}
+            </button>
+            {showDashTemplates && (
+              <div>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                  {QUICK_ADD_TEMPLATES.map(({ category }) => (
+                    <button
+                      key={category}
+                      onClick={() => setDashTemplateCat(category)}
+                      style={{
+                        fontSize: 10, fontFamily: 'IBM Plex Mono, monospace',
+                        color: dashTemplateCat === category ? '#fff' : 'var(--text-muted)',
+                        background: dashTemplateCat === category ? 'var(--accent)' : 'transparent',
+                        border: '1px solid ' + (dashTemplateCat === category ? 'var(--accent)' : 'var(--border)'),
+                        borderRadius: 99, padding: '2px 8px', cursor: 'pointer',
+                      }}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {(QUICK_ADD_TEMPLATES.find(t => t.category === dashTemplateCat)?.items || []).map(item => {
+                    const added = draft.expenses.some(e => e.name.trim().toLowerCase() === item.name.toLowerCase())
+                    return (
+                      <button
+                        key={item.name}
+                        onClick={() => addDraftTemplate(item)}
+                        disabled={added}
+                        title={added ? 'Already added' : 'Add ' + item.name + ' — $' + item.amount + '/mo'}
+                        style={{
+                          fontSize: 11, fontFamily: 'IBM Plex Mono, monospace',
+                          color: added ? 'var(--text-muted)' : 'var(--text-secondary)',
+                          background: 'var(--bg-base)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 8, padding: '4px 9px',
+                          cursor: added ? 'default' : 'pointer',
+                          opacity: added ? 0.4 : 1,
+                          display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                      >
+                        <span>{item.name}</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>${item.amount}</span>
+                        {added && <span style={{ fontSize: 9 }}>✓</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
