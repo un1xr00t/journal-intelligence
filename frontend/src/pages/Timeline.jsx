@@ -879,6 +879,20 @@ function TherapistInsight() {
   const fetchedRef = useRef(false);
   // token + cache metadata per tone
   const [meta, setMeta] = useState({});
+  // TTS
+  const [speaking, setSpeaking] = useState(false);
+  const [ttsLoading, setTtsLoading] = useState(false);
+  const audioRef = useRef(null);
+
+  // Map reflection tones to OpenAI voices
+  const TONE_VOICES = {
+    therapist:    "shimmer",
+    best_friend:  "nova",
+    coach:        "fable",
+    mentor:       "shimmer",
+    inner_critic: "onyx",
+    chaos_agent:  "onyx",
+  };
 
   const toneObj     = TONES.find(t => t.id === activeTone);
   const current     = cache[activeTone];
@@ -941,6 +955,48 @@ function TherapistInsight() {
     }
   }, [loading, cache]);
 
+  // Stop audio when tone switches or component unmounts
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setSpeaking(false);
+  }, [activeTone]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    };
+  }, []);
+
+  const toggleSpeak = useCallback(async () => {
+    if (!current?.insight) return;
+    // Stop if already playing
+    if (speaking || ttsLoading) {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      setSpeaking(false);
+      setTtsLoading(false);
+      return;
+    }
+    const voice = TONE_VOICES[activeTone] || "shimmer";
+    setTtsLoading(true);
+    try {
+      const res = await api.post("/api/voice/speak", { text: current.insight, voice_id: voice }, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended  = () => { setSpeaking(false); URL.revokeObjectURL(url); };
+      audio.onerror  = () => { setSpeaking(false); };
+      audio.play();
+      setSpeaking(true);
+    } catch {
+      setSpeaking(false);
+    } finally {
+      setTtsLoading(false);
+    }
+  }, [speaking, ttsLoading, current, activeTone]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const hasSomething = current?.insight;
 
   return (
@@ -993,6 +1049,63 @@ function TherapistInsight() {
               }} title="Dismiss">×</button>
             </div>
           )}
+          {hasSomething && !loading && (
+            <button
+              onClick={toggleSpeak}
+              title={speaking ? "Stop" : ttsLoading ? "Generating audio…" : "Read aloud"}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                fontSize: 11, padding: "3px 10px", borderRadius: 8,
+                background: (speaking || ttsLoading) ? `${accentColor}22` : "transparent",
+                border: `1px solid ${(speaking || ttsLoading) ? accentColor : borderColor}`,
+                color: (speaking || ttsLoading) ? accentColor : "#475569",
+                cursor: ttsLoading ? "not-allowed" : "pointer",
+                transition: "all 0.15s",
+                lineHeight: 1,
+              }}
+            >
+              {ttsLoading ? (
+                <>
+                  <div style={{
+                    width: 10, height: 10, borderRadius: "50%",
+                    border: `2px solid ${accentColor}40`,
+                    borderTopColor: accentColor,
+                    animation: "spin 0.7s linear infinite",
+                    flexShrink: 0,
+                  }} />
+                  <span>Generating…</span>
+                </>
+              ) : speaking ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    {[0, 1, 2].map(i => (
+                      <div key={i} style={{
+                        width: 3, borderRadius: 99,
+                        background: accentColor,
+                        animation: `ttsBar 0.9s ease-in-out ${i * 0.15}s infinite alternate`,
+                      }} />
+                    ))}
+                  </div>
+                  <span>Stop</span>
+                </>
+              ) : (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                  </svg>
+                  <span>Listen</span>
+                </>
+              )}
+            </button>
+          )}
+          <style>{`
+            @keyframes ttsBar {
+              from { height: 4px; opacity: 0.5; }
+              to   { height: 12px; opacity: 1; }
+            }
+          `}</style>
           {hasSomething && (
             <button
               onClick={() => generate(activeTone, true)}

@@ -9,6 +9,17 @@ import { useState, useEffect, useRef } from 'react'
 import PageHeader from '../components/PageHeader'
 import api from '../services/api'
 
+// ── Mobile detection hook ─────────────────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+  return isMobile
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const FOLDER_ICONS  = ['📁','🏥','🏫','🍽','💊','📚','🎨','⚽','🚗','💰','📞','📧','🎵','🛁','🌙','❤️','🧸','📸','🎒','🧾']
@@ -184,12 +195,22 @@ function NewFolderModal({ onSave, onClose }) {
 
 function NewItemModal({ onSave, onClose }) {
   const [form, setForm]     = useState({ title: '', notes: '', item_date: new Date().toISOString().slice(0, 10) })
+  const [files, setFiles]   = useState([])
   const [saving, setSaving] = useState(false)
+  const fileRef             = useRef(null)
+
+  const pickFiles = (e) => {
+    const picked = Array.from(e.target.files || [])
+    setFiles(f => [...f, ...picked])
+    e.target.value = ''
+  }
+
+  const removeFile = (idx) => setFiles(f => f.filter((_, i) => i !== idx))
 
   const submit = async () => {
     if (!form.title.trim()) return
     setSaving(true)
-    await onSave(form)
+    await onSave(form, files)
     setSaving(false)
   }
 
@@ -212,10 +233,30 @@ function NewItemModal({ onSave, onClose }) {
           rows={3} style={{ ...fieldSty, resize: 'vertical', lineHeight: 1.6 }}
           placeholder="Any details worth documenting…" />
       </div>
+      <div>
+        <label style={lbl}>Photos (optional)</label>
+        <input ref={fileRef} type="file" accept="image/*" multiple onChange={pickFiles} style={{ display: 'none' }} />
+        <button onClick={() => fileRef.current?.click()} style={{ ...btn(), padding: '8px 14px', fontSize: 12, width: '100%', textAlign: 'center' }}>
+          📷 Add Photos
+        </button>
+        {files.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+            {files.map((file, i) => (
+              <div key={i} style={{ position: 'relative', width: 72, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+                <img src={URL.createObjectURL(file)} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <button onClick={() => removeFile(i)}
+                  style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: 4, color: '#fff', fontSize: 10, cursor: 'pointer', padding: '2px 5px', lineHeight: 1.4 }}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button onClick={onClose} style={btn()}>Cancel</button>
         <button onClick={submit} disabled={saving || !form.title.trim()} style={btn('primary', saving || !form.title.trim())}>
-          {saving ? 'Adding…' : 'Add Entry'}
+          {saving ? 'Saving…' : files.length ? 'Add Entry + ' + files.length + ' photo' + (files.length > 1 ? 's' : '') : 'Add Entry'}
         </button>
       </div>
     </Modal>
@@ -399,6 +440,7 @@ function PhotoThumb({ itemId, photo, onDelete }) {
 // ── Item card ──────────────────────────────────────────────────────────────────
 
 function ItemCard({ item, onDelete, onEdit, onPhotoUpload, onPhotoDelete }) {
+  const isMobile    = useIsMobile()
   const fileRef      = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [expanded, setExpanded]   = useState(false)
@@ -429,18 +471,18 @@ function ItemCard({ item, onDelete, onEdit, onPhotoUpload, onPhotoDelete }) {
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 5, lineHeight: 1.6 }}>{item.notes}</div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: isMobile ? 8 : 5, flexShrink: 0 }}>
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
             title="Upload photo"
-            style={{ ...btn('default', uploading), padding: '5px 10px', fontSize: 12 }}>
+            style={{ ...btn('default', uploading), padding: isMobile ? '8px 13px' : '5px 10px', fontSize: isMobile ? 15 : 12 }}>
             {uploading ? '…' : '📷'}
           </button>
-          <button onClick={() => onEdit(item)} style={{ ...btn(), padding: '5px 10px', fontSize: 12 }} title="Edit entry">
+          <button onClick={() => onEdit(item)} style={{ ...btn(), padding: isMobile ? '8px 13px' : '5px 10px', fontSize: isMobile ? 15 : 12 }} title="Edit entry">
             ✏️
           </button>
-          <button onClick={() => onDelete(item.id)} style={{ ...btn('danger'), padding: '5px 10px', fontSize: 12 }} title="Delete entry">
+          <button onClick={() => onDelete(item.id)} style={{ ...btn('danger'), padding: isMobile ? '8px 13px' : '5px 10px', fontSize: isMobile ? 15 : 12 }} title="Delete entry">
             🗑
           </button>
         </div>
@@ -481,6 +523,7 @@ function ItemCard({ item, onDelete, onEdit, onPhotoUpload, onPhotoDelete }) {
 // ── Folder panel (right side) ─────────────────────────────────────────────────
 
 function FolderPanel({ folder, onBack, onItemCountChange }) {
+  const isMobile = useIsMobile()
   const [items,        setItems]        = useState([])
   const [loading,      setLoading]      = useState(true)
   const [addOpen,      setAddOpen]      = useState(false)
@@ -510,10 +553,19 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
 
   useEffect(() => { load(); loadCached() }, [folder.id])
 
-  const handleAddItem = async (form) => {
+  const handleAddItem = async (form, files = []) => {
     try {
       const r = await api.post(`/api/vault/folders/${folder.id}/items`, form)
-      setItems(is => { const updated = [r.data, ...is]; onItemCountChange?.(folder.id, updated.length); return updated })
+      const newItem = { ...r.data, photos: [] }
+      for (const file of files) {
+        const fd = new FormData()
+        fd.append('file', file)
+        try {
+          const pr = await api.post(`/api/vault/items/${newItem.id}/photos`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+          newItem.photos.push(pr.data)
+        } catch {}
+      }
+      setItems(is => { const updated = [newItem, ...is]; onItemCountChange?.(folder.id, updated.length); return updated })
       setAddOpen(false)
     } catch (e) { alert(e.response?.data?.detail || 'Failed to add entry.') }
   }
@@ -573,37 +625,76 @@ function FolderPanel({ folder, onBack, onItemCountChange }) {
       {summary && <SummaryModal summary={summary} meta={summaryMeta} onClose={() => setSummary(null)} />}
 
       {/* Folder header */}
-      <div style={{ ...card, padding: '18px 22px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <button onClick={onBack} style={{ ...btn(), padding: '5px 10px', fontSize: 12 }}>← Back</button>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: `${folder.color}22`, border: `2px solid ${folder.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-            {folder.icon}
-          </div>
-          <div>
-            <div style={{ ...syne, fontWeight: 700, fontSize: 17, color: 'var(--text-primary)' }}>{folder.name}</div>
-            {folder.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{folder.description}</div>}
-          </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span style={{ ...mono, fontSize: 10, color: 'var(--text-muted)' }}>{items.length} entries · {totalPhotos} photos</span>
-            {cachedMeta ? (
-              <>
-                <button onClick={() => { setSummary(cachedMeta.summary); setSummaryMeta(cachedMeta) }} style={btn('success')}>
-                  View Summary
-                </button>
-                <button onClick={() => handleSummary(true)} disabled={summarizing} style={{ ...btn('default', summarizing), padding: '7px 10px' }} title="Regenerate">
-                  {summarizing ? '...' : 'Regen'}
-                </button>
-              </>
-            ) : (
-              <button onClick={() => handleSummary(false)} disabled={summarizing || items.length === 0} style={btn('success', summarizing || items.length === 0)}>
-                {summarizing ? '🧠 Generating…' : '🧠 AI Summary'}
+      <div style={{ ...card, padding: isMobile ? '14px 14px' : '18px 22px' }}>
+
+        {isMobile ? (
+          /* ── MOBILE layout: stacked rows ── */
+          <>
+            {/* Row 1: back + icon + name */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <button onClick={onBack} style={{ ...btn(), padding: '7px 12px', fontSize: 13, flexShrink: 0 }}>← Back</button>
+              <div style={{ width: 36, height: 36, borderRadius: 9, background: `${folder.color}22`, border: `2px solid ${folder.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                {folder.icon}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ ...syne, fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</div>
+                <div style={{ ...mono, fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{items.length} entries · {totalPhotos} photos</div>
+              </div>
+            </div>
+
+            {/* Row 2: buttons side by side, full width */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setAddOpen(true)} style={{ ...btn('primary'), fontSize: 13, padding: '9px 0', flex: 1, textAlign: 'center' }}>
+                + Add Entry
               </button>
-            )}
-            <button onClick={() => setAddOpen(true)} style={btn('primary')}>+ Add Entry</button>
+              {cachedMeta ? (
+                <>
+                  <button onClick={() => { setSummary(cachedMeta.summary); setSummaryMeta(cachedMeta) }} style={{ ...btn('success'), fontSize: 13, padding: '9px 0', flex: 1, textAlign: 'center' }}>
+                    View Summary
+                  </button>
+                  <button onClick={() => handleSummary(true)} disabled={summarizing} style={{ ...btn('default', summarizing), padding: '9px 12px', fontSize: 13, flexShrink: 0 }} title="Regenerate">
+                    {summarizing ? '⏳' : '↺'}
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => handleSummary(false)} disabled={summarizing || items.length === 0} style={{ ...btn('success', summarizing || items.length === 0), fontSize: 13, padding: '9px 0', flex: 1, textAlign: 'center' }}>
+                  {summarizing ? '🧠 Generating…' : '🧠 AI Summary'}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          /* ── DESKTOP layout: single row ── */
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <button onClick={onBack} style={{ ...btn(), padding: '5px 10px', fontSize: 12 }}>← Back</button>
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: `${folder.color}22`, border: `2px solid ${folder.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+              {folder.icon}
+            </div>
+            <div>
+              <div style={{ ...syne, fontWeight: 700, fontSize: 17, color: 'var(--text-primary)' }}>{folder.name}</div>
+              {folder.description && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{folder.description}</div>}
+            </div>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ ...mono, fontSize: 10, color: 'var(--text-muted)' }}>{items.length} entries · {totalPhotos} photos</span>
+              {cachedMeta ? (
+                <>
+                  <button onClick={() => { setSummary(cachedMeta.summary); setSummaryMeta(cachedMeta) }} style={btn('success')}>View Summary</button>
+                  <button onClick={() => handleSummary(true)} disabled={summarizing} style={{ ...btn('default', summarizing), padding: '7px 10px' }} title="Regenerate">
+                    {summarizing ? '...' : 'Regen'}
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => handleSummary(false)} disabled={summarizing || items.length === 0} style={btn('success', summarizing || items.length === 0)}>
+                  {summarizing ? '🧠 Generating…' : '🧠 AI Summary'}
+                </button>
+              )}
+              <button onClick={() => setAddOpen(true)} style={btn('primary')}>+ Add Entry</button>
+            </div>
           </div>
-        </div>
-        {error && <div style={{ marginTop: 12, fontSize: 12, color: '#f87171', ...mono }}>{error}</div>}
+        )}
+
+        {error && <div style={{ marginTop: 10, fontSize: 12, color: '#f87171', ...mono }}>{error}</div>}
       </div>
 
       {/* Items */}
