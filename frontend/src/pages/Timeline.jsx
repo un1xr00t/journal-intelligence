@@ -882,9 +882,9 @@ function TherapistInsight() {
   // TTS
   const [speaking, setSpeaking] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
-  const audioRef    = useRef(null); // kept for stop compat
-  const audioCtxRef = useRef(null);
-  const srcNodeRef  = useRef(null);
+  const audioRef    = useRef(null); // <Audio> element — OS tracks this for background
+  const audioCtxRef = useRef(null); // Web Audio — used only for silent unlock gesture
+  const blobUrlRef  = useRef(null); // track blob URL for cleanup
 
   // Map reflection tones to OpenAI voices
   const TONE_VOICES = {
@@ -959,61 +959,105 @@ function TherapistInsight() {
 
   // Stop audio when tone switches or component unmounts
   useEffect(() => {
-    try { srcNodeRef.current?.stop(); } catch {}
-    srcNodeRef.current = null;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
     setSpeaking(false);
   }, [activeTone]);
 
   useEffect(() => {
     return () => {
-      try { srcNodeRef.current?.stop(); } catch {}
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
       try { audioCtxRef.current?.close(); } catch {}
     };
   }, []);
 
   const toggleSpeak = useCallback(async () => {
     if (!current?.insight) return;
+
     // Stop if already playing
     if (speaking || ttsLoading) {
-      try { srcNodeRef.current?.stop(); } catch {}
-      srcNodeRef.current = null;
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
       setSpeaking(false);
       setTtsLoading(false);
       return;
     }
+
     const voice = TONE_VOICES[activeTone] || "shimmer";
 
-    // ── CRITICAL: create/resume AudioContext SYNCHRONOUSLY inside the gesture ──
-    // Mobile Safari blocks play() called after any await. We must touch the
-    // AudioContext in the same call stack as the user tap before going async.
+    // ── Step 1: Unlock audio SYNCHRONOUSLY in the gesture context ──────────────
+    // Safari/iOS requires AudioContext to be touched in the same call stack as
+    // the user tap. We play a zero-duration silent buffer to satisfy this, then
+    // do the actual playback via an <audio> element (which the OS keeps alive
+    // when the screen locks — Web Audio buffers do not get this treatment).
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
     }
     const ac = audioCtxRef.current;
-    if (ac.state === "suspended") await ac.resume(); // resume is fast and keeps gesture context
+    if (ac.state === "suspended") await ac.resume();
+    // Silent 1-frame buffer — fully unlocks audio context on iOS
+    const silent = ac.createBuffer(1, 1, 22050);
+    const silentSrc = ac.createBufferSource();
+    silentSrc.buffer = silent;
+    silentSrc.connect(ac.destination);
+    silentSrc.start();
 
     setTtsLoading(true);
     try {
+      // ── Step 2: Fetch audio as blob ─────────────────────────────────────────
       const res = await api.post(
         "/api/voice/speak",
         { text: current.insight, voice_id: voice },
-        { responseType: "arraybuffer" }
+        { responseType: "blob" }
       );
-      const buf = await ac.decodeAudioData(res.data);
-      try { srcNodeRef.current?.stop(); } catch {}
-      const src = ac.createBufferSource();
-      src.buffer = buf;
-      src.connect(ac.destination);
-      src.onended = () => { setSpeaking(false); };
-      src.start(0);
-      srcNodeRef.current = src;
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+      const url = URL.createObjectURL(res.data);
+      blobUrlRef.current = url;
+
+      // ── Step 3: Play via <Audio> element ────────────────────────────────────
+      // <audio> elements are tracked by the OS audio session — they survive
+      // screen lock and show on the lock screen (unlike Web Audio buffers).
+      if (!audioRef.current) audioRef.current = new Audio();
+      const audio = audioRef.current;
+      audio.src = url;
+
+      // ── Step 4: Register Media Session for lock-screen controls ─────────────
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title:  "Journal Reflection",
+          artist: toneObj?.label || "AI Reflection",
+          album:  "Journal Intelligence",
+        });
+        navigator.mediaSession.setActionHandler("pause", () => {
+          audio.pause();
+          setSpeaking(false);
+        });
+        navigator.mediaSession.setActionHandler("play", () => {
+          audio.play().catch(() => {});
+          setSpeaking(true);
+        });
+        navigator.mediaSession.setActionHandler("stop", () => {
+          audio.pause();
+          audio.src = "";
+          setSpeaking(false);
+        });
+      }
+
+      audio.onended = () => {
+        setSpeaking(false);
+        if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+      };
+      audio.onerror = () => { setSpeaking(false); };
+
+      await audio.play();
       setSpeaking(true);
     } catch {
       setSpeaking(false);
     } finally {
       setTtsLoading(false);
     }
-  }, [speaking, ttsLoading, current, activeTone]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [speaking, ttsLoading, current, activeTone, toneObj]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasSomething = current?.insight;
 
