@@ -882,7 +882,9 @@ function TherapistInsight() {
   // TTS
   const [speaking, setSpeaking] = useState(false);
   const [ttsLoading, setTtsLoading] = useState(false);
-  const audioRef = useRef(null);
+  const audioRef    = useRef(null); // kept for stop compat
+  const audioCtxRef = useRef(null);
+  const srcNodeRef  = useRef(null);
 
   // Map reflection tones to OpenAI voices
   const TONE_VOICES = {
@@ -957,16 +959,15 @@ function TherapistInsight() {
 
   // Stop audio when tone switches or component unmounts
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
+    try { srcNodeRef.current?.stop(); } catch {}
+    srcNodeRef.current = null;
     setSpeaking(false);
   }, [activeTone]);
 
   useEffect(() => {
     return () => {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      try { srcNodeRef.current?.stop(); } catch {}
+      try { audioCtxRef.current?.close(); } catch {}
     };
   }, []);
 
@@ -974,21 +975,38 @@ function TherapistInsight() {
     if (!current?.insight) return;
     // Stop if already playing
     if (speaking || ttsLoading) {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      try { srcNodeRef.current?.stop(); } catch {}
+      srcNodeRef.current = null;
       setSpeaking(false);
       setTtsLoading(false);
       return;
     }
     const voice = TONE_VOICES[activeTone] || "shimmer";
+
+    // ── CRITICAL: create/resume AudioContext SYNCHRONOUSLY inside the gesture ──
+    // Mobile Safari blocks play() called after any await. We must touch the
+    // AudioContext in the same call stack as the user tap before going async.
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ac = audioCtxRef.current;
+    if (ac.state === "suspended") await ac.resume(); // resume is fast and keeps gesture context
+
     setTtsLoading(true);
     try {
-      const res = await api.post("/api/voice/speak", { text: current.insight, voice_id: voice }, { responseType: "blob" });
-      const url = URL.createObjectURL(res.data);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended  = () => { setSpeaking(false); URL.revokeObjectURL(url); };
-      audio.onerror  = () => { setSpeaking(false); };
-      audio.play();
+      const res = await api.post(
+        "/api/voice/speak",
+        { text: current.insight, voice_id: voice },
+        { responseType: "arraybuffer" }
+      );
+      const buf = await ac.decodeAudioData(res.data);
+      try { srcNodeRef.current?.stop(); } catch {}
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.connect(ac.destination);
+      src.onended = () => { setSpeaking(false); };
+      src.start(0);
+      srcNodeRef.current = src;
       setSpeaking(true);
     } catch {
       setSpeaking(false);
